@@ -1,4 +1,4 @@
-import { Domain, InvalidDomainParams } from "./index.js";
+import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 
 export class User extends Domain<UserDetails> {
