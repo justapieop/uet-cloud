@@ -22,7 +22,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Source-of-truth note
 
-The README provides a setup guide and links to this brief. Use this brief, the LLM guidance in [`project-instructions.md`](project-instructions.md), and the confirmed records in [`decisions/`](decisions/) for current project context.
+The README provides a setup guide and links to this brief. Use this brief and the LLM guidance in [`project-instructions.md`](project-instructions.md) for current project context and technical conventions.
 
 ## Open questions
 

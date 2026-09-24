@@ -1,6 +1,6 @@
 # Cloud PaaS project
 
-This project is building an Azure-hosted platform for developers and platform teams to deploy applications using Azure Container Apps. The [project brief](docs/llm/project-brief.md) describes the confirmed product direction, and the [decision log](docs/llm/decisions/README.md) records project-wide choices.
+This project is building an Azure-hosted platform for developers and platform teams to deploy applications using Azure Container Apps. The [project brief](docs/llm/project-brief.md) describes the product direction, and [LLM project instructions](docs/llm/project-instructions.md) provide technical conventions.
 
 The project is an npm workspaces monorepo with a frontend application serving as the PaaS client.
 
@@ -17,10 +17,10 @@ packages/infrastructure/  External system adapters
 packages/presentation/    Transport adapters
 packages/contracts/       Shared API contract placeholder
 infra/azure/              Azure deployment configuration placeholder
-docs/llm/                 Project guidance and decisions
+docs/llm/                 Project brief and LLM-specific guidance
 ```
 
-The API has a TypeScript configuration and [server skeleton guidance](apps/api/README.md); frontend tooling will be chosen with its framework. `@kumo/domain` now contains the [domain base, errors, and a `User` example](docs/llm/decisions/0005-domain-construction.md). The other packages remain skeletons. NestJS and Azure SDK dependencies, deployment configuration, and run/build scripts have not been added yet.
+The API has a TypeScript configuration and [server skeleton guidance](apps/api/README.md); frontend tooling will be chosen with its framework. `@kumo/domain` now contains a domain base, errors, and a `User` example; its construction conventions are documented in the [LLM project instructions](docs/llm/project-instructions.md). The other packages remain skeletons. NestJS and Azure SDK dependencies, deployment configuration, and run/build scripts have not been added yet.
 
 ## Local setup
 
@@ -35,5 +35,5 @@ There is no application start command yet. The current development dependencies 
 ## Project guidance
 
 - [Product brief](docs/llm/project-brief.md)
-- [Confirmed decisions](docs/llm/decisions/README.md)
+- [LLM project instructions](docs/llm/project-instructions.md)
 - [Repository guidance for coding agents](AGENTS.md)

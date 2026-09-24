@@ -10,16 +10,15 @@ The codebase is an npm workspaces monorepo with `apps/api` as the NestJS server 
 
 Keep use cases under `packages/application/src/use-cases`. Group related code by feature within each package as features are defined. Domain code must not depend on NestJS or Azure SDKs; the application package depends inward on domain concepts, while infrastructure and presentation implement outside adapters. Assemble these pieces in `apps/api`.
 
-Every domain definition in `@kumo/domain` must extend `Domain` and follow the constructor, details-interface, and validation convention in [`decisions/0005-domain-construction.md`](decisions/0005-domain-construction.md).
+Every domain definition in `@kumo/domain` must extend the `Domain<TDetails>` base class exported from `src/domain.ts` through `src/index.ts`. Each concrete domain must expose one public constructor argument named `details`, typed by its corresponding `*Details` interface, and pass it to `super(details)`. The base class stores the details and calls `validate()` during construction, so validation must read stored details rather than subclass fields initialized after `super()` returns. `validate()` returns `InvalidDomainParams` for invalid construction data and `null` when valid. `InvalidStateTransition` is reserved for state validation and transition failures; its behavior is not yet implemented. Keep imports acyclic: domain files import the base from `src/domain.ts`, while `src/index.ts` re-exports the base and concrete domains.
 
-Permission definitions in the role domain include a stable offset, name, and description. `Super` bypasses role permission checks, as recorded in [`decisions/0006-permission-definition-metadata.md`](decisions/0006-permission-definition-metadata.md).
+Each permission definition in the role domain must include a stable zero-based `offset`, `name`, and `description`. Compute its mask as `1n << BigInt(offset)` when needed; do not store a precomputed mask or reuse/renumber an assigned offset. `Role.hasPermission()` grants any requested permission when the role has the `Super` bit, otherwise it checks the requested permission's bit. `Role.getGrantedPermissions()` returns known definitions granted by the role, and a role with `Super` receives every definition in the catalog. Metadata does not control access. Unknown stored bits have no catalog entry and are omitted. Resource or tenant scope checks are separate and are not specified here.
 
 ## Source of truth
 
 - Treat [`project-brief.md`](project-brief.md) as the concise, current product brief.
-- Treat [`decisions/`](decisions/) as the record of confirmed project-wide decisions.
-- Treat the `README.md` as repository setup and status guidance. The project brief and decision log define product direction.
-- Conversation context can establish or refine direction. When a project-wide direction is confirmed, update the relevant brief or decision record so future conversations can use it.
+- Treat the `README.md` as repository setup and status guidance. The project brief and these instructions define product direction and technical conventions.
+- Conversation context can establish or refine direction. When a project-wide direction is confirmed, update the relevant brief or these instructions so future conversations can use it.
 
 ## Working guidance
 
@@ -27,5 +26,4 @@ Permission definitions in the role domain include a stable offset, name, and des
 - Keep product intent, architectural choices, and implementation details distinct. Do not present an idea or assumption as a confirmed decision.
 - Consider the effect of proposals on the PaaS as a whole, including its frontend client, users, Azure hosting, ACA deployment workflow, and Clean Architecture boundaries.
 - Do not infer specific Azure services, languages, frameworks, tenancy models, deployment flows, or security requirements unless the user or project documents establish them.
-- For new decisions, record the context, the decision, and its consequences in `docs/llm/decisions/`.
-- Keep this instruction file focused on durable LLM guidance. Put product facts in the project brief and decision details in the decision log.
+- Keep this instruction file focused on durable LLM guidance and technical conventions. Put product facts in the project brief.
