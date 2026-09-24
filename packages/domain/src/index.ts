@@ -1,18 +1,17 @@
-export * from "./user.js";
+export abstract class Domain<TDetails> {
+  protected readonly details: TDetails;
 
-export abstract class Domain {
-  protected constructor() {
+  protected constructor(details: TDetails) {
+    this.details = details;
     const error: InvalidDomainParams | null = this.validate();
 
-    if (error) { 
+    if (error) {
       throw error;
     }
   }
 
   public abstract validate(): InvalidDomainParams | null;
 }
-
-export interface DomainDetails { }
 
 export class InvalidDomainParams extends Error { }
 

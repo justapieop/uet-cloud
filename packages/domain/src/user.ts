@@ -1,16 +1,14 @@
-import { Domain, InvalidDomainParams, type DomainDetails } from "./index.js";
+import { Domain, InvalidDomainParams } from "./index.js";
 import { isBlankStr } from "./utils.js";
 
-export class User extends Domain {
+export class User extends Domain<UserDetails> {
   public readonly id: string;
   public readonly displayName: string;
   public readonly createdAt: Date;
   public readonly suspended: boolean;
 
-  public constructor(
-    private readonly details: UserDetails,
-  ) { 
-    super();
+  public constructor(details: UserDetails) {
+    super(details);
 
     this.id = details.id;
     this.displayName = details.displayName;
@@ -31,7 +29,7 @@ export class User extends Domain {
   }
 }
 
-export interface UserDetails extends DomainDetails {
+export interface UserDetails {
   id: string;
   displayName: string;
   hashedPassword: string;
