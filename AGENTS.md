@@ -6,4 +6,6 @@ Use `README.md` for the current repository setup and status. Use the project bri
 
 Treat this project as an npm workspaces monorepo. `apps/api` is the NestJS server entry point and composition root; `apps/web` is the frontend client. Keep domain, application/use-case, infrastructure, and presentation code in their corresponding `packages/` workspaces. `packages/contracts` and `infra/azure` are reserved for later implementation. The frontend framework is not yet decided.
 
+For `@kumo/domain`, follow the domain construction and validation rule in [`docs/llm/decisions/0005-domain-construction.md`](docs/llm/decisions/0005-domain-construction.md).
+
 Keep LLM-only supporting documents in `docs/llm`. Keep product context intended for all project contributors in `docs/llm/project-brief.md` and confirmed project-wide decisions in `docs/llm/decisions/`. Mark assumptions and open questions clearly instead of presenting them as settled requirements. Update the relevant docs when the user establishes a new project-wide direction.

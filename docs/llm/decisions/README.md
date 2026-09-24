@@ -8,3 +8,4 @@ This directory records confirmed project-wide decisions. Add one Markdown file p
 - [D-0002: TypeScript, NestJS, and npm application stack](0002-typescript-nestjs-npm.md)
 - [D-0003: Monorepo with a frontend client](0003-monorepo-frontend-client.md)
 - [D-0004: Clean Architecture packages and API composition root](0004-architecture-packages.md)
+- [D-0005: Domain construction and validation](0005-domain-construction.md)

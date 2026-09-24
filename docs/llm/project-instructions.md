@@ -10,6 +10,8 @@ The codebase is an npm workspaces monorepo with `apps/api` as the NestJS server 
 
 Keep use cases under `packages/application/src/use-cases`. Group related code by feature within each package as features are defined. Domain code must not depend on NestJS or Azure SDKs; the application package depends inward on domain concepts, while infrastructure and presentation implement outside adapters. Assemble these pieces in `apps/api`.
 
+Every domain definition in `@kumo/domain` must extend `Domain` and follow the constructor, details-interface, and validation convention in [`decisions/0005-domain-construction.md`](decisions/0005-domain-construction.md).
+
 ## Source of truth
 
 - Treat [`project-brief.md`](project-brief.md) as the concise, current product brief.

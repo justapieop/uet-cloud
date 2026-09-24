@@ -20,7 +20,7 @@ infra/azure/              Azure deployment configuration placeholder
 docs/llm/                 Project guidance and decisions
 ```
 
-The workspaces contain package manifests and empty source directories. The API has a TypeScript configuration and [server skeleton guidance](apps/api/README.md); frontend tooling will be chosen with its framework. No application code, NestJS or Azure SDK dependencies, deployment configuration, or run/build scripts have been added yet.
+The API has a TypeScript configuration and [server skeleton guidance](apps/api/README.md); frontend tooling will be chosen with its framework. `@kumo/domain` now contains the [domain base, errors, and a `User` example](docs/llm/decisions/0005-domain-construction.md). The other packages remain skeletons. NestJS and Azure SDK dependencies, deployment configuration, and run/build scripts have not been added yet.
 
 ## Local setup
 
