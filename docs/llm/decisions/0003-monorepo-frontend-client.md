@@ -11,8 +11,11 @@ The PaaS needs a client application alongside its platform services. The user co
 
 - Organize the project as a monorepo.
 - Include a frontend application that acts as the client for the PaaS.
+- Use npm workspaces with `apps/api` for the NestJS platform application and `apps/web` for the frontend client.
+- Reserve `packages/contracts` for shared API contracts and `infra/azure` for Azure deployment configuration.
 
 ## Consequences
 
-- Future repository structure and tooling should accommodate the frontend and platform applications together.
-- The frontend framework, workspace tooling, package layout, and communication between applications remain to be decided.
+- The root package manages the workspaces and a single lockfile.
+- The directory skeletons are placeholders; shared contracts and Azure deployment configuration will be added when needed.
+- The frontend framework and communication between applications remain to be decided.

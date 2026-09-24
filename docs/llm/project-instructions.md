@@ -6,7 +6,7 @@ This project is building a cloud-integrated Platform as a Service (PaaS) for dev
 
 The platform itself is intended to be hosted on Azure. Organize its code using Clean Architecture to support clear boundaries and future growth.
 
-The codebase is a monorepo and includes a frontend application that serves as the client for the PaaS. The frontend technology and monorepo workspace layout are still open decisions.
+The codebase is an npm workspaces monorepo with `apps/api` for the NestJS platform application and `apps/web` for the frontend client. `packages/contracts` and `infra/azure` are reserved for shared contracts and Azure deployment configuration. The frontend technology remains an open decision.
 
 ## Source of truth
 

@@ -4,6 +4,6 @@ For project-specific LLM guidance, read [`docs/llm/project-instructions.md`](doc
 
 Use `README.md` for the current repository setup and status. Use the project brief and decision log for authoritative product context.
 
-Treat this project as a monorepo with a frontend application that acts as the client for the PaaS. The frontend framework and workspace layout are not yet decided; do not infer them from the current root package files.
+Treat this project as an npm workspaces monorepo with `apps/api` for the NestJS platform application and `apps/web` for the frontend client. `packages/contracts` and `infra/azure` are reserved for later implementation. The frontend framework is not yet decided.
 
 Keep LLM-only supporting documents in `docs/llm`. Keep product context intended for all project contributors in `docs/llm/project-brief.md` and confirmed project-wide decisions in `docs/llm/decisions/`. Mark assumptions and open questions clearly instead of presenting them as settled requirements. Update the relevant docs when the user establishes a new project-wide direction.
