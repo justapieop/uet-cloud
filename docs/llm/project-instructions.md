@@ -12,6 +12,8 @@ Keep use cases under `packages/application/src/use-cases`. Group related code by
 
 Every domain definition in `@kumo/domain` must extend `Domain` and follow the constructor, details-interface, and validation convention in [`decisions/0005-domain-construction.md`](decisions/0005-domain-construction.md).
 
+Permission definitions in the role domain include a stable offset, name, and description. `Super` bypasses role permission checks, as recorded in [`decisions/0006-permission-definition-metadata.md`](decisions/0006-permission-definition-metadata.md).
+
 ## Source of truth
 
 - Treat [`project-brief.md`](project-brief.md) as the concise, current product brief.
@@ -21,6 +23,7 @@ Every domain definition in `@kumo/domain` must extend `Domain` and follow the co
 
 ## Working guidance
 
+- Explicitly annotate every TypeScript variable declaration (`const`, `let`, or `var`), including exported constants. Do not rely on type inference for variables or use `any` as a substitute for a meaningful type.
 - Keep product intent, architectural choices, and implementation details distinct. Do not present an idea or assumption as a confirmed decision.
 - Consider the effect of proposals on the PaaS as a whole, including its frontend client, users, Azure hosting, ACA deployment workflow, and Clean Architecture boundaries.
 - Do not infer specific Azure services, languages, frameworks, tenancy models, deployment flows, or security requirements unless the user or project documents establish them.

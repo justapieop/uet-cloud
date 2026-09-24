@@ -9,7 +9,7 @@ Domain definitions need a consistent way to receive construction data and reject
 
 ## Decision
 
-- Every domain definition in `@kumo/domain` extends the `Domain<TDetails>` base class in `src/index.ts`.
+- Every domain definition in `@kumo/domain` extends the `Domain<TDetails>` base class in `src/domain.ts`, which is exported through `src/index.ts`.
 - Each concrete domain exposes one public constructor argument named `details`, typed by a corresponding `*Details` interface, such as `UserDetails`.
 - The concrete constructor passes that argument to `super(details)`. The base class stores it and calls `validate()` during construction. Validation must read the stored details, not subclass fields that are initialized after `super()` returns.
 - `validate()` returns `InvalidDomainParams` when construction data violates a business rule, or `null` when it is valid. No domain-specific error class is required.
@@ -19,4 +19,4 @@ Domain definitions need a consistent way to receive construction data and reject
 
 - Invalid domain instances fail at construction with `InvalidDomainParams`.
 - A domain implementation must not rely on its own field initializers or constructor body inside `validate()`, because base construction runs first.
-- Keep imports acyclic: a domain file may import the base from `src/index.ts`, but `src/index.ts` must not re-export that same domain file while the base class is defined there.
+- Keep imports acyclic: domain files import the base from `src/domain.ts`, while `src/index.ts` re-exports the base and concrete domains.

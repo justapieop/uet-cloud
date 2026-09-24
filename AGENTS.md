@@ -8,4 +8,6 @@ Treat this project as an npm workspaces monorepo. `apps/api` is the NestJS serve
 
 For `@kumo/domain`, follow the domain construction and validation rule in [`docs/llm/decisions/0005-domain-construction.md`](docs/llm/decisions/0005-domain-construction.md).
 
+When writing TypeScript, explicitly declare the type of every variable (`const`, `let`, or `var`), including exported constants. Do not rely on inferred variable types.
+
 Keep LLM-only supporting documents in `docs/llm`. Keep product context intended for all project contributors in `docs/llm/project-brief.md` and confirmed project-wide decisions in `docs/llm/decisions/`. Mark assumptions and open questions clearly instead of presenting them as settled requirements. Update the relevant docs when the user establishes a new project-wide direction.
