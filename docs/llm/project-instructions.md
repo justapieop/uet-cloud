@@ -6,7 +6,9 @@ This project is building a cloud-integrated Platform as a Service (PaaS) for dev
 
 The platform itself is intended to be hosted on Azure. Organize its code using Clean Architecture to support clear boundaries and future growth.
 
-The codebase is an npm workspaces monorepo with `apps/api` for the NestJS platform application and `apps/web` for the frontend client. `packages/contracts` and `infra/azure` are reserved for shared contracts and Azure deployment configuration. The frontend technology remains an open decision.
+The codebase is an npm workspaces monorepo with `apps/api` as the NestJS server entry point and composition root and `apps/web` as the frontend client. `packages/domain`, `packages/application`, `packages/infrastructure`, and `packages/presentation` hold the Clean Architecture boundaries. `packages/contracts` and `infra/azure` are reserved for shared contracts and Azure deployment configuration. The frontend technology remains an open decision.
+
+Keep use cases under `packages/application/src/use-cases`. Group related code by feature within each package as features are defined. Domain code must not depend on NestJS or Azure SDKs; the application package depends inward on domain concepts, while infrastructure and presentation implement outside adapters. Assemble these pieces in `apps/api`.
 
 ## Source of truth
 

@@ -18,7 +18,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - The codebase will use Clean Architecture for organization and future scaling.
 - The platform application will use TypeScript with NestJS; npm is the package manager.
 - The project is a monorepo that includes a frontend application serving as the client for the PaaS.
-- npm workspaces place the platform application in `apps/api` and the frontend client in `apps/web`. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
+- npm workspaces place the NestJS server entry point in `apps/api` and the frontend client in `apps/web`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
 
 ## Source-of-truth note
 
