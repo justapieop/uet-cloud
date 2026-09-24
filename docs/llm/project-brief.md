@@ -16,11 +16,11 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - Azure Container Apps is the deployment platform for applications deployed through the PaaS.
 - The PaaS itself will be hosted on Azure.
 - The codebase will use Clean Architecture for organization and future scaling.
-- The application will use JavaScript with NestJS.
-- 
+- The application will use TypeScript with NestJS and npm as its package manager.
+
 ## Source-of-truth note
 
-The repository's existing `README.md` comes from an earlier idea and does not define this project's objective. Use this brief, the LLM guidance in [`llm/project-instructions.md`](llm/project-instructions.md), and the confirmed records in [`decisions/`](decisions/) for current project context.
+The README provides a setup guide and links to this brief. Use this brief, the LLM guidance in [`project-instructions.md`](project-instructions.md), and the confirmed records in [`decisions/`](decisions/) for current project context.
 
 ## Open questions
 

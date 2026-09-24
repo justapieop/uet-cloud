@@ -5,4 +5,4 @@ This directory records confirmed project-wide decisions. Add one Markdown file p
 ## Confirmed decisions
 
 - [D-0001: Project direction and foundational constraints](0001-project-direction.md)
-- [D-0002: JavaScript and NestJS application stack](0002-javascript-nestjs.md)
+- [D-0002: TypeScript, NestJS, and npm application stack](0002-typescript-nestjs-npm.md)

@@ -13,9 +13,11 @@ The project needs a shared direction that remains useful across product discussi
 - Enable users to deploy applications using Azure Container Apps.
 - Host the PaaS on Azure.
 - Use Clean Architecture for code organization and future scaling.
-- Treat the existing `README.md` as material from an earlier idea, not as this project's objective.
+- At the time of this decision, treat the existing `README.md` as material from an earlier idea, not as this project's objective.
 
 ## Consequences
 
 - Product and architecture discussions should be evaluated against this PaaS objective, Azure hosting, Azure Container Apps deployment, and Clean Architecture.
 - Specific implementation technologies, detailed product scope, deployment workflows, and other architecture decisions remain open until confirmed.
+
+The legacy README was later replaced with a current repository setup guide. This decision's product and architecture direction remains in effect.
