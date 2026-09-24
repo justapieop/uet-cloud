@@ -6,6 +6,8 @@ This project is building a cloud-integrated Platform as a Service (PaaS) for dev
 
 The platform itself is intended to be hosted on Azure. Organize its code using Clean Architecture to support clear boundaries and future growth.
 
+The codebase is a monorepo and includes a frontend application that serves as the client for the PaaS. The frontend technology and monorepo workspace layout are still open decisions.
+
 ## Source of truth
 
 - Treat [`project-brief.md`](project-brief.md) as the concise, current product brief.
@@ -16,7 +18,7 @@ The platform itself is intended to be hosted on Azure. Organize its code using C
 ## Working guidance
 
 - Keep product intent, architectural choices, and implementation details distinct. Do not present an idea or assumption as a confirmed decision.
-- Consider the effect of proposals on the PaaS as a whole, including its users, Azure hosting, ACA deployment workflow, and Clean Architecture boundaries.
+- Consider the effect of proposals on the PaaS as a whole, including its frontend client, users, Azure hosting, ACA deployment workflow, and Clean Architecture boundaries.
 - Do not infer specific Azure services, languages, frameworks, tenancy models, deployment flows, or security requirements unless the user or project documents establish them.
 - For new decisions, record the context, the decision, and its consequences in `docs/llm/decisions/`.
 - Keep this instruction file focused on durable LLM guidance. Put product facts in the project brief and decision details in the decision log.

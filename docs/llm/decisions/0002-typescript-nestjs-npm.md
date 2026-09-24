@@ -9,10 +9,10 @@ The project needs a confirmed application technology stack to guide implementati
 
 ## Decision
 
-- Build the application using TypeScript with NestJS.
+- Build the platform application using TypeScript with NestJS.
 - Use npm as the package manager.
 
 ## Consequences
 
 - Implementation and Azure SDK choices should support TypeScript, Node.js, and NestJS, with npm managing project dependencies and scripts.
-- This decision does not establish additional Azure services, deployment workflows, or application architecture details beyond the existing Clean Architecture direction.
+- This decision does not establish the frontend technology, additional Azure services, deployment workflows, or application architecture details beyond the existing Clean Architecture direction.
