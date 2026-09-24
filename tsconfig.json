@@ -5,7 +5,8 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "types": ["@types/node"]
   },
   "files": []
 }
