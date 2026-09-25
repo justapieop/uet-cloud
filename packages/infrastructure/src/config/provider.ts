@@ -30,14 +30,14 @@ const bootstrapSettings: Record<string, string> = existsSync(envFilePath)
   ? parse(readFileSync(envFilePath))
   : {};
 const environment: string = process.env.NODE_ENV ?? bootstrapSettings.NODE_ENV ?? "production";
-const configurationSource: string = process.env.KUMO_CONFIG_SOURCE ?? bootstrapSettings.KUMO_CONFIG_SOURCE ?? "azure";
+const configurationSource: string = process.env.CONFIG_SOURCE ?? bootstrapSettings.CONFIG_SOURCE ?? "azure";
 
 if (!["development", "test", "production"].includes(environment)) {
   throw new Error(`Unsupported NODE_ENV: ${environment}`);
 }
 
 if (!["local", "azure"].includes(configurationSource)) {
-  throw new Error(`Unsupported KUMO_CONFIG_SOURCE: ${configurationSource}`);
+  throw new Error(`Unsupported CONFIG_SOURCE: ${configurationSource}`);
 }
 
 const useAzureConfiguration: boolean = configurationSource === "azure";
@@ -45,7 +45,7 @@ const useAzureConfiguration: boolean = configurationSource === "azure";
 function loadRuntimeConfiguration(): Record<string, string> {
   return {
     NODE_ENV: environment,
-    KUMO_CONFIG_SOURCE: configurationSource,
+    CONFIG_SOURCE: configurationSource,
   };
 }
 
