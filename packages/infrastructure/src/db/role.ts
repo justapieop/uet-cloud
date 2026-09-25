@@ -23,10 +23,16 @@ export class InfraRoleRepository implements RoleRepository {
   }
 
   public async save(role: Role): Promise<void> {
+    const permissionBits: bigint = role.getPermissionBits();
+
+    if (permissionBits > (1n << 63n) - 1n) {
+      throw new RangeError("Role permissions exceed the SQL Server bigint range");
+    }
+
     const dbRole: InfraRole = this.roleRepository.create({
       id: role.id,
       name: role.name,
-      permission: role.getPermissionBits(),
+      permission: permissionBits,
       createdAt: role.createdAt,
     });
 
@@ -58,15 +64,14 @@ export class InfraRole {
   public readonly createdAt!: Date;
 
   @Column({
-    type: "varchar",
-    length: "MAX",
+    type: "bigint",
     nullable: false,
-    default: "0",
+    default: 0,
     transformer: {
-      to(value: bigint): string {
-        return value.toString(10);
+      to(value: bigint): bigint {
+        return value;
       },
-      from(value: string): bigint {
+      from(value: string | bigint): bigint {
         return BigInt(value);
       },
     },
