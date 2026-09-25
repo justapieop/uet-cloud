@@ -32,7 +32,6 @@ export class User extends Domain<UserDetails> {
 export interface UserDetails {
   id: string;
   displayName: string;
-  hashedPassword: string;
   createdAt?: Date;
   suspended: boolean;
 }
