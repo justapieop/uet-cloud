@@ -4,10 +4,21 @@
   "type": "module",
   "version": "0.0.0",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "dependencies": {
+    "@azure/app-configuration-provider": "^2.6.0",
+    "@azure/identity": "^4.13.3",
+    "@azure/keyvault-secrets": "^4.11.2",
     "@kumo/application": "0.0.0",
     "@kumo/domain": "0.0.0",
+    "@nestjs/config": "^12.0.1",
     "@nestjs/typeorm": "^12.0.1",
+    "dotenv": "^18.0.3",
     "install": "^0.13.0",
     "npm": "^12.1.0",
     "pg": "^8.23.0",

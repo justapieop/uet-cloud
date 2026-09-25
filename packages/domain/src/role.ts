@@ -5,6 +5,7 @@ export class Role extends Domain<RoleDetails> {
   public readonly id: string;
   public readonly name: string;
   private readonly permission: bigint;
+  public readonly createdAt: Date;
 
   public constructor(details: RoleDetails) {
     super(details);
@@ -12,6 +13,7 @@ export class Role extends Domain<RoleDetails> {
     this.id = details.id;
     this.name = details.name;
     this.permission = details.permission ?? 0n;
+    this.createdAt = details.createdAt ?? new Date();
   }
 
   public validate(): InvalidDomainParams | null {
@@ -48,6 +50,10 @@ export class Role extends Domain<RoleDetails> {
       (permission: Permission): boolean => this.hasPermission(permission),
     );
   }
+
+  public getPermissionBits(): bigint {
+    return this.permission;
+  }
 }
 
 export interface PermissionDefinition {
@@ -70,4 +76,5 @@ export interface RoleDetails {
   id: string;
   name: string;
   permission?: bigint;
+  createdAt?: Date;
 }

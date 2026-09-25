@@ -4,7 +4,7 @@ For project-specific LLM guidance, read [`docs/llm/project-instructions.md`](doc
 
 Use `README.md` for the current repository setup and status. Use the project brief and project instructions for authoritative product context and technical conventions.
 
-Treat this project as an npm workspaces monorepo. `apps/api` is the NestJS server entry point and composition root; `apps/web` is the frontend client. Keep domain, application/use-case, infrastructure, and presentation code in their corresponding `packages/` workspaces. `packages/contracts` and `infra/azure` are reserved for later implementation. The frontend framework is not yet decided.
+Treat this project as an npm workspaces monorepo. `apps/api` is the thin NestJS server entry point; the NestJS bootstrap and module composition live in `packages/presentation`. `apps/web` is the frontend client. Keep domain, application/use-case, infrastructure, and presentation code in their corresponding `packages/` workspaces. `packages/contracts` and `infra/azure` are reserved for later implementation. The frontend framework is not yet decided.
 
 For `@kumo/domain`, follow the construction and validation conventions in `docs/llm/project-instructions.md`.
 
