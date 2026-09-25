@@ -14,6 +14,8 @@ Every domain definition in `@kumo/domain` must extend the `Domain<TDetails>` bas
 
 Each permission definition in the role domain must include a stable zero-based `offset`, `name`, and `description`. Compute its mask as `1n << BigInt(offset)` when needed; do not store a precomputed mask or reuse/renumber an assigned offset. `Role.hasPermission()` grants any requested permission when the role has the `Super` bit, otherwise it checks the requested permission's bit. `Role.getGrantedPermissions()` returns known definitions granted by the role, and a role with `Super` receives every definition in the catalog. Metadata does not control access. Unknown stored bits have no catalog entry and are omitted. Resource or tenant scope checks are separate and are not specified here.
 
+Do not write anything into README.md until told to do so.
+
 ## Source of truth
 
 - Treat [`project-brief.md`](project-brief.md) as the concise, current product brief.
