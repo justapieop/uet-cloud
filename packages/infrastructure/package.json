@@ -19,9 +19,7 @@
     "@nestjs/config": "^12.0.1",
     "@nestjs/typeorm": "^12.0.1",
     "dotenv": "^18.0.3",
-    "install": "^0.13.0",
-    "npm": "^12.1.0",
-    "pg": "^8.23.0",
+    "mssql": "^12.7.2",
     "typeorm": "^1.1.1"
   }
 }
