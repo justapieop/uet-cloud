@@ -11,7 +11,7 @@ export class Role extends Domain<RoleDetails> {
 
     this.id = details.id;
     this.name = details.name;
-    this.permission = details.permission ?? BigInt(0);
+    this.permission = details.permission ?? 0n;
   }
 
   public validate(): InvalidDomainParams | null {
