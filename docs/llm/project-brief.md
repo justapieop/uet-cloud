@@ -20,7 +20,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - The platform application will use TypeScript with NestJS; npm is the package manager.
 - The project is a monorepo that includes a frontend application serving as the client for the PaaS.
 - npm workspaces place the thin NestJS server entry point in `apps/api` and the frontend client in `apps/web`. NestJS bootstrap and module composition live in `packages/presentation`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
-- `NODE_ENV` and `KUMO_CONFIG_SOURCE` independently select the API runtime environment and configuration source. `NODE_ENV` defaults to production. `KUMO_CONFIG_SOURCE` defaults to Azure when unset; `local` loads `.env`, while `azure` loads App Configuration settings and resolves Key Vault references using an Azure identity.
+- `NODE_ENV` and `KUMO_CONFIG_SOURCE` independently select the API runtime environment and configuration source. Both can come from the process environment or repository-root `.env`, with the process value taking precedence. `NODE_ENV` defaults to production. `KUMO_CONFIG_SOURCE` defaults to Azure when unset; `local` loads `.env`, while `azure` loads App Configuration settings and resolves Key Vault references using an Azure identity.
 
 ## Source-of-truth note
 

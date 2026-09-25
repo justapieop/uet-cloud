@@ -1,7 +1,10 @@
 import { Module } from "@nestjs/common";
-import { configModule } from "@kumo/infrastructure";
+import { AppConfigModule, DatabaseModule } from "@kumo/infrastructure";
 
 @Module({
-  imports: [configModule],
+  imports: [
+    AppConfigModule,
+    DatabaseModule,
+  ],
 })
 export class RootModule { }

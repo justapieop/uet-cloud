@@ -19,17 +19,17 @@ async function loadAzureConfiguration(): Promise<Record<string, unknown>> {
       { keyFilter: "*", labelFilter: LabelFilter.Null },
       { keyFilter: "*", labelFilter: environment },
     ],
-    keyVaultOptions: { credential },
+    keyVaultOptions: { credential, },
   });
 
   return configuration.constructConfigurationObject();
 }
 
-const environment: string = process.env.NODE_ENV ?? "production";
 const envFilePath: string = fileURLToPath(new URL("../../../../.env", import.meta.url));
 const bootstrapSettings: Record<string, string> = existsSync(envFilePath)
   ? parse(readFileSync(envFilePath))
   : {};
+const environment: string = process.env.NODE_ENV ?? bootstrapSettings.NODE_ENV ?? "production";
 const configurationSource: string = process.env.KUMO_CONFIG_SOURCE ?? bootstrapSettings.KUMO_CONFIG_SOURCE ?? "azure";
 
 if (!["development", "test", "production"].includes(environment)) {
@@ -42,11 +42,20 @@ if (!["local", "azure"].includes(configurationSource)) {
 
 const useAzureConfiguration: boolean = configurationSource === "azure";
 
-export const configModule: Promise<DynamicModule> = ConfigModule.forRoot({
+function loadRuntimeConfiguration(): Record<string, string> {
+  return {
+    NODE_ENV: environment,
+    KUMO_CONFIG_SOURCE: configurationSource,
+  };
+}
+
+export const AppConfigModule: Promise<DynamicModule> = ConfigModule.forRoot({
   cache: true,
   expandVariables: false,
   isGlobal: true,
   ignoreEnvFile: useAzureConfiguration,
   envFilePath,
-  load: useAzureConfiguration ? [loadAzureConfiguration] : [],
+  load: useAzureConfiguration
+    ? [loadAzureConfiguration, loadRuntimeConfiguration]
+    : [loadRuntimeConfiguration],
 });
