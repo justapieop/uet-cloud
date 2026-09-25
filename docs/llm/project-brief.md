@@ -16,6 +16,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - Azure Container Apps is the deployment platform for applications deployed through the PaaS.
 - The PaaS itself will be hosted on Azure.
 - Azure SQL Database is the persistence database for the project.
+- The API uses Microsoft Entra passwordless authentication for Azure SQL Database.
 - The codebase will use Clean Architecture for organization and future scaling.
 - The platform application will use TypeScript with NestJS; npm is the package manager.
 - The project is a monorepo that includes a frontend application serving as the client for the PaaS.

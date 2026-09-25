@@ -8,6 +8,13 @@ export async function bootstrap(): Promise<void> {
   const app: INestApplication = await NestFactory.create(RootModule);
   const config: ConfigService = app.get(ConfigService);
   const port: number = Number(config.get<string>("PORT") ?? "3000");
+
+  const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production").trim().toLowerCase());
+
+  if (devMode) { 
+    console.log("Development or test mode is enabled! We advise against using this mode for production as they are strictly for non-production environment only. Connections to services maybe unencrypted and credentials can be accidentally logged. We are not liable for any damages that are caused by running this app in development or test mode on production")
+  }
+
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error("PORT must be an integer between 0 and 65535");
   }
