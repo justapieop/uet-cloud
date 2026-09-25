@@ -20,7 +20,7 @@ infra/azure/              Azure deployment configuration placeholder
 docs/llm/                 Project brief and LLM-specific guidance
 ```
 
-The API has a TypeScript configuration and [server skeleton guidance](apps/api/README.md); frontend tooling will be chosen with its framework. `@kumo/domain` now contains a domain base, errors, and a `User` example; its construction conventions are documented in the [LLM project instructions](docs/llm/project-instructions.md). The other packages remain skeletons. NestJS and Azure SDK dependencies, deployment configuration, and run/build scripts have not been added yet.
+The API has a TypeScript configuration and [server skeleton guidance](apps/api/README.md); frontend tooling will be chosen with its framework. `@kumo/domain` contains a domain base, errors, and User and Role models; its construction conventions are documented in the [LLM project instructions](docs/llm/project-instructions.md). `@kumo/application` contains User and Role repository ports. The remaining packages are skeletons. NestJS and Azure SDK dependencies, deployment configuration, and application start scripts have not been added yet.
 
 ## Local setup
 
