@@ -6,6 +6,9 @@
     "apps/*",
     "packages/*"
   ],
+  "scripts": {
+    "build:api": "tsc -b packages/domain packages/contracts packages/application packages/infrastructure packages/presentation apps/api"
+  },
   "devDependencies": {
     "@types/node": "^26.6.2",
     "typescript": "^7.0.2"
