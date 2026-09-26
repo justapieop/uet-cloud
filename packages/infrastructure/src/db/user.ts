@@ -58,4 +58,10 @@ export class InfraUser {
     default: false,
   })
   public readonly suspended!: boolean;
+
+  @Column({
+    type: "text",
+    nullable: false,
+  })
+  public readonly email!: string;
 }
