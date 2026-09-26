@@ -9,7 +9,7 @@
   "scripts": {
     "build:api": "tsc -b packages/domain packages/contracts packages/application packages/infrastructure packages/presentation apps/api",
     "start:api": "node apps/api/dist/main.js",
-    "check:azure-config": "node packages/infrastructure/scripts/check-azure-config.mjs"
+    "dev:api": "npm run build:api && npm run start:api"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
