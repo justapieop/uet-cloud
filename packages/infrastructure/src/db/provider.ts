@@ -27,8 +27,12 @@ export const DatabaseModule = TypeOrmModule.forRootAsync({
       },
       options: {
         encrypt: enableEncryption,
-      }
-    };
+      },
+      migrationsRun: true,
+      migrationsTransactionMode: "all",
+      migrations: [import.meta.dirname + "/migrations/**/*{.js,.ts}"],
+      logging: devMode ? "all" : undefined,
+  };
   },
   inject: [ConfigService],
 });
