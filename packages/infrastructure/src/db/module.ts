@@ -3,6 +3,9 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { InfraRole, InfraRoleRepository } from "./repositories/role.js";
 import { InfraUser, InfraUserRepository } from "./repositories/user.js";
 import { ConfigService } from "@nestjs/config";
+import { UNIT_OF_WORK } from "@kumo/application";
+import { TypeOrmUnitOfWork } from "./uow.js";
+import { UserUseCases } from "@kumo/application";
 
 @Module({
   imports: [
@@ -44,10 +47,16 @@ import { ConfigService } from "@nestjs/config";
   providers: [
     InfraUserRepository,
     InfraRoleRepository,
+    TypeOrmUnitOfWork,
+    {
+      provide: UNIT_OF_WORK,
+      useExisting: TypeOrmUnitOfWork,
+    },
+    UserUseCases,
   ],
   exports: [
-    InfraUserRepository,
-    InfraRoleRepository,
+    UNIT_OF_WORK,
+    UserUseCases,
   ]
 })
 export class DatabaseModule { }

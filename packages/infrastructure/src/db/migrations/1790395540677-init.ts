@@ -21,12 +21,6 @@ export class Init1790395540677 implements MigrationInterface {
                         isNullable: false,
                     },
                     {
-                        name: "email",
-                        type: "nvarchar",
-                        length: "255",
-                        isNullable: false,
-                    },
-                    {
                         name: "created_at",
                         type: "datetime2",
                         precision: 7,

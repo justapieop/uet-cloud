@@ -1,5 +1,6 @@
 import type { RoleRepository } from "@kumo/application";
 import { Role } from "@kumo/domain";
+import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Column, CreateDateColumn, Entity, PrimaryColumn, Repository } from "typeorm";
 
@@ -42,7 +43,7 @@ export class InfraRole {
   public readonly permission!: bigint;
 }
 
-
+@Injectable()
 export class InfraRoleRepository implements RoleRepository {
   public constructor(
     @InjectRepository(InfraRole)

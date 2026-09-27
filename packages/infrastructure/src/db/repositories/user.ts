@@ -34,13 +34,6 @@ export class InfraUser {
     default: false,
   })
   public readonly suspended!: boolean;
-
-  @Column({
-    type: "nvarchar",
-    length: 255,
-    nullable: false,
-  })
-  public readonly email!: string;
 }
 
 @Injectable()
@@ -68,5 +61,9 @@ export class InfraUserRepository implements UserRepository {
     const dbUser: InfraUser = this.userRepository.create(user);
 
     await this.userRepository.save(dbUser);
+  }
+
+  public async exists(id: string): Promise<boolean> {
+    return await this.userRepository.existsBy({ id, });
   }
 }

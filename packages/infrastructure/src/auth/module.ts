@@ -1,8 +1,15 @@
 import { Module } from "@nestjs/common";
-import { AuthProvider } from "./provider.js";
+import { PassportProvider } from "./provider.js";
+import { DatabaseModule } from "../db/index.js";
 
 @Module({
-  providers: [AuthProvider],
-  exports: [AuthProvider],
+  imports: [
+    DatabaseModule,
+  ],
+  providers: [
+    PassportProvider,
+  ],
+  exports: [
+  ],
 })
 export class AuthModule { }

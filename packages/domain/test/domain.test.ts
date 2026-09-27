@@ -2,40 +2,35 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { InvalidDomainParams, Permission, Role, User } from "../dist/index.js";
 
-function createUser(email: string): User {
-  return new User({ id: "user-1", displayName: "Alice", email, suspended: false });
+function createUser(id: string, displayName: string): User {
+  return new User({ id, displayName, suspended: false });
 }
 
-test("valid email construction and revalidation are repeatable", (): void => {
+test("valid user construction and revalidation are repeatable", (): void => {
   for (let attempt: number = 0; attempt < 3; attempt++) {
-    const user: User = createUser("alice@example.com");
+    const user: User = createUser("user-1", "Alice");
     assert.equal(user.validate(), null);
     assert.equal(user.validate(), null);
   }
 });
 
-test("email validation rejects malformed and partially matching inputs", (): void => {
-  const invalidEmails: readonly string[] = [
-    "NOT AN EMAIL <alice@example.com> GARBAGE",
-    " alice@example.com",
-    "alice@example.com ",
-    "alice@example.com\n",
-    "alice@example.com\r\n",
-    "alice@example.com\u2028",
-    "alice@example.com,other@example.com",
-    "alice..smith@example.com",
-    "alice@example.com!",
-    "alice@",
-    "",
+test("user construction rejects blank identity fields", (): void => {
+  const invalidUsers: readonly { id: string; displayName: string }[] = [
+    { id: "", displayName: "Alice" },
+    { id: "user-1", displayName: "" },
+    { id: "  ", displayName: "Alice" },
+    { id: "user-1", displayName: "  " },
   ];
 
-  invalidEmails.forEach((email: string): void => {
-    assert.throws((): User => createUser(email), InvalidDomainParams, email);
+  invalidUsers.forEach((details: { id: string; displayName: string }): void => {
+    assert.throws((): User => createUser(details.id, details.displayName), InvalidDomainParams);
   });
 });
 
-test("email validation accepts mixed case and plus addressing", (): void => {
-  assert.equal(createUser("Alice.Smith+tag@Example.COM").validate(), null);
+test("user preserves identity and display name", (): void => {
+  const user: User = createUser("user-1", "Alice");
+  assert.equal(user.id, "user-1");
+  assert.equal(user.displayName, "Alice");
 });
 
 test("Super grants copied permissions and permissions outside the catalog", (): void => {
