@@ -8,3 +8,4 @@ import { AppConfigModule, DatabaseModule } from "@kumo/infrastructure";
   ],
 })
 export class RootModule { }
+

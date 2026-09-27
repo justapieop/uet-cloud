@@ -5,8 +5,9 @@ import { ConfigModule } from "@nestjs/config";
 import { parse } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { FEATURE_FLAGS, type FeatureFlagConfiguration } from "./feature-flags.js";
 
-async function loadAzureConfiguration(): Promise<Record<string, unknown>> {
+async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> {
   const endpoint: string | undefined = process.env.AZURE_APPCONFIG_ENDPOINT ?? bootstrapSettings.AZURE_APPCONFIG_ENDPOINT;
 
   if (!endpoint) {
@@ -14,15 +15,20 @@ async function loadAzureConfiguration(): Promise<Record<string, unknown>> {
   }
 
   const credential: DefaultAzureCredential = new DefaultAzureCredential();
-  const configuration: AzureAppConfiguration = await load(endpoint, credential, {
+  return load(endpoint, credential, {
     selectors: [
       { keyFilter: "*", labelFilter: LabelFilter.Null },
       { keyFilter: "*", labelFilter: environment },
     ],
+    featureFlagOptions: {
+      enabled: true,
+      selectors: [
+        { keyFilter: "*", labelFilter: LabelFilter.Null },
+        { keyFilter: "*", labelFilter: environment },
+      ],
+    },
     keyVaultOptions: { credential, },
   });
-
-  return configuration.constructConfigurationObject();
 }
 
 const envFilePath: string = fileURLToPath(new URL("../../../../.env", import.meta.url));
@@ -41,6 +47,36 @@ if (!["local", "azure"].includes(configurationSource)) {
 }
 
 const useAzureConfiguration: boolean = configurationSource === "azure";
+let azureConfigurationPromise: Promise<AzureAppConfiguration> | undefined;
+
+function getAzureConfiguration(): Promise<AzureAppConfiguration> {
+  azureConfigurationPromise ??= loadAzureConfigurationProvider();
+  return azureConfigurationPromise;
+}
+
+async function loadAzureConfiguration(): Promise<Record<string, unknown>> {
+  const configuration: AzureAppConfiguration = await getAzureConfiguration();
+  const values: Record<string, unknown> = configuration.constructConfigurationObject();
+  delete values.feature_management;
+  return values;
+}
+
+async function loadFeatureFlags(): Promise<FeatureFlagConfiguration> {
+  if (!useAzureConfiguration) {
+    return { feature_flags: [] };
+  }
+
+  const configuration: AzureAppConfiguration = await getAzureConfiguration();
+  const featureManagement: unknown = configuration.get("feature_management");
+
+  if (typeof featureManagement !== "object" || featureManagement === null ||
+    !("feature_flags" in featureManagement) ||
+    !Array.isArray(featureManagement.feature_flags)) {
+    throw new Error("Azure App Configuration did not return feature flags");
+  }
+
+  return { feature_flags: featureManagement.feature_flags };
+}
 
 function loadRuntimeConfiguration(): Record<string, string> {
   return {
@@ -49,13 +85,26 @@ function loadRuntimeConfiguration(): Record<string, string> {
   };
 }
 
-export const AppConfigModule: Promise<DynamicModule> = ConfigModule.forRoot({
-  cache: true,
-  expandVariables: false,
-  isGlobal: true,
-  ignoreEnvFile: useAzureConfiguration,
-  envFilePath,
-  load: useAzureConfiguration
-    ? [loadAzureConfiguration, loadRuntimeConfiguration]
-    : [loadRuntimeConfiguration],
-});
+async function createAppConfigModule(): Promise<DynamicModule> {
+  const configModule: DynamicModule = await ConfigModule.forRoot({
+    cache: true,
+    expandVariables: false,
+    isGlobal: true,
+    ignoreEnvFile: useAzureConfiguration,
+    envFilePath,
+    load: useAzureConfiguration
+      ? [loadAzureConfiguration, loadRuntimeConfiguration]
+      : [loadRuntimeConfiguration],
+  });
+
+  return {
+    ...configModule,
+    providers: [
+      ...(configModule.providers ?? []),
+      { provide: FEATURE_FLAGS, useFactory: loadFeatureFlags },
+    ],
+    exports: [...(configModule.exports ?? []), FEATURE_FLAGS],
+  };
+}
+
+export const AppConfigModule: Promise<DynamicModule> = createAppConfigModule();
