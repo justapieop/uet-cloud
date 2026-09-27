@@ -1,15 +1,9 @@
 import { load, LabelFilter, type AzureAppConfiguration } from "@azure/app-configuration-provider";
 import { DefaultAzureCredential } from "@azure/identity";
-import type { FactoryProvider } from "@nestjs/common";
 import { parse } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-
-export interface FeatureFlagConfiguration {
-  readonly feature_flags: ReadonlyArray<unknown>;
-}
-
-export const FEATURE_FLAGS: unique symbol = Symbol("FEATURE_FLAGS");
+import { FEATURE_FLAG_REFRESH_INTERVAL_MS } from "../feature-flags/interval.js";
 
 async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> {
   const endpoint: string | undefined = process.env.AZURE_APPCONFIG_ENDPOINT ?? bootstrapSettings.AZURE_APPCONFIG_ENDPOINT;
@@ -30,6 +24,10 @@ async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> 
         { keyFilter: "*", labelFilter: LabelFilter.Null },
         { keyFilter: "*", labelFilter: environment },
       ],
+      refresh: {
+        enabled: true,
+        refreshIntervalInMs: FEATURE_FLAG_REFRESH_INTERVAL_MS,
+      },
     },
     keyVaultOptions: { credential, },
   });
@@ -53,7 +51,7 @@ if (!["local", "azure"].includes(configurationSource)) {
 export const useAzureConfiguration: boolean = configurationSource === "azure";
 let azureConfigurationPromise: Promise<AzureAppConfiguration> | undefined;
 
-function getAzureConfiguration(): Promise<AzureAppConfiguration> {
+export function getAzureConfiguration(): Promise<AzureAppConfiguration> {
   azureConfigurationPromise ??= loadAzureConfigurationProvider();
   return azureConfigurationPromise;
 }
@@ -65,31 +63,9 @@ export async function loadAzureConfiguration(): Promise<Record<string, unknown>>
   return values;
 }
 
-async function loadFeatureFlags(): Promise<FeatureFlagConfiguration> {
-  if (!useAzureConfiguration) {
-    return { feature_flags: [] };
-  }
-
-  const configuration: AzureAppConfiguration = await getAzureConfiguration();
-  const featureManagement: unknown = configuration.get("feature_management");
-
-  if (typeof featureManagement !== "object" || featureManagement === null ||
-    !("feature_flags" in featureManagement) ||
-    !Array.isArray(featureManagement.feature_flags)) {
-    throw new Error("Azure App Configuration did not return feature flags");
-  }
-
-  return { feature_flags: featureManagement.feature_flags };
-}
-
 export function loadRuntimeConfiguration(): Record<string, string> {
   return {
     NODE_ENV: environment,
     CONFIG_SOURCE: configurationSource,
   };
 }
-
-export const featureFlagsProvider: FactoryProvider<FeatureFlagConfiguration> = {
-  provide: FEATURE_FLAGS,
-  useFactory: loadFeatureFlags,
-};

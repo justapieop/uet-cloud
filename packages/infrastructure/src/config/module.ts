@@ -1,9 +1,7 @@
 import { Global, Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import {
-  FEATURE_FLAGS,
   envFilePath,
-  featureFlagsProvider,
   loadAzureConfiguration,
   loadRuntimeConfiguration,
   useAzureConfiguration,
@@ -23,7 +21,6 @@ import {
         : [loadRuntimeConfiguration],
     }),
   ],
-  providers: [featureFlagsProvider],
-  exports: [ConfigModule, FEATURE_FLAGS],
+  exports: [ConfigModule],
 })
 export class AppConfigModule { }

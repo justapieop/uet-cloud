@@ -1,0 +1,11 @@
+import { Global, Module } from "@nestjs/common";
+import { AppConfigModule } from "../config/module.js";
+import { FEATURE_FLAGS, FeatureFlagsService, featureFlagsProvider, featureFlagsTokenProvider } from "./provider.js";
+
+@Global()
+@Module({
+  imports: [AppConfigModule],
+  providers: [featureFlagsProvider, featureFlagsTokenProvider],
+  exports: [FEATURE_FLAGS, FeatureFlagsService],
+})
+export class FeatureFlagsModule { }
