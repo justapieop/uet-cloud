@@ -1,21 +1,21 @@
 # API configuration
 
-The API reads configuration through NestJS `ConfigService`. `NODE_ENV` and `KUMO_CONFIG_SOURCE` are independent:
+The API reads configuration through NestJS `ConfigService`. `NODE_ENV` and `CONFIG_SOURCE` are independent:
 
 | Setting | Values | Default | Purpose |
 | --- | --- | --- | --- |
 | `NODE_ENV` | `development`, `test`, `production` | `production` | Selects the runtime environment and the Azure label override. Set it in the process environment or repository-root `.env`; the process value wins. |
-| `KUMO_CONFIG_SOURCE` | `local`, `azure` | `azure` | Selects where application configuration is loaded from. Set it in the process environment or repository-root `.env`; the process value wins. |
+| `CONFIG_SOURCE` | `local`, `azure` | `azure` | Selects where application configuration is loaded from. Set it in the process environment or repository-root `.env`; the process value wins. |
 
-Any combination is supported. For example, `NODE_ENV=development` with `KUMO_CONFIG_SOURCE=azure` runs development behavior using Azure settings, while `NODE_ENV=production` with `KUMO_CONFIG_SOURCE=local` uses `.env`. The repository-root `.env` is ignored by Git.
+Any combination is supported. For example, `NODE_ENV=development` with `CONFIG_SOURCE=azure` runs development behavior using Azure settings, while `NODE_ENV=production` with `CONFIG_SOURCE=local` uses `.env`. The repository-root `.env` is ignored by Git.
 
 ## Local source
 
-Set `KUMO_CONFIG_SOURCE=local` to load application values from the repository-root `.env`.
+Set `CONFIG_SOURCE=local` to load application values from the repository-root `.env`.
 
 ## Azure source
 
-Set `KUMO_CONFIG_SOURCE=azure` and `AZURE_APPCONFIG_ENDPOINT` to the App Configuration store endpoint, such as `https://<store>.azconfig.io`. The endpoint can be set in the process environment or `.env`. When the source is Azure, only `NODE_ENV`, the source switch, and the endpoint are read from `.env` for bootstrap; application values come from Azure. The API authenticates with `DefaultAzureCredential`, which can use a managed identity on Azure or a local Azure CLI sign-in.
+Set `CONFIG_SOURCE=azure` and `AZURE_APPCONFIG_ENDPOINT` to the App Configuration store endpoint, such as `https://<store>.azconfig.io`. The endpoint can be set in the process environment or `.env`. When the source is Azure, only `NODE_ENV`, the source switch, and the endpoint are read from `.env` for bootstrap; application values come from Azure. The API authenticates with `DefaultAzureCredential`, which can use a managed identity on Azure or a local Azure CLI sign-in.
 
 To diagnose local Azure access without starting the database, run `npm run check:azure-config` after `az login`. This command uses the Azure CLI identity directly, checks the App Configuration data endpoint, then tries the same full configuration load and Key Vault reference resolution as the API. It reports status without printing configuration values. For an HTTP `403`, it also reports the token's tenant and principal IDs and any error category returned by the store, so they can be compared with the store's IAM and network settings.
 
