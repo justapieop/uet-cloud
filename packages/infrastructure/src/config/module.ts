@@ -1,13 +1,13 @@
 import type { DynamicModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { FEATURE_FLAGS } from "./feature-flags.js";
 import {
   envFilePath,
-  FEATURE_FLAGS,
   featureFlagsProvider,
   loadAzureConfiguration,
   loadRuntimeConfiguration,
   useAzureConfiguration,
-} from "@kumo/infrastructure";
+} from "./provider.js";
 
 async function createAppConfigModule(): Promise<DynamicModule> {
   const configModule: DynamicModule = await ConfigModule.forRoot({

@@ -16,7 +16,7 @@ export const databaseOptionsProvider: TypeOrmModuleAsyncOptions = {
       host: config.getOrThrow<string>("DATABASE_URL"),
       port,
       database: config.getOrThrow("DATABASE_NAME"),
-      synchronize: devMode,
+      synchronize: false,
       autoLoadEntities: true,
       cache: true,
       authentication: {

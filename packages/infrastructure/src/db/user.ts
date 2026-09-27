@@ -60,7 +60,8 @@ export class InfraUser {
   public readonly suspended!: boolean;
 
   @Column({
-    type: "text",
+    type: "nvarchar",
+    length: 255,
     nullable: false,
   })
   public readonly email!: string;
