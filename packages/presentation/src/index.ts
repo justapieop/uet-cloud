@@ -1,2 +1,2 @@
 export * from "./bootstrap.js";
-export * from "./modules/root/Root.module.js";
+export * from "./Root.module.js";
