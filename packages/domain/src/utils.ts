@@ -1,6 +1,6 @@
 const ALPHANUMERIC_REGEX: RegExp = /^[a-zA-Z0-9]+$/;
 const BLANK_REGEX: RegExp = /^\s*$/;
-const EMAIL_REGEX: RegExp = /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/g;
+const EMAIL_REGEX: RegExp = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?![\s\S])/i;
 
 export function isAlphaNumStr(s: string): boolean { 
   return ALPHANUMERIC_REGEX.test(s);
