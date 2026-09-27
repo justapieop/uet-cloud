@@ -1,4 +1,4 @@
-import type { DynamicModule } from "@nestjs/common";
+import { Global, Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { FEATURE_FLAGS } from "./feature-flags.js";
 import {
@@ -9,23 +9,21 @@ import {
   useAzureConfiguration,
 } from "./provider.js";
 
-async function createAppConfigModule(): Promise<DynamicModule> {
-  const configModule: DynamicModule = await ConfigModule.forRoot({
-    cache: true,
-    expandVariables: false,
-    isGlobal: true,
-    ignoreEnvFile: useAzureConfiguration,
-    envFilePath,
-    load: useAzureConfiguration
-      ? [loadAzureConfiguration, loadRuntimeConfiguration]
-      : [loadRuntimeConfiguration],
-  });
-
-  return {
-    ...configModule,
-    providers: [...(configModule.providers ?? []), featureFlagsProvider],
-    exports: [...(configModule.exports ?? []), FEATURE_FLAGS],
-  };
-}
-
-export const AppConfigModule: Promise<DynamicModule> = createAppConfigModule();
+@Global()
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      cache: true,
+      expandVariables: false,
+      isGlobal: true,
+      ignoreEnvFile: useAzureConfiguration,
+      envFilePath,
+      load: useAzureConfiguration
+        ? [loadAzureConfiguration, loadRuntimeConfiguration]
+        : [loadRuntimeConfiguration],
+    }),
+  ],
+  providers: [featureFlagsProvider],
+  exports: [ConfigModule, FEATURE_FLAGS],
+})
+export class AppConfigModule { }
