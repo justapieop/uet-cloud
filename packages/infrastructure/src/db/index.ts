@@ -1,4 +1,3 @@
-export * from "./role.js";
-export * from "./user.js";
-export * from "./provider.js";
+export * from "./repositories/role.js";
+export * from "./repositories/user.js";
 export * from "./module.js";

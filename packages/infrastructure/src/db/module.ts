@@ -1,28 +1,53 @@
-import { Module, type FactoryProvider } from "@nestjs/common";
-import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
-import type { Repository } from "typeorm";
-import { databaseOptionsProvider } from "./provider.js";
-import { InfraRole, InfraRoleRepository } from "./role.js";
-import { InfraUser, InfraUserRepository } from "./user.js";
-
-const userRepositoryProvider: FactoryProvider<InfraUserRepository> = {
-  provide: InfraUserRepository,
-  useFactory: (repository: Repository<InfraUser>): InfraUserRepository => new InfraUserRepository(repository),
-  inject: [getRepositoryToken(InfraUser)],
-};
-
-const roleRepositoryProvider: FactoryProvider<InfraRoleRepository> = {
-  provide: InfraRoleRepository,
-  useFactory: (repository: Repository<InfraRole>): InfraRoleRepository => new InfraRoleRepository(repository),
-  inject: [getRepositoryToken(InfraRole)],
-};
+import { Module } from "@nestjs/common";
+import { TypeOrmModule } from "@nestjs/typeorm";
+import { InfraRole, InfraRoleRepository } from "./repositories/role.js";
+import { InfraUser, InfraUserRepository } from "./repositories/user.js";
+import { ConfigService } from "@nestjs/config";
 
 @Module({
   imports: [
-    TypeOrmModule.forRootAsync(databaseOptionsProvider),
+    TypeOrmModule.forRootAsync({
+      useFactory: async (config: ConfigService) => {
+        const devMode: boolean = config.get<string>("NODE_ENV", "production").trim().toLowerCase() === "development";
+        const enableEncryption: boolean = config.get<string>("DATABASE_ENABLE_ENCRYPTION", "true").trim().toLowerCase() === "true";
+        const port: number = Number(config.getOrThrow<string>("DATABASE_PORT"));
+
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error("DATABASE_PORT must be an integer between 1 and 65535");
+        }
+
+        return {
+          type: "mssql",
+          host: config.getOrThrow<string>("DATABASE_URL"),
+          port,
+          database: config.getOrThrow("DATABASE_NAME"),
+          synchronize: false,
+          autoLoadEntities: true,
+          cache: true,
+          authentication: {
+            type: "azure-active-directory-default",
+            options: {},
+          },
+          options: {
+            encrypt: enableEncryption,
+          },
+          migrationsRun: true,
+          migrationsTransactionMode: "all",
+          migrations: [import.meta.dirname + "/migrations/**/*{.js,.ts}"],
+          logging: devMode ? "all" : undefined,
+        };
+      },
+      inject: [ConfigService],
+    }),
     TypeOrmModule.forFeature([InfraUser, InfraRole]),
   ],
-  providers: [userRepositoryProvider, roleRepositoryProvider],
-  exports: [InfraUserRepository, InfraRoleRepository],
+  providers: [
+    InfraUserRepository,
+    InfraRoleRepository,
+  ],
+  exports: [
+    InfraUserRepository,
+    InfraRoleRepository,
+  ]
 })
 export class DatabaseModule { }
