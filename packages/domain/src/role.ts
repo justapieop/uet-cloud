@@ -34,15 +34,19 @@ export class Role extends Domain<RoleDetails> {
   }
 
   public hasPermission(permission: Permission): boolean {
-    if (!Object.values(Permission).includes(permission)) {
+    if (!Number.isSafeInteger(permission.offset) || permission.offset < 0) {
       return false;
     }
 
     const superMask: bigint = 1n << BigInt(Permission.Super.offset);
+
+    if ((this.permission & superMask) === superMask) {
+      return true;
+    }
+
     const requiredMask: bigint = 1n << BigInt(permission.offset);
 
-    return (this.permission & superMask) === superMask ||
-      (this.permission & requiredMask) === requiredMask;
+    return (this.permission & requiredMask) === requiredMask;
   }
 
   public getGrantedPermissions(): Permission[] {
@@ -66,7 +70,7 @@ export const Permission: Readonly<Record<"Super", PermissionDefinition>> = {
   Super: {
     offset: 0,
     name: "Super",
-    description: "Super role that has all permission. Granting this permission is not recommended.",
+    description: "Super role that has all permissions. Granting this permission is not recommended.",
   },
 };
 
