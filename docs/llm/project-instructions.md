@@ -25,6 +25,7 @@ Do not write anything into README.md until told to do so.
 ## Working guidance
 
 - Explicitly annotate every TypeScript variable declaration (`const`, `let`, or `var`), including exported constants. Do not rely on type inference for variables or use `any` as a substitute for a meaningful type.
+- Keep external dependencies used by `packages/infrastructure` and `packages/presentation` in the root `package.json`. Those workspaces declare only their `@kumo/*` package dependencies; the root lockfile records the resolved versions.
 - Keep product intent, architectural choices, and implementation details distinct. Do not present an idea or assumption as a confirmed decision.
 - Consider the effect of proposals on the PaaS as a whole, including its frontend client, users, Azure hosting, ACA deployment workflow, and Clean Architecture boundaries.
 - Do not infer specific Azure services, languages, frameworks, tenancy models, deployment flows, or security requirements unless the user or project documents establish them.
