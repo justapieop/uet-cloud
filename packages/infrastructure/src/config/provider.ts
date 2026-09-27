@@ -1,7 +1,6 @@
 import { load, LabelFilter, type AzureAppConfiguration } from "@azure/app-configuration-provider";
 import { DefaultAzureCredential } from "@azure/identity";
-import type { DynamicModule } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
+import type { FactoryProvider } from "@nestjs/common";
 import { parse } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -31,7 +30,7 @@ async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> 
   });
 }
 
-const envFilePath: string = fileURLToPath(new URL("../../../../.env", import.meta.url));
+export const envFilePath: string = fileURLToPath(new URL("../../../../.env", import.meta.url));
 const bootstrapSettings: Record<string, string> = existsSync(envFilePath)
   ? parse(readFileSync(envFilePath))
   : {};
@@ -46,7 +45,7 @@ if (!["local", "azure"].includes(configurationSource)) {
   throw new Error(`Unsupported CONFIG_SOURCE: ${configurationSource}`);
 }
 
-const useAzureConfiguration: boolean = configurationSource === "azure";
+export const useAzureConfiguration: boolean = configurationSource === "azure";
 let azureConfigurationPromise: Promise<AzureAppConfiguration> | undefined;
 
 function getAzureConfiguration(): Promise<AzureAppConfiguration> {
@@ -54,7 +53,7 @@ function getAzureConfiguration(): Promise<AzureAppConfiguration> {
   return azureConfigurationPromise;
 }
 
-async function loadAzureConfiguration(): Promise<Record<string, unknown>> {
+export async function loadAzureConfiguration(): Promise<Record<string, unknown>> {
   const configuration: AzureAppConfiguration = await getAzureConfiguration();
   const values: Record<string, unknown> = configuration.constructConfigurationObject();
   delete values.feature_management;
@@ -78,33 +77,14 @@ async function loadFeatureFlags(): Promise<FeatureFlagConfiguration> {
   return { feature_flags: featureManagement.feature_flags };
 }
 
-function loadRuntimeConfiguration(): Record<string, string> {
+export function loadRuntimeConfiguration(): Record<string, string> {
   return {
     NODE_ENV: environment,
     CONFIG_SOURCE: configurationSource,
   };
 }
 
-async function createAppConfigModule(): Promise<DynamicModule> {
-  const configModule: DynamicModule = await ConfigModule.forRoot({
-    cache: true,
-    expandVariables: false,
-    isGlobal: true,
-    ignoreEnvFile: useAzureConfiguration,
-    envFilePath,
-    load: useAzureConfiguration
-      ? [loadAzureConfiguration, loadRuntimeConfiguration]
-      : [loadRuntimeConfiguration],
-  });
-
-  return {
-    ...configModule,
-    providers: [
-      ...(configModule.providers ?? []),
-      { provide: FEATURE_FLAGS, useFactory: loadFeatureFlags },
-    ],
-    exports: [...(configModule.exports ?? []), FEATURE_FLAGS],
-  };
-}
-
-export const AppConfigModule: Promise<DynamicModule> = createAppConfigModule();
+export const featureFlagsProvider: FactoryProvider<FeatureFlagConfiguration> = {
+  provide: FEATURE_FLAGS,
+  useFactory: loadFeatureFlags,
+};

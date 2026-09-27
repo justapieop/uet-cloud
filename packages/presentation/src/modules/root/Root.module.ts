@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
-import { AppConfigModule, DatabaseModule } from "@kumo/infrastructure";
+import { AppConfigModule } from "./Config.module.js";
+import { DatabaseModule } from "./Database.module.js";
 
 @Module({
   imports: [
@@ -8,4 +9,3 @@ import { AppConfigModule, DatabaseModule } from "@kumo/infrastructure";
   ],
 })
 export class RootModule { }
-

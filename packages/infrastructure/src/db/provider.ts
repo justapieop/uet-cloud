@@ -1,9 +1,7 @@
 import { ConfigService } from "@nestjs/config";
-import { TypeOrmModule } from "@nestjs/typeorm";
-import { AppConfigModule } from "../config/provider.js";
+import type { TypeOrmModuleAsyncOptions } from "@nestjs/typeorm";
 
-export const DatabaseModule = TypeOrmModule.forRootAsync({
-  imports: [AppConfigModule],
+export const databaseOptionsProvider: TypeOrmModuleAsyncOptions = {
   useFactory: async (config: ConfigService) => {
     const devMode: boolean = config.get<string>("NODE_ENV", "production").trim().toLowerCase() === "development";
     const enableEncryption: boolean = config.get<string>("DATABASE_ENABLE_ENCRYPTION", "true").trim().toLowerCase() === "true";
@@ -35,4 +33,4 @@ export const DatabaseModule = TypeOrmModule.forRootAsync({
   };
   },
   inject: [ConfigService],
-});
+};
