@@ -1,11 +1,6 @@
+import { envFilePath, loadAzureConfiguration, loadRuntimeConfiguration, useAzureConfiguration } from "@kumo/infrastructure";
 import { Global, Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import {
-  envFilePath,
-  loadAzureConfiguration,
-  loadRuntimeConfiguration,
-  useAzureConfiguration,
-} from "./provider.js";
 
 @Global()
 @Module({

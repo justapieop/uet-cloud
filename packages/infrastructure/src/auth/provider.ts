@@ -17,15 +17,14 @@ export class PassportProvider extends PassportStrategy(Strategy, "github") {
       clientID: configService.getOrThrow("GITHUB_OAUTH2_CLIENT_ID"),
       clientSecret: configService.getOrThrow("GITHUB_OAUTH2_SECRET"),
       callbackURL: configService.getOrThrow("GITHUB_OAUTH2_REDIRECT_URL"),
-      scope: ["user:email", "user:profile"]
+      scope: ["read:user", "offline_access"]
     });
   }
 
-  public async validate(_accessToken: string, _refreshToken: string, profile: Profile, done: (err: any, user: any) => void): Promise<any> {
-    const user: User = await this.uow.run(async (repos: UnitOfWorkRepositories) => {
-      return await this.userUseCases.createIfNotExists(repos, profile.id, profile.displayName);
-    });
+  public validate(_accessToken: string, _refreshToken: string, profile: Profile): Promise<User> {
+    const displayName: string = profile.displayName?.trim() || profile.username?.trim() || profile.id;
 
-    done(null, user);
+    return this.uow.run((repositories: UnitOfWorkRepositories): Promise<User> =>
+      this.userUseCases.createIfNotExists(repositories, profile.id, displayName));
   }
 }

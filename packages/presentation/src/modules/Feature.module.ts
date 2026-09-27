@@ -1,6 +1,6 @@
 import { Global, Module } from "@nestjs/common";
-import { AppConfigModule } from "../config/module.js";
-import { FEATURE_FLAGS, FeatureFlagsService, featureFlagsProvider, featureFlagsTokenProvider } from "./provider.js";
+import { AppConfigModule } from "./AppConfig.module.js";
+import { FEATURE_FLAGS, FeatureFlagsService, featureFlagsProvider, featureFlagsTokenProvider } from "@kumo/infrastructure";
 
 @Global()
 @Module({
@@ -8,4 +8,4 @@ import { FEATURE_FLAGS, FeatureFlagsService, featureFlagsProvider, featureFlagsT
   providers: [featureFlagsProvider, featureFlagsTokenProvider],
   exports: [FEATURE_FLAGS, FeatureFlagsService],
 })
-export class FeatureFlagsModule { }
+export class FeatureModule { }
