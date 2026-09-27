@@ -4,7 +4,12 @@ import type { FactoryProvider } from "@nestjs/common";
 import { parse } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { FEATURE_FLAGS, type FeatureFlagConfiguration } from "./feature-flags.js";
+
+export interface FeatureFlagConfiguration {
+  readonly feature_flags: ReadonlyArray<unknown>;
+}
+
+export const FEATURE_FLAGS: unique symbol = Symbol("FEATURE_FLAGS");
 
 async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> {
   const endpoint: string | undefined = process.env.AZURE_APPCONFIG_ENDPOINT ?? bootstrapSettings.AZURE_APPCONFIG_ENDPOINT;

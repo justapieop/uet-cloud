@@ -1,7 +1,7 @@
 import { Global, Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { FEATURE_FLAGS } from "./feature-flags.js";
 import {
+  FEATURE_FLAGS,
   envFilePath,
   featureFlagsProvider,
   loadAzureConfiguration,
