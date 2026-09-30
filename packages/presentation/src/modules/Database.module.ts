@@ -1,6 +1,7 @@
-import { Logger, Module } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
+import { PinoLogger } from "nestjs-pino";
 import { UNIT_OF_WORK } from "@kumo/application";
 import { UserUseCases } from "@kumo/application";
 import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrmLoggerAdapter, TypeOrmUnitOfWork } from "@kumo/infrastructure";
@@ -8,7 +9,7 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
 @Module({
   imports: [
     TypeOrmModule.forRootAsync({
-      useFactory: async (config: ConfigService) => {
+      useFactory: async (config: ConfigService, pinoLogger: PinoLogger) => {
         const devMode: boolean = config.get<string>("NODE_ENV", "production").trim().toLowerCase() === "development";
         const enableEncryption: boolean = config.get<string>("DATABASE_ENABLE_ENCRYPTION", "true").trim().toLowerCase() === "true";
         const port: number = Number(config.getOrThrow<string>("DATABASE_PORT"));
@@ -36,10 +37,10 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
           migrationsTransactionMode: "all",
           migrations: ["packages/infrastructure/src/db/migrations"],
           logging: devMode ? "all" : undefined,
-          logger: new TypeOrmLoggerAdapter(new Logger("TypeORM")),
+          logger: new TypeOrmLoggerAdapter(pinoLogger),
         };
       },
-      inject: [ConfigService],
+      inject: [ConfigService, PinoLogger],
     }),
     TypeOrmModule.forFeature([InfraUser, InfraRole]),
   ],

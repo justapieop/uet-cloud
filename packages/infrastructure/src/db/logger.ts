@@ -1,14 +1,14 @@
-import type { LoggerService } from "@nestjs/common";
+import type { PinoLogger } from "nestjs-pino";
 import type { ObjectLiteral } from "typeorm";
 import type { Logger as TypeOrmLogger } from "typeorm";
 
-type LogLevel = "debug" | "error" | "log" | "warn";
+type LogLevel = "debug" | "error" | "info" | "warn";
 type LogFields = Record<string, string | number | undefined>;
 type QueryParameters = unknown[] | ObjectLiteral | undefined;
 
 export class TypeOrmLoggerAdapter implements TypeOrmLogger {
   public constructor(
-    private readonly nestLogger: LoggerService,
+    private readonly pinoLogger: PinoLogger,
     private readonly context: string = TypeOrmLoggerAdapter.name,
   ) { }
 
@@ -39,18 +39,18 @@ export class TypeOrmLoggerAdapter implements TypeOrmLogger {
   }
 
   public logSchemaBuild(message: string): void {
-    this.write("log", "schema-build", { message });
+    this.write("info", "schema-build", { message });
   }
 
   public logMigration(message: string): void {
-    this.write("log", "migration", { message });
+    this.write("info", "migration", { message });
   }
 
   public log(level: "log" | "info" | "warn", message: unknown): void {
-    const nestLevel: LogLevel = level === "warn" ? "warn" : "log";
+    const pinoLevel: LogLevel = level === "warn" ? "warn" : "info";
     const messageText: string = typeof message === "string" ? message : String(message);
 
-    this.write(nestLevel, level, { message: messageText });
+    this.write(pinoLevel, level, { message: messageText });
   }
 
   private countParameters(parameters: QueryParameters): number {
@@ -62,24 +62,26 @@ export class TypeOrmLoggerAdapter implements TypeOrmLogger {
   }
 
   private write(level: LogLevel, event: string, fields: LogFields): void {
-    const payload: string = JSON.stringify({ component: "typeorm", context: this.context, event, ...fields }) ?? "{\"component\":\"typeorm\"}";
+    const structuredFields: LogFields & { component: string; context: string; event: string } = {
+      component: "typeorm",
+      context: this.context,
+      event,
+      ...fields,
+    };
+    const message: string = `TypeORM ${event}`;
 
     switch (level) {
       case "debug":
-        if (this.nestLogger.debug !== undefined) {
-          this.nestLogger.debug(payload);
-        } else {
-          this.nestLogger.log(payload);
-        }
+        this.pinoLogger.debug(structuredFields, message);
         return;
       case "error":
-        this.nestLogger.error(payload);
+        this.pinoLogger.error(structuredFields, message);
         return;
       case "warn":
-        this.nestLogger.warn(payload);
+        this.pinoLogger.warn(structuredFields, message);
         return;
-      case "log":
-        this.nestLogger.log(payload);
+      case "info":
+        this.pinoLogger.info(structuredFields, message);
     }
   }
 }

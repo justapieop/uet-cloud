@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import type { INestApplication } from "@nestjs/common";
+import { ValidationPipe, type INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { RootModule } from "./modules/Root.module.js";
@@ -15,6 +15,7 @@ export async function bootstrap(): Promise<void> {
   const logger: Logger = app.get(Logger)
 
   app.useLogger(logger);
+  app.useGlobalPipes(new ValidationPipe());
 
   const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production").trim().toLowerCase());
 

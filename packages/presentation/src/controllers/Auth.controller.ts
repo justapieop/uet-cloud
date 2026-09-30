@@ -1,6 +1,7 @@
 import type { User } from "@kumo/domain";
-import { Controller, Get, Req, UseGuards } from "@nestjs/common";
+import { ClassSerializerInterceptor, Controller, Get, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import { UserResponseDto } from "../dto/User.dto.js";
 
 interface AuthenticatedRequest {
   user: User;
@@ -12,9 +13,10 @@ export class AuthController {
   @UseGuards(AuthGuard("github"))
   public login(): void {}
 
+  @UseInterceptors(ClassSerializerInterceptor)
   @Get("callback")
   @UseGuards(AuthGuard("github"))
-  public callback(@Req() request: AuthenticatedRequest): User {
-    return request.user;
+  public callback(@Req() request: AuthenticatedRequest): UserResponseDto {
+    return new UserResponseDto(request.user);
   }
 }
