@@ -20,6 +20,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - The codebase will use Clean Architecture for organization and future scaling.
 - The platform application will use TypeScript with NestJS; npm is the package manager.
 - The project is a monorepo that includes a frontend application serving as the client for the PaaS.
+- The frontend client follows Feature-Sliced Design (FSD) within `apps/web`.
 - npm workspaces place the thin NestJS server entry point in `apps/api` and the frontend client in `apps/web`. NestJS bootstrap and module composition live in `packages/presentation`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
 - `NODE_ENV` and `CONFIG_SOURCE` independently select the API runtime environment and configuration source. Both can come from the process environment or repository-root `.env`, with the process value taking precedence. `NODE_ENV` defaults to production. `CONFIG_SOURCE` defaults to Azure when unset; `local` loads `.env`, while `azure` loads App Configuration settings and resolves Key Vault references using an Azure identity.
 - Feature flags load from Azure App Configuration at startup and refresh every 12 hours. The local configuration source provides an empty feature flag list.
@@ -30,4 +31,4 @@ The README provides a setup guide and links to this brief. Use this brief and th
 
 ## Open questions
 
-The product scope, supported deployment inputs, user journey, tenancy model, Azure service choices beyond ACA, frontend technology, communication between applications, and operational requirements have not yet been established here. Treat these as open until decided.
+The product scope, supported deployment inputs, user journey, tenancy model, Azure service choices beyond ACA, frontend framework, communication between applications, and operational requirements have not yet been established here. Treat these as open until decided.

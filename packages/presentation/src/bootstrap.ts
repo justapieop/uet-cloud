@@ -3,16 +3,23 @@ import type { INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { RootModule } from "./modules/Root.module.js";
+import { Logger } from "nestjs-pino";
 
 export async function bootstrap(): Promise<void> {
-  const app: INestApplication = await NestFactory.create(RootModule);
+  const app: INestApplication = await NestFactory.create(RootModule, {
+    bufferLogs: true,
+  });
   const config: ConfigService = app.get(ConfigService);
-  const port: number = Number(config.get<string>("PORT") ?? "3000");
+  const port: number = Number(config.get<string>("PORT", "3000"));
+
+  const logger: Logger = app.get(Logger)
+
+  app.useLogger(logger);
 
   const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production").trim().toLowerCase());
 
   if (devMode) { 
-    console.log("Development or test mode is enabled! We advise against using this mode for production as they are strictly for non-production environment only. Connections to services maybe unencrypted and credentials can be accidentally logged. We are not liable for any damages that are caused by running this app in development or test mode on production")
+    logger.debug("Development or test mode is enabled! We advise against using this mode for production as they are strictly for non-production environment only. Connections to services maybe unencrypted and credentials can be accidentally logged. We are not liable for any damages that are caused by running this app in development or test mode on production");
   }
 
   if (!Number.isInteger(port) || port < 0 || port > 65535) {

@@ -10,10 +10,13 @@
     "build:api": "tsc -b packages/domain packages/contracts packages/application packages/infrastructure packages/presentation apps/api",
     "test:api": "npm run build:api && node --test",
     "start:api": "node apps/api/dist/main.js",
-    "dev:api": "npm run build:api && npm run start:api"
+    "dev:api": "npm run build:api && npm run start:api | npx pino-pretty"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
     "typescript": "^7.0.2"
+  },
+  "allowScripts": {
+    "@scarf/scarf@1.4.0": true
   }
 }
