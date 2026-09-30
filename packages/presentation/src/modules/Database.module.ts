@@ -1,9 +1,9 @@
-import { Module } from "@nestjs/common";
+import { Logger, Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { UNIT_OF_WORK } from "@kumo/application";
 import { UserUseCases } from "@kumo/application";
-import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrmUnitOfWork } from "@kumo/infrastructure";
+import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrmLoggerAdapter, TypeOrmUnitOfWork } from "@kumo/infrastructure";
 
 @Module({
   imports: [
@@ -36,6 +36,7 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
           migrationsTransactionMode: "all",
           migrations: ["packages/infrastructure/src/db/migrations"],
           logging: devMode ? "all" : undefined,
+          logger: new TypeOrmLoggerAdapter(new Logger("TypeORM")),
         };
       },
       inject: [ConfigService],
