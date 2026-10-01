@@ -1,3 +1,3 @@
-export default function HomePage() {
-  return <></>
-}
+import { HomePage } from "@/views/home";
+
+export default HomePage;
