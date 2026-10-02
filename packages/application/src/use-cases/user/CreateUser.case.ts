@@ -1,8 +1,15 @@
 import { User } from "@kumo/domain";
-import type { UnitOfWorkRepositories } from "../ports/uow.js";
+import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 
-export class UserUseCases {
-  public async createIfNotExists(
+export class CreateUserCase {
+  public constructor(private readonly unitOfWork: UnitOfWork) {}
+
+  public exec(id: string, displayName: string): Promise<User> {
+    return this.unitOfWork.run((repositories: UnitOfWorkRepositories): Promise<User> =>
+      this.createIfNotExists(repositories, id, displayName));
+  }
+
+  private async createIfNotExists(
     repositories: UnitOfWorkRepositories,
     id: string,
     displayName: string,

@@ -2,8 +2,8 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { PinoLogger } from "nestjs-pino";
-import { UNIT_OF_WORK } from "@kumo/application";
-import { UserUseCases } from "@kumo/application";
+import { UNIT_OF_WORK, type UnitOfWork } from "@kumo/application";
+import { CreateUserCase } from "@kumo/application";
 import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrmLoggerAdapter, TypeOrmUnitOfWork } from "@kumo/infrastructure";
 
 @Module({
@@ -52,11 +52,15 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
       provide: UNIT_OF_WORK,
       useExisting: TypeOrmUnitOfWork,
     },
-    UserUseCases,
+    {
+      provide: CreateUserCase,
+      useFactory: (unitOfWork: UnitOfWork): CreateUserCase => new CreateUserCase(unitOfWork),
+      inject: [UNIT_OF_WORK],
+    },
   ],
   exports: [
     UNIT_OF_WORK,
-    UserUseCases,
+    CreateUserCase,
   ]
 })
 export class DatabaseModule { }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigService } from "@nestjs/config";
-import { UserUseCases, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
+import { CreateUserCase, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
 import { Role, User } from "@kumo/domain";
 import type { Profile } from "passport-github2";
 import { PassportProvider } from "../dist/auth/provider.js";
@@ -31,7 +31,7 @@ test("GitHub strategy returns the user created in one unit of work", async (): P
       ? "http://localhost:3000/auth/callback"
       : "test-value",
   } as unknown as ConfigService;
-  const provider: PassportProvider = new PassportProvider(configService, unitOfWork, new UserUseCases());
+  const provider: PassportProvider = new PassportProvider(configService, new CreateUserCase(unitOfWork));
   const profile: Profile = {
     provider: "github",
     id: "123",

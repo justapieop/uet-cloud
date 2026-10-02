@@ -4,6 +4,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { RootModule } from "./modules/Root.module.js";
 import { Logger } from "nestjs-pino";
+import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 
 export async function bootstrap(): Promise<void> {
   const app: INestApplication = await NestFactory.create(RootModule, {
@@ -16,6 +17,28 @@ export async function bootstrap(): Promise<void> {
 
   app.useLogger(logger);
   app.useGlobalPipes(new ValidationPipe());
+
+  SwaggerModule.setup(
+    "/api-docs",
+    app,
+    () => SwaggerModule.createDocument(app,
+      new DocumentBuilder()
+        .addOAuth2(
+          {
+            type: "oauth2",
+            flows: {
+              authorizationCode: {
+                authorizationUrl: "https://github.com/login/oauth/authorize",
+                tokenUrl: "https://github.com/login/oauth/access_token",
+                scopes: { "read:user": "Read your GitHub profile" },
+              },
+            },
+          },
+          "github",
+        )
+        .build()
+    )
+  );
 
   const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production").trim().toLowerCase());
 
