@@ -80,9 +80,14 @@ export class AzureDeployService implements AzureDeployPort {
       );
     }
 
-    const exists: boolean = (await this.resourceClient.resourceGroups.checkExistence(
+    const existsResult = await this.resourceClient.resourceGroups.checkExistence(
       resourceGroupName,
-    )) as unknown as boolean;
+    );
+
+    const exists: boolean =
+      typeof existsResult === "boolean"
+        ? existsResult
+      : (existsResult as { body?: boolean })?.body === true;
 
     if (!exists) {
       await this.resourceClient.resourceGroups.createOrUpdate(
