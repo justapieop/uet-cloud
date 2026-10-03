@@ -1,4 +1,9 @@
-import { ContainerAppsAPIClient, type EnvironmentVar } from "@azure/arm-appcontainers";
+import {
+  ContainerAppsAPIClient,
+  type Container,
+  type ContainerApp,
+  type EnvironmentVar,
+} from "@azure/arm-appcontainers";
 import { ResourceManagementClient } from "@azure/arm-resources";
 import { DefaultAzureCredential } from "@azure/identity";
 import { Injectable, Optional } from "@nestjs/common";
@@ -80,14 +85,12 @@ export class AzureDeployService implements AzureDeployPort {
       );
     }
 
-    const existsResult = await this.resourceClient.resourceGroups.checkExistence(
-      resourceGroupName,
-    );
+    const existsResult: { body: boolean } =
+      await this.resourceClient.resourceGroups.checkExistence(
+        resourceGroupName,
+      );
 
-    const exists: boolean =
-      typeof existsResult === "boolean"
-        ? existsResult
-      : (existsResult as { body?: boolean })?.body === true;
+    const exists: boolean = existsResult.body;
 
     if (!exists) {
       await this.resourceClient.resourceGroups.createOrUpdate(
@@ -133,39 +136,38 @@ export class AzureDeployService implements AzureDeployPort {
     const maxReplicas: number =
       params.spec.scaling?.maxReplicas ?? DEFAULT_MAX_REPLICAS;
 
-    const result = await this.containerAppsClient.containerApps.beginCreateOrUpdateAndWait(
-      params.resourceGroupName,
-      params.appName,
-      {
-        location: this.location,
-        managedEnvironmentId: this.managedEnvironmentId,
-        configuration: {
-          ingress: {
-            external: true,
-            targetPort: params.spec.targetPort,
-            transport: "Auto",
-            allowInsecure: false,
-          },
-        },
-        template: {
-          containers: [
-            {
-              name: params.appName,
-              image: params.spec.image,
-              resources: {
-                cpu: cpuVal,
-                memory: memoryVal,
-              },
-              env: envVarsList.length > 0 ? envVarsList : undefined,
+    const result: ContainerApp =
+      await this.containerAppsClient.containerApps
+        .createOrUpdate(params.resourceGroupName, params.appName, {
+          location: this.location,
+          managedEnvironmentId: this.managedEnvironmentId,
+          configuration: {
+            ingress: {
+              external: true,
+              targetPort: params.spec.targetPort,
+              transport: "Auto",
+              allowInsecure: false,
             },
-          ],
-          scale: {
-            minReplicas,
-            maxReplicas,
           },
-        },
-      },
-    );
+          template: {
+            containers: [
+              {
+                name: params.appName,
+                image: params.spec.image,
+                resources: {
+                  cpu: cpuVal,
+                  memory: memoryVal,
+                },
+                env: envVarsList.length > 0 ? envVarsList : undefined,
+              },
+            ],
+            scale: {
+              minReplicas,
+              maxReplicas,
+            },
+          },
+        })
+        .pollUntilDone();
 
     const fqdn: string | undefined = result.configuration?.ingress?.fqdn;
     const url: string = fqdn ? `https://${fqdn}` : "";
@@ -176,12 +178,14 @@ export class AzureDeployService implements AzureDeployPort {
   public async updateContainerApp(
     params: UpdateAppParams,
   ): Promise<{ fqdn: string }> {
-    const existing = await this.containerAppsClient.containerApps.get(
-      params.resourceGroupName,
-      params.appName,
-    );
+    const existing: ContainerApp =
+      await this.containerAppsClient.containerApps.get(
+        params.resourceGroupName,
+        params.appName,
+      );
 
-    const existingContainer = existing.template?.containers?.[0];
+    const existingContainer: Container | undefined =
+      existing.template?.containers?.[0];
     const imageToUse: string = params.spec.image ?? existingContainer?.image ?? "";
     const targetPortToUse: number =
       params.spec.targetPort ?? existing.configuration?.ingress?.targetPort ?? 80;
@@ -210,41 +214,40 @@ export class AzureDeployService implements AzureDeployPort {
       existing.template?.scale?.maxReplicas ??
       DEFAULT_MAX_REPLICAS;
 
-    const result = await this.containerAppsClient.containerApps.beginCreateOrUpdateAndWait(
-      params.resourceGroupName,
-      params.appName,
-      {
-        location: existing.location,
-        managedEnvironmentId: existing.managedEnvironmentId,
-        configuration: {
-          ...existing.configuration,
-          ingress: {
-            ...existing.configuration?.ingress,
-            external: true,
-            targetPort: targetPortToUse,
-            transport: "Auto",
-          },
-        },
-        template: {
-          ...existing.template,
-          containers: [
-            {
-              name: params.appName,
-              image: imageToUse,
-              resources: {
-                cpu: cpuToUse,
-                memory: memoryToUse,
-              },
-              env: envVarsList.length > 0 ? envVarsList : undefined,
+    const result: ContainerApp =
+      await this.containerAppsClient.containerApps
+        .createOrUpdate(params.resourceGroupName, params.appName, {
+          location: existing.location,
+          managedEnvironmentId: existing.managedEnvironmentId,
+          configuration: {
+            ...existing.configuration,
+            ingress: {
+              ...existing.configuration?.ingress,
+              external: true,
+              targetPort: targetPortToUse,
+              transport: "Auto",
             },
-          ],
-          scale: {
-            minReplicas,
-            maxReplicas,
           },
-        },
-      },
-    );
+          template: {
+            ...existing.template,
+            containers: [
+              {
+                name: params.appName,
+                image: imageToUse,
+                resources: {
+                  cpu: cpuToUse,
+                  memory: memoryToUse,
+                },
+                env: envVarsList.length > 0 ? envVarsList : undefined,
+              },
+            ],
+            scale: {
+              minReplicas,
+              maxReplicas,
+            },
+          },
+        })
+        .pollUntilDone();
 
     const fqdn: string | undefined = result.configuration?.ingress?.fqdn;
     const url: string = fqdn ? `https://${fqdn}` : "";
