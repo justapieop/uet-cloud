@@ -3,6 +3,7 @@ import { AuthController } from "../controllers/Auth.controller.js";
 import { AuthModule } from "./Auth.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { FeatureModule } from "./Feature.module.js";
+import { DeploymentModule } from "./Deployment.module.js";
 import { LoggerModule } from "nestjs-pino";
 import { ConfigService } from "@nestjs/config";
 
@@ -29,6 +30,7 @@ import { ConfigService } from "@nestjs/config";
       ],
     }),
     AuthModule,
+    DeploymentModule,
   ],
   controllers: [AuthController],
 })
