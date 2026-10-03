@@ -49,7 +49,7 @@ export class ScalingDto {
 export class CreateDeploymentSpecDto {
   @ApiProperty({
     description: "Docker container image URI",
-    example: "nginxdemos/hello:latest",
+    example: "mcr.microsoft.com/k8se/quickstart:latest",
   })
   @IsString()
   @IsNotEmpty()

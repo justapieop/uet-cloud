@@ -15,7 +15,7 @@ import { ResourcesDto, ScalingDto } from "./CreateDeployment.dto.js";
 export class UpdateDeploymentSpecDto {
   @ApiPropertyOptional({
     description: "Updated container image URI",
-    example: "nginxdemos/hello:0.3",
+    example: "mcr.microsoft.com/k8se/quickstart:latest",
   })
   @IsOptional()
   @IsString()

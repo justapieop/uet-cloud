@@ -24,6 +24,9 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - npm workspaces place the thin NestJS server entry point in `apps/api` and the frontend client in `apps/web`. NestJS bootstrap and module composition live in `packages/presentation`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
 - `NODE_ENV` and `CONFIG_SOURCE` independently select the API runtime environment and configuration source. Both can come from the process environment or repository-root `.env`, with the process value taking precedence. `NODE_ENV` defaults to production. `CONFIG_SOURCE` defaults to Azure when unset; `local` loads `.env`, while `azure` loads App Configuration settings and resolves Key Vault references using an Azure identity.
 - Feature flags load from Azure App Configuration at startup and refresh every 12 hours. The local configuration source provides an empty feature flag list.
+- User application isolation: Applications deployed through the platform run as Azure Container Apps inside dedicated user Resource Groups named `user-rg-<userId>`. Deployments into the system Resource Group are strictly forbidden.
+- Shared ACA Managed Environment: Container Apps across all user Resource Groups connect to a central shared Managed Environment (referenced by `AZURE_CONTAINER_APP_ENV_ID`) in the system Resource Group within the same Azure region (`eastasia`).
+- Deployment engine separation: The Deployment feature is split into a Provisioning & Mutation Engine (handling `POST /deployments` and `PATCH /deployments/:id`) and a Data, Monitoring & Teardown Engine (handling `GET` queries and `DELETE` teardown).
 
 ## Source-of-truth note
 
