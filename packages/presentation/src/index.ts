@@ -5,3 +5,4 @@ export * from "./controllers/DeploymentMutation.controller.js";
 export * from "./dto/CreateDeployment.dto.js";
 export * from "./dto/UpdateDeployment.dto.js";
 export * from "./dto/DeploymentResponse.dto.js";
+export * from "./dto/DeleteResourceGroupResponse.dto.js";

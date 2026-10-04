@@ -3,7 +3,13 @@ import { isBlankStr } from "./utils.js";
 
 const ACA_NAME_REGEX: RegExp = /^[a-z][a-z0-9-]{0,30}[a-z0-9]$/;
 
-export type DeploymentStatus = "PENDING" | "RUNNING" | "FAILED" | "STOPPED";
+export type DeploymentStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "FAILED"
+  | "STOPPED"
+  | "DELETING"
+  | "DELETED";
 
 export interface ContainerResources {
   cpu?: string;
