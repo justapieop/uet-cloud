@@ -18,6 +18,12 @@ Every domain definition in `@kumo/domain` must extend the `Domain<TDetails>` bas
 
 Each permission definition in the role domain must include a stable zero-based `offset`, `name`, and `description`. Compute its mask as `1n << BigInt(offset)` when needed; do not store a precomputed mask or reuse/renumber an assigned offset. `Role.hasPermission()` grants any requested permission when the role has the `Super` bit, otherwise it checks the requested permission's bit. `Role.getGrantedPermissions()` returns known definitions granted by the role, and a role with `Super` receives every definition in the catalog. Metadata does not control access. Unknown stored bits have no catalog entry and are omitted. Resource or tenant scope checks are separate and are not specified here.
 
+For Azure Container Apps and ARM SDK interactions in `@kumo/infrastructure`:
+- For `@azure/arm-appcontainers`, create and update operations must invoke `.createOrUpdate(resourceGroupName, appName, envelope).pollUntilDone()`. Never invoke deprecated methods such as `beginCreateOrUpdateAndWait()`, `beginCreateOrUpdate()`, or `beginUpdateAndWait()`.
+- Azure Container App names must be validated against `^[a-z][a-z0-9-]{0,30}[a-z0-9]$` (2-32 characters, lowercase alphanumeric and hyphens, starting with a letter and ending with an alphanumeric character).
+- User isolation: All user workloads belong to `user-rg-<userId>`. Guard against any deployment or RG modification targeting the central system RG.
+- Presentation controllers for deployment mutation (`POST /deployments`, `PATCH /deployments/:id`) must return `HttpStatus.ACCEPTED` (HTTP 202) representing accepted asynchronous processing.
+
 Do not write anything into README.md until told to do so.
 
 ## Source of truth
