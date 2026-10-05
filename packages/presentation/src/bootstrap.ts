@@ -28,7 +28,7 @@ export async function bootstrap(): Promise<void> {
     cookie: createSessionCookieOptions(config.get<string>("NODE_ENV", "production")),
     store: MongoStore.create({
       mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
-      dbName: "sessions",
+      dbName: config.getOrThrow("MONGO_DBNAME"),
     }),
   }));
 
