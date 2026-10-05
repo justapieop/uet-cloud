@@ -1,12 +1,7 @@
-import type { User } from "@kumo/domain";
-import { ClassSerializerInterceptor, Controller, Get, Req, UseGuards, UseInterceptors } from "@nestjs/common";
-import { AuthGuard } from "@nestjs/passport";
-import { UserResponseDto } from "../dto/User.dto.js";
+import { ClassSerializerInterceptor, Controller, Get, Post, Req, Res, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-
-interface AuthenticatedRequest {
-  user: User;
-}
+import { type Request, type Response } from "express";
+import { GitHubAuthGuard } from "../common/Auth.guard.js";
 
 @Controller("auth")
 export class AuthController {
@@ -15,13 +10,18 @@ export class AuthController {
   ) { }
 
   @Get("login")
-  @UseGuards(AuthGuard("github"))
+  @UseGuards(GitHubAuthGuard)
   public login(): void {}
 
   @UseInterceptors(ClassSerializerInterceptor)
   @Get("callback")
-  @UseGuards(AuthGuard("github"))
-  public callback(@Req() request: AuthenticatedRequest): UserResponseDto {
-    return new UserResponseDto(request.user);
+  @UseGuards(GitHubAuthGuard)
+  public callback(@Res() response: Response): void {
+    response.redirect(this.configService.getOrThrow("FRONTEND_URL"));
+  }
+
+  @Post("logout")
+  public async logout(@Req() request: Request): Promise<void> {
+    await new Promise<void>((resolve, reject) => request.logOut((err: any) => (err ? reject(err) : resolve())));
   }
 }

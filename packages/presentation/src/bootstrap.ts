@@ -5,6 +5,10 @@ import { NestFactory } from "@nestjs/core";
 import { RootModule } from "./modules/Root.module.js";
 import { Logger } from "nestjs-pino";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import session from "express-session";
+import passport from "passport";
+import MongoStore from "connect-mongo";
+import { createSessionCookieOptions } from "./common/Session.options.js";
 
 export async function bootstrap(): Promise<void> {
   const app: INestApplication = await NestFactory.create(RootModule, {
@@ -17,6 +21,19 @@ export async function bootstrap(): Promise<void> {
 
   app.useLogger(logger);
   app.useGlobalPipes(new ValidationPipe());
+  app.use(session({
+    saveUninitialized: false,
+    resave: true,
+    secret: config.getOrThrow("SESSION_SECRET"),
+    cookie: createSessionCookieOptions(config.get<string>("NODE_ENV", "production")),
+    store: MongoStore.create({
+      mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
+      dbName: "sessions",
+    }),
+  }));
+
+  app.use(passport.initialize());
+  app.use(passport.session());
 
   SwaggerModule.setup(
     "/api-docs",

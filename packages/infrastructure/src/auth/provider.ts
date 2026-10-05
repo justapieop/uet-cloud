@@ -15,7 +15,7 @@ export class PassportProvider extends PassportStrategy(Strategy, "github") {
       clientID: configService.getOrThrow("GITHUB_OAUTH2_CLIENT_ID"),
       clientSecret: configService.getOrThrow("GITHUB_OAUTH2_SECRET"),
       callbackURL: configService.getOrThrow("GITHUB_OAUTH2_REDIRECT_URL"),
-      scope: ["read:user", "offline_access"]
+      scope: ["read:user", "offline_access"],
     });
   }
 

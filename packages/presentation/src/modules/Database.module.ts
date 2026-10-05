@@ -60,7 +60,8 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
   ],
   exports: [
     UNIT_OF_WORK,
-    CreateUserCase,
+    InfraUserRepository,
+    InfraRoleRepository,
   ]
 })
 export class DatabaseModule { }
