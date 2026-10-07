@@ -1,4 +1,4 @@
-import { ClassSerializerInterceptor, Controller, Get, Post, Req, Res, UseGuards, UseInterceptors } from "@nestjs/common";
+import { Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { type Request, type Response } from "express";
 import { GitHubAuthGuard } from "../common/Auth.guard.js";
@@ -13,7 +13,6 @@ export class AuthController {
   @UseGuards(GitHubAuthGuard)
   public login(): void {}
 
-  @UseInterceptors(ClassSerializerInterceptor)
   @Get("callback")
   @UseGuards(GitHubAuthGuard)
   public callback(@Res() response: Response): void {

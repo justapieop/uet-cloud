@@ -1,7 +1,7 @@
 import "reflect-metadata";
-import { ValidationPipe, type INestApplication } from "@nestjs/common";
+import { ClassSerializerInterceptor, ValidationPipe, type INestApplication } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { NestFactory } from "@nestjs/core";
+import { NestFactory, Reflector } from "@nestjs/core";
 import { RootModule } from "./modules/Root.module.js";
 import { Logger } from "nestjs-pino";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -21,6 +21,7 @@ export async function bootstrap(): Promise<void> {
 
   app.useLogger(logger);
   app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   app.use(session({
     saveUninitialized: false,
     resave: true,
@@ -28,7 +29,6 @@ export async function bootstrap(): Promise<void> {
     cookie: createSessionCookieOptions(config.get<string>("NODE_ENV", "production")),
     store: MongoStore.create({
       mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
-      dbName: config.getOrThrow("MONGO_DBNAME"),
     }),
   }));
 

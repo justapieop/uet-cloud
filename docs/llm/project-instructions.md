@@ -34,6 +34,7 @@ Do not write anything into README.md until told to do so.
 
 ## Working guidance
 
+- API response serialization uses the global NestJS `ClassSerializerInterceptor` registered in the presentation bootstrap. Return response DTO instances so `class-transformer` decorators such as `@Expose` and `@Exclude` apply. Do not register the same interceptor again on individual controllers or routes. Plain objects need an explicit DTO type through `@SerializeOptions({ type: ResponseDto })` to use that DTO's decorators.
 - Explicitly annotate every TypeScript variable declaration (`const`, `let`, or `var`), including exported constants. Do not rely on type inference for variables or use `any` as a substitute for a meaningful type.
 - Keep external dependencies used by `packages/infrastructure` and `packages/presentation` in the root `package.json`. Those workspaces declare only their `@kumo/*` package dependencies; the root lockfile records the resolved versions.
 - Keep product intent, architectural choices, and implementation details distinct. Do not present an idea or assumption as a confirmed decision.

@@ -2,7 +2,6 @@ import type { Deployment } from "@kumo/domain";
 import { CreateDeploymentCase, UpdateDeploymentCase } from "@kumo/application";
 import {
   Body,
-  ClassSerializerInterceptor,
   Controller,
   HttpCode,
   HttpStatus,
@@ -10,7 +9,6 @@ import {
   Patch,
   Post,
   Req,
-  UseInterceptors,
 } from "@nestjs/common";
 import {
   ApiAcceptedResponse,
@@ -37,7 +35,6 @@ function extractUserId(request: Request): string {
 
 @ApiTags("deployments")
 @Controller("deployments")
-@UseInterceptors(ClassSerializerInterceptor)
 export class DeploymentMutationController {
   public constructor(
     private readonly createDeploymentCase: CreateDeploymentCase,
