@@ -148,7 +148,11 @@ export class AzureDeployService implements AzureDeployPort {
       ? Number(params.spec.resources.cpu)
       : DEFAULT_CPU;
     const memoryVal: string =
-      params.spec.resources?.memory ?? DEFAULT_MEMORY;
+      params.spec.resources?.memory !== undefined
+        ? (typeof params.spec.resources.memory === "number"
+            ? `${params.spec.resources.memory}Gi`
+            : String(params.spec.resources.memory))
+        : DEFAULT_MEMORY;
     const minReplicas: number =
       params.spec.scaling?.minReplicas ?? DEFAULT_MIN_REPLICAS;
     const maxReplicas: number =
@@ -221,7 +225,11 @@ export class AzureDeployService implements AzureDeployPort {
       ? Number(params.spec.resources.cpu)
       : (existingContainer?.resources?.cpu ?? DEFAULT_CPU);
     const memoryToUse: string =
-      params.spec.resources?.memory ?? existingContainer?.resources?.memory ?? DEFAULT_MEMORY;
+      params.spec.resources?.memory !== undefined
+        ? (typeof params.spec.resources.memory === "number"
+            ? `${params.spec.resources.memory}Gi`
+            : String(params.spec.resources.memory))
+        : (existingContainer?.resources?.memory ?? DEFAULT_MEMORY);
 
     const minReplicas: number =
       params.spec.scaling?.minReplicas ??

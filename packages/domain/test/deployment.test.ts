@@ -22,8 +22,8 @@ test("Deployment entity creates successfully with valid parameters and defaults"
   assert.equal(deployment.status, "PENDING");
   assert.equal(deployment.spec.image, "nginx:alpine");
   assert.equal(deployment.spec.targetPort, 80);
-  assert.equal(deployment.spec.resources?.cpu, "0.25");
-  assert.equal(deployment.spec.resources?.memory, "0.5Gi");
+  assert.equal(deployment.spec.resources?.cpu, 0.25);
+  assert.equal(deployment.spec.resources?.memory, 0.5);
   assert.equal(deployment.spec.scaling?.minReplicas, 0);
   assert.equal(deployment.spec.scaling?.maxReplicas, 2);
   assert.equal(deployment.spec.envVars, null);
@@ -41,7 +41,7 @@ test("Deployment entity creates successfully with custom configuration in spec",
     spec: {
       image: "node:20-alpine",
       targetPort: 3000,
-      resources: { cpu: "0.5", memory: "1.0Gi" },
+      resources: { cpu: 0.5, memory: 1.0 },
       scaling: { minReplicas: 1, maxReplicas: 5 },
       envVars: { NODE_ENV: "production" },
     },
@@ -49,8 +49,8 @@ test("Deployment entity creates successfully with custom configuration in spec",
   };
   const deployment: Deployment = new Deployment(customDetails);
 
-  assert.equal(deployment.spec.resources?.cpu, "0.5");
-  assert.equal(deployment.spec.resources?.memory, "1.0Gi");
+  assert.equal(deployment.spec.resources?.cpu, 0.5);
+  assert.equal(deployment.spec.resources?.memory, 1.0);
   assert.equal(deployment.spec.scaling?.minReplicas, 1);
   assert.equal(deployment.spec.scaling?.maxReplicas, 5);
   assert.deepEqual(deployment.spec.envVars, { NODE_ENV: "production" });

@@ -36,8 +36,8 @@ export class UpdateDeploymentCase {
         image: input.spec.image ?? existingDeployment?.spec.image ?? "unknown",
         targetPort: input.spec.targetPort ?? existingDeployment?.spec.targetPort ?? 80,
         resources: {
-          cpu: input.spec.resources?.cpu ?? existingDeployment?.spec.resources?.cpu ?? "0.25",
-          memory: input.spec.resources?.memory ?? existingDeployment?.spec.resources?.memory ?? "0.5Gi",
+          cpu: input.spec.resources?.cpu ?? existingDeployment?.spec.resources?.cpu ?? 0.25,
+          memory: input.spec.resources?.memory ?? existingDeployment?.spec.resources?.memory ?? 0.5,
         },
         scaling: {
           minReplicas: input.spec.scaling?.minReplicas ?? existingDeployment?.spec.scaling?.minReplicas ?? 0,

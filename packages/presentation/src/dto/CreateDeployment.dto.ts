@@ -3,6 +3,7 @@ import { Type } from "class-transformer";
 import {
   IsInt,
   IsNotEmpty,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -13,15 +14,15 @@ import {
 } from "class-validator";
 
 export class ResourcesDto {
-  @ApiPropertyOptional({ example: "0.25", description: "CPU allocation" })
+  @ApiPropertyOptional({ example: 0.25, description: "CPU allocation (in cores, e.g. 0.25, 0.5, 1)" })
   @IsOptional()
-  @IsString()
-  public readonly cpu?: string;
+  @IsNumber()
+  public readonly cpu?: number;
 
-  @ApiPropertyOptional({ example: "0.5Gi", description: "Memory allocation" })
+  @ApiPropertyOptional({ example: 0.5, description: "Memory allocation in GiB (e.g. 0.5, 1, 2)" })
   @IsOptional()
-  @IsString()
-  public readonly memory?: string;
+  @IsNumber()
+  public readonly memory?: number;
 }
 
 export class ScalingDto {

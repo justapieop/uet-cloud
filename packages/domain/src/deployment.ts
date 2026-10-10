@@ -12,8 +12,8 @@ export type DeploymentStatus =
   | "DELETED";
 
 export interface ContainerResources {
-  cpu?: string;
-  memory?: string;
+  cpu?: number;
+  memory?: number;
 }
 
 export interface ContainerScaling {
@@ -63,8 +63,8 @@ export class Deployment extends Domain<DeploymentDetails> {
       image: details.spec.image,
       targetPort: details.spec.targetPort,
       resources: {
-        cpu: details.spec.resources?.cpu ?? "0.25",
-        memory: details.spec.resources?.memory ?? "0.5Gi",
+        cpu: details.spec.resources?.cpu ?? 0.25,
+        memory: details.spec.resources?.memory ?? 0.5,
       },
       scaling: {
         minReplicas: details.spec.scaling?.minReplicas ?? 0,
