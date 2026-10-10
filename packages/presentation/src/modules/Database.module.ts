@@ -11,6 +11,7 @@ import { CreateUserCase } from "@kumo/application";
 import {
   InfraDeployment,
   InfraDeploymentRepository,
+  InfraDeploymentSpec,
   InfraRole,
   InfraRoleRepository,
   InfraUser,
@@ -48,7 +49,7 @@ import {
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment, InfraDeploymentSpec]),
   ],
   providers: [
     InfraUserRepository,
