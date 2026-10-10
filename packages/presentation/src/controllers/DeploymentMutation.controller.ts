@@ -1,10 +1,21 @@
 import type { Deployment } from "@kumo/domain";
-import { CreateDeploymentCase, UpdateDeploymentCase } from "@kumo/application";
+import {
+  CreateDeploymentCase,
+  DeleteDeploymentCase,
+  DeleteUserResourceGroupCase,
+  DeploymentNotFoundError,
+  UnsafeResourceGroupError,
+  UpdateDeploymentCase,
+  type DeleteUserResourceGroupResult,
+} from "@kumo/application";
 import {
   Body,
   Controller,
+  Delete,
+  ForbiddenException,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   Patch,
   Post,
@@ -12,6 +23,7 @@ import {
 } from "@nestjs/common";
 import {
   ApiAcceptedResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
@@ -20,6 +32,7 @@ import type { Request } from "express";
 import { CreateDeploymentDto } from "../dto/CreateDeployment.dto.js";
 import { UpdateDeploymentDto } from "../dto/UpdateDeployment.dto.js";
 import { DeploymentResponseDto } from "../dto/DeploymentResponse.dto.js";
+import { DeleteResourceGroupResponseDto } from "../dto/DeleteResourceGroupResponse.dto.js";
 
 function extractUserId(request: Request): string {
   const reqObj: Record<string, unknown> = request as unknown as Record<string, unknown>;
@@ -39,6 +52,8 @@ export class DeploymentMutationController {
   public constructor(
     private readonly createDeploymentCase: CreateDeploymentCase,
     private readonly updateDeploymentCase: UpdateDeploymentCase,
+    private readonly deleteDeploymentCase: DeleteDeploymentCase,
+    private readonly deleteUserResourceGroupCase: DeleteUserResourceGroupCase,
   ) {}
 
   @Post()
@@ -85,5 +100,60 @@ export class DeploymentMutationController {
     });
 
     return new DeploymentResponseDto(deployment);
+  }
+
+  @Delete("resource-group/me")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Delete the current user's resource group" })
+  @ApiOkResponse({
+    description: "Resource group and deployment records were synchronized",
+    type: DeleteResourceGroupResponseDto,
+  })
+  public async deleteResourceGroup(
+    @Req() request: Request,
+  ): Promise<DeleteResourceGroupResponseDto> {
+    const userId: string = extractUserId(request);
+
+    try {
+      const result: DeleteUserResourceGroupResult =
+        await this.deleteUserResourceGroupCase.exec({ userId });
+      return new DeleteResourceGroupResponseDto(result);
+    } catch (error: unknown) {
+      if (error instanceof UnsafeResourceGroupError) {
+        throw new ForbiddenException(error.message);
+      }
+      throw error;
+    }
+  }
+
+  @Delete(":id")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Delete an existing container application" })
+  @ApiParam({ name: "id", description: "Deployment ID" })
+  @ApiOkResponse({
+    description: "Container App was deleted and its deployment was synchronized",
+    type: DeploymentResponseDto,
+  })
+  public async delete(
+    @Req() request: Request,
+    @Param("id") id: string,
+  ): Promise<DeploymentResponseDto> {
+    const userId: string = extractUserId(request);
+
+    try {
+      const deployment: Deployment = await this.deleteDeploymentCase.exec({
+        id,
+        userId,
+      });
+      return new DeploymentResponseDto(deployment);
+    } catch (error: unknown) {
+      if (error instanceof DeploymentNotFoundError) {
+        throw new NotFoundException(error.message);
+      }
+      if (error instanceof UnsafeResourceGroupError) {
+        throw new ForbiddenException(error.message);
+      }
+      throw error;
+    }
   }
 }

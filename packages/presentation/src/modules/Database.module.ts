@@ -2,9 +2,22 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { PinoLogger } from "nestjs-pino";
-import { UNIT_OF_WORK, type UnitOfWork } from "@kumo/application";
+import {
+  DEPLOYMENT_REPOSITORY,
+  UNIT_OF_WORK,
+  type UnitOfWork,
+} from "@kumo/application";
 import { CreateUserCase } from "@kumo/application";
-import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrmLoggerAdapter, TypeOrmUnitOfWork } from "@kumo/infrastructure";
+import {
+  InfraDeployment,
+  InfraDeploymentRepository,
+  InfraRole,
+  InfraRoleRepository,
+  InfraUser,
+  InfraUserRepository,
+  TypeOrmLoggerAdapter,
+  TypeOrmUnitOfWork,
+} from "@kumo/infrastructure";
 
 @Module({
   imports: [
@@ -35,15 +48,20 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment]),
   ],
   providers: [
     InfraUserRepository,
     InfraRoleRepository,
+    InfraDeploymentRepository,
     TypeOrmUnitOfWork,
     {
       provide: UNIT_OF_WORK,
       useExisting: TypeOrmUnitOfWork,
+    },
+    {
+      provide: DEPLOYMENT_REPOSITORY,
+      useExisting: InfraDeploymentRepository,
     },
     {
       provide: CreateUserCase,
@@ -53,6 +71,8 @@ import { InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, TypeOrm
   ],
   exports: [
     UNIT_OF_WORK,
+    DEPLOYMENT_REPOSITORY,
+    CreateUserCase,
     InfraUserRepository,
     InfraRoleRepository,
   ]

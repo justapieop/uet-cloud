@@ -10,11 +10,14 @@ import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type {
   AzureDeployPort,
+  DeleteAppParams,
+  DeleteResourceGroupParams,
   DeployAppParams,
   UpdateAppParams,
 } from "@kumo/application";
+import { UnsafeResourceGroupError } from "@kumo/application";
 
-const FORBIDDEN_RESOURCE_GROUP: string = "int3319-test";
+const DEFAULT_PLATFORM_RESOURCE_GROUP: string = "int3319-test";
 const DEFAULT_LOCATION: string = "eastasia";
 const DEFAULT_CPU: number = 0.25;
 const DEFAULT_MEMORY: string = "0.5Gi";
@@ -27,6 +30,7 @@ export class AzureDeployService implements AzureDeployPort {
   private readonly containerAppsClient: ContainerAppsAPIClient;
   private readonly managedEnvironmentId: string;
   private readonly location: string;
+  private readonly platformResourceGroup: string;
 
   public constructor(@Optional() configService?: ConfigService) {
     const credential: DefaultAzureCredential = new DefaultAzureCredential();
@@ -57,6 +61,12 @@ export class AzureDeployService implements AzureDeployPort {
       configService?.get<string>("AZURE_LOCATION") ??
       process.env.AZURE_LOCATION ??
       DEFAULT_LOCATION;
+    const configuredPlatformResourceGroup: string | undefined =
+      configService?.get<string>("AZURE_PLATFORM_RESOURCE_GROUP") ??
+      process.env.AZURE_PLATFORM_RESOURCE_GROUP;
+    this.platformResourceGroup =
+      configuredPlatformResourceGroup?.trim() ||
+      DEFAULT_PLATFORM_RESOURCE_GROUP;
 
     this.resourceClient = new ResourceManagementClient(
       credential,
@@ -68,22 +78,15 @@ export class AzureDeployService implements AzureDeployPort {
     );
   }
 
+  public getUserResourceGroupName(userId: string): string {
+    const resourceGroupName: string =
+      this.generateUserResourceGroupName(userId);
+    this.assertSafeUserResourceGroup(resourceGroupName, userId);
+    return resourceGroupName;
+  }
+
   public async ensureUserResourceGroup(userId: string): Promise<string> {
-    const sanitizedUserId: string = userId
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9_-]/g, "");
-
-    const resourceGroupName: string = `user-rg-${sanitizedUserId}`;
-
-    if (
-      resourceGroupName === FORBIDDEN_RESOURCE_GROUP ||
-      resourceGroupName === `user-rg-${FORBIDDEN_RESOURCE_GROUP}`
-    ) {
-      throw new Error(
-        `Forbidden: cannot operate on system resource group ${FORBIDDEN_RESOURCE_GROUP}`,
-      );
-    }
+    const resourceGroupName: string = this.getUserResourceGroupName(userId);
 
     const existsResult: { body: boolean } =
       await this.resourceClient.resourceGroups.checkExistence(
@@ -106,6 +109,21 @@ export class AzureDeployService implements AzureDeployPort {
     }
 
     return resourceGroupName;
+  }
+
+  private generateUserResourceGroupName(userId: string): string {
+    const sanitizedUserId: string = userId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, "");
+
+    if (!sanitizedUserId) {
+      throw new UnsafeResourceGroupError(
+        "Cannot derive a user resource group from an empty user ID",
+      );
+    }
+
+    return `user-rg-${sanitizedUserId}`;
   }
 
   public async deployContainerApp(
@@ -253,5 +271,49 @@ export class AzureDeployService implements AzureDeployPort {
     const url: string = fqdn ? `https://${fqdn}` : "";
 
     return { fqdn: url };
+  }
+
+  public async deleteContainerApp(params: DeleteAppParams): Promise<void> {
+    this.assertSafeUserResourceGroup(params.resourceGroupName, params.userId);
+
+    await this.containerAppsClient.containerApps
+      .delete(params.resourceGroupName, params.appName)
+      .pollUntilDone();
+  }
+
+  public async deleteResourceGroup(
+    params: DeleteResourceGroupParams,
+  ): Promise<void> {
+    this.assertSafeUserResourceGroup(params.resourceGroupName, params.userId);
+
+    await this.resourceClient.resourceGroups
+      .delete(params.resourceGroupName)
+      .pollUntilDone();
+  }
+
+  private assertSafeUserResourceGroup(
+    resourceGroupName: string,
+    userId: string,
+  ): void {
+    const expectedResourceGroupName: string =
+      this.generateUserResourceGroupName(userId);
+    const normalizedResourceGroupName: string =
+      resourceGroupName.trim().toLowerCase();
+    const normalizedExpectedName: string =
+      expectedResourceGroupName.trim().toLowerCase();
+    const normalizedPlatformName: string =
+      this.platformResourceGroup.trim().toLowerCase();
+    const normalizedPlatformUserName: string =
+      `user-rg-${normalizedPlatformName}`;
+
+    if (
+      normalizedResourceGroupName !== normalizedExpectedName ||
+      normalizedResourceGroupName === normalizedPlatformName ||
+      normalizedResourceGroupName === normalizedPlatformUserName
+    ) {
+      throw new UnsafeResourceGroupError(
+        `Forbidden: cannot operate on resource group ${resourceGroupName}`,
+      );
+    }
   }
 }

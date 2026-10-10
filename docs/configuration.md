@@ -46,6 +46,7 @@ The deployment provisioning and mutation service requires Azure ARM and Containe
 | `AZURE_CONTAINER_APP_ENV_ID` | Yes | None | Fully qualified Azure Resource ID of the shared Managed Environment, e.g. `/subscriptions/.../resourceGroups/int3319-test/providers/Microsoft.App/managedEnvironments/test-shared-env`. |
 | `AZURE_SUBSCRIPTION_ID` | Optional | Extracted from `AZURE_CONTAINER_APP_ENV_ID` | Azure Subscription ID for ARM and Container Apps management clients. |
 | `AZURE_LOCATION` | Optional | `eastasia` | Azure region where per-user Resource Groups (`user-rg-<userId>`) are provisioned. |
+| `AZURE_PLATFORM_RESOURCE_GROUP` | Recommended | `int3319-test` | Resource Group hosting the platform itself. Deployment teardown refuses to modify or delete this group. |
 | `RUN_AZURE_LIVE_TESTS` | Optional | `false` | When set to `true`, enables live cloud integration tests in `packages/infrastructure/test/azure-deploy-live.test.ts` during test execution. |
 
 These settings can be configured via `.env` for local execution or via Azure App Configuration. The API uses `DefaultAzureCredential` to authenticate with ARM and Azure Container Apps.
