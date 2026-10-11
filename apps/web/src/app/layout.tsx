@@ -7,28 +7,38 @@ type RootLayoutProps = Readonly<{
   children: ReactNode;
 }>;
 
-const geistSans: ReturnType<typeof Geist> = Geist({
+type FontWithVariable = {
+  readonly variable: string;
+  readonly className: string;
+};
+
+const geistSans: FontWithVariable = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono: ReturnType<typeof Geist_Mono> = Geist_Mono({
+const geistMono: FontWithVariable = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Hello | Kumo",
-  description: "A small hello from Kumo, an Azure-integrated deployment platform.",
+  title: "Kumo — The PaaS for Deploying Applications on Azure",
+  description:
+    "A cloud-integrated Platform as a Service (PaaS) for deploying containerized workloads to Azure Container Apps with automated isolation and zero infra overhead.",
 };
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        {children}
+      </body>
     </html>
   );
 }
