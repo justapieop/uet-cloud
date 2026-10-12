@@ -1,0 +1,11 @@
+{
+  "name": "@kumo/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@kumo/presentation": "0.0.0"
+  }
+}

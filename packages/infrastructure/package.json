@@ -1,0 +1,50 @@
+{
+  "name": "@kumo/infrastructure",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@azure/app-configuration-provider": "^2.6.0",
+    "@azure/arm-appcontainers": "^4.0.0",
+    "@azure/arm-resources": "^8.0.0",
+    "@azure/cosmos": "^4.10.1",
+    "@azure/identity": "^4.13.3",
+    "@keyv/redis": "^6.1.0",
+    "@kumo/application": "0.0.0",
+    "@kumo/domain": "0.0.0",
+    "@nestjs/cache-manager": "^12.0.1",
+    "@nestjs/common": "^12.1.0",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.1.0",
+    "@nestjs/passport": "^12.0.0",
+    "@nestjs/platform-express": "^12.1.0",
+    "@nestjs/typeorm": "^12.0.2",
+    "cache-manager": "^7.2.9",
+    "cacheable": "^2.5.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "connect-mongo": "^6.0.0",
+    "dotenv": "^18.0.3",
+    "express-session": "^1.19.0",
+    "nestjs-pino": "^5.2.1",
+    "oauth4webapi": "^3.8.8",
+    "passport": "^0.7.0",
+    "passport-github2": "^0.1.12",
+    "pino-http": "^11.0.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^1.1.2"
+  },
+  "devDependencies": {
+    "@types/express-session": "^1.19.0",
+    "@types/passport-github2": "^1.2.9",
+    "pino-pretty": "^13.1.3"
+  }
+}

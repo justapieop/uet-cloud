@@ -1,0 +1,17 @@
+{
+  "name": "@kumo/domain",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.ts"
+  }
+}

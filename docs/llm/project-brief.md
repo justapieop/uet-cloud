@@ -1,0 +1,37 @@
+# Project brief
+
+## Objective
+
+Build a cloud-integrated Platform as a Service (PaaS) that lets developers and platform-oriented teams deploy applications using Azure Container Apps (ACA).
+
+## Intended users
+
+- Developers
+- DevOps practitioners
+- MLOps practitioners
+- Related platform and operations roles
+
+## Confirmed direction
+
+- Azure Container Apps is the deployment platform for applications deployed through the PaaS.
+- The PaaS itself will be hosted on Azure.
+- Azure SQL Database is the persistence database for the project.
+- The API uses Microsoft Entra passwordless authentication for Azure SQL Database.
+- The codebase will use Clean Architecture for organization and future scaling.
+- The platform application will use TypeScript with NestJS; npm is the package manager.
+- The project is a monorepo that includes a frontend application serving as the client for the PaaS.
+- The frontend client follows Feature-Sliced Design (FSD) within `apps/web`.
+- npm workspaces place the thin NestJS server entry point in `apps/api` and the frontend client in `apps/web`. NestJS bootstrap and module composition live in `packages/presentation`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
+- `NODE_ENV` and `CONFIG_SOURCE` independently select the API runtime environment and configuration source. Both can come from the process environment or repository-root `.env`, with the process value taking precedence. `NODE_ENV` defaults to production. `CONFIG_SOURCE` defaults to Azure when unset; `local` loads `.env`, while `azure` loads App Configuration settings and resolves Key Vault references using an Azure identity.
+- Feature flags load from Azure App Configuration at startup and refresh every 12 hours. The local configuration source provides an empty feature flag list.
+- User application isolation: Applications deployed through the platform run as Azure Container Apps inside dedicated user Resource Groups named `user-rg-<userId>`. Deployments into the system Resource Group are strictly forbidden.
+- Shared ACA Managed Environment: Container Apps across all user Resource Groups connect to a central shared Managed Environment (referenced by `AZURE_CONTAINER_APP_ENV_ID`) in the system Resource Group within the same Azure region (`eastasia`).
+- Deployment engine separation: The Deployment feature is split into a Provisioning & Mutation Engine (handling `POST /deployments` and `PATCH /deployments/:id`) and a Data, Monitoring & Teardown Engine (handling `GET` queries and `DELETE` teardown).
+
+## Source-of-truth note
+
+The README provides a setup guide and links to this brief. Use this brief and the LLM guidance in [`project-instructions.md`](project-instructions.md) for current project context and technical conventions.
+
+## Open questions
+
+The product scope, supported deployment inputs, user journey, tenancy model, Azure service choices beyond ACA, frontend framework, communication between applications, and operational requirements have not yet been established here. Treat these as open until decided.

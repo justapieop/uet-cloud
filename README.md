@@ -1,3 +1,3 @@
-# uet-cloud
+# kumo
 
-Secret management service for INT3319 course
+An app-deployment platform integrated with Microsoft Azure.

@@ -1,0 +1,19 @@
+{
+  "name": "@kumo/presentation",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@kumo/application": "0.0.0",
+    "@kumo/domain": "0.0.0",
+    "@kumo/infrastructure": "0.0.0",
+    "@nestjs/swagger": "^12.0.2"
+  }
+}

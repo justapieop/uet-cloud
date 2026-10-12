@@ -1,0 +1,24 @@
+{
+  "name": "@kumo/rest",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate": "openapi-typescript -o ./src/schema.ts"
+  },
+  "dependencies": {
+    "@kumo/domain": "0.0.0",
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}
