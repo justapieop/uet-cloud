@@ -143,3 +143,11 @@ vite.config.ts.timestamp-*
 .vite/
 # heroui-agents-md
 .heroui-docs/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes

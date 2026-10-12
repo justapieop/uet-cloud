@@ -2,8 +2,7 @@ import type { JSX } from "react";
 import { Navbar } from "@/widgets/navbar";
 import { HeroSection } from "@/widgets/hero";
 import { FeaturesSection } from "@/widgets/features";
-import { DifferenceSection } from "@/widgets/difference";
-import { HowItWorksSection } from "@/widgets/how-it-works";
+import { GuideSection } from "@/widgets/guide";
 
 export function HomePage(): JSX.Element {
   return (
@@ -13,12 +12,11 @@ export function HomePage(): JSX.Element {
       <main className="flex-1">
         <HeroSection />
         <FeaturesSection />
-        <HowItWorksSection />
-        <DifferenceSection />
+        <GuideSection />
       </main>
 
-      <footer className="border-t border-[var(--surface-border)] py-8 text-center text-xs text-gray-500 font-mono">
-        Kumo · The PaaS for Azure Container Apps
+      <footer className="border-t border-[var(--surface-border)] py-8 text-center font-mono text-xs text-gray-500">
+        Kumo
       </footer>
     </div>
   );

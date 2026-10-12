@@ -19,17 +19,17 @@
 
 :root,
 .dark {
-  --background: #0a0a0f;
+  --background: #090a0f;
   --foreground: #f3f4f6;
-  --surface: #111118;
-  --surface-hover: #171722;
+  --surface: #0f1117;
+  --surface-hover: #141720;
   --surface-border: rgba(255, 255, 255, 0.08);
   --surface-border-subtle: rgba(255, 255, 255, 0.04);
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-subtle: rgba(59, 130, 246, 0.12);
-  --muted-text: #9ca3af;
-  --muted-dark: #6b7280;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: rgba(37, 99, 235, 0.12);
+  --muted-text: #94a3b8;
+  --muted-dark: #64748b;
 }
 
 html {
@@ -45,71 +45,4 @@ body {
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-@keyframes pulseGlow {
-  0%, 100% {
-    opacity: 0.35;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.75;
-    transform: scale(1.04);
-  }
-}
-
-@keyframes terminalCursor {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-}
-
-@keyframes floatSlow {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 7s ease-in-out infinite;
-}
-
-.animate-terminal-cursor {
-  animation: terminalCursor 1s step-start infinite;
-}
-
-.animate-float-slow {
-  animation: floatSlow 4s ease-in-out infinite;
-}
-
-@keyframes textShimmer {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.animate-text-shimmer {
-  background-size: 200% 200%;
-  animation: textShimmer 4s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .animate-pulse-glow,
-  .animate-terminal-cursor,
-  .animate-float-slow,
-  .animate-text-shimmer {
-    animation: none !important;
-  }
 }
