@@ -25,7 +25,7 @@ const geistMono: FontWithVariable = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Kumo — The PaaS for Deploying Applications on Azure",
+  title: "Kumo - The PaaS for Deploying Applications on Azure",
   description:
     "A cloud-integrated Platform as a Service (PaaS) for deploying containerized workloads to Azure Container Apps with automated isolation and zero infra overhead.",
 };
