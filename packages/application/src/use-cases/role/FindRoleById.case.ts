@@ -1,7 +1,7 @@
 import type { Role } from "@kumo/domain";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/index.js";
 
-export class FindUserById {
+export class FindRoleByIdCase {
   public constructor(
     private readonly uow: UnitOfWork,
   ) { }
