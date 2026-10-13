@@ -1,15 +1,14 @@
 import type { Deployment } from "@kumo/domain";
 import type {
-  AzureDeployPort,
   DeleteAppParams,
 } from "../../ports/azure-deploy.js";
-import type { DeploymentRepository } from "../../ports/deployment.js";
 import {
   DeploymentNotFoundError,
   isAzureNotFound,
   sanitizeDeploymentError,
   withDeploymentStatus,
 } from "./delete-helpers.js";
+import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 
 export interface DeleteDeploymentInput {
   readonly id: string;
@@ -18,13 +17,16 @@ export interface DeleteDeploymentInput {
 
 export class DeleteDeploymentCase {
   public constructor(
-    private readonly deployService: AzureDeployPort,
-    private readonly deploymentRepository: DeploymentRepository,
-  ) {}
+    private readonly uow: UnitOfWork,
+  ) { }
+  
+  public exec(input: DeleteDeploymentInput): Promise<Deployment> {
+    return this.uow.run((repo: UnitOfWorkRepositories) => this.deleteDeployment(repo, input));
+  }
 
-  public async exec(input: DeleteDeploymentInput): Promise<Deployment> {
+  private async deleteDeployment(repo: UnitOfWorkRepositories, input: DeleteDeploymentInput): Promise<Deployment> {
     const deployment: Deployment | null =
-      await this.deploymentRepository.findByIdAndUserId(input.id, input.userId);
+      await repo.deployment.findByIdAndUserId(input.id, input.userId);
 
     if (!deployment) {
       throw new DeploymentNotFoundError(input.id);
@@ -35,12 +37,12 @@ export class DeleteDeploymentCase {
     }
 
     const resourceGroupName: string =
-      this.deployService.getUserResourceGroupName(input.userId);
+      repo.azure.getUserResourceGroupName(input.userId);
     const deletingDeployment: Deployment = withDeploymentStatus(
       deployment,
       "DELETING",
     );
-    await this.deploymentRepository.update(deletingDeployment);
+    await repo.deployment.update(deletingDeployment);
 
     const deleteParams: DeleteAppParams = {
       userId: input.userId,
@@ -49,7 +51,7 @@ export class DeleteDeploymentCase {
     };
 
     try {
-      await this.deployService.deleteContainerApp(deleteParams);
+      await repo.azure.deleteContainerApp(deleteParams);
     } catch (error: unknown) {
       if (!isAzureNotFound(error)) {
         const failedDeployment: Deployment = withDeploymentStatus(
@@ -57,7 +59,7 @@ export class DeleteDeploymentCase {
           "FAILED",
           sanitizeDeploymentError(error),
         );
-        await this.deploymentRepository.update(failedDeployment);
+        await repo.deployment.update(failedDeployment);
         throw error;
       }
     }
@@ -66,7 +68,7 @@ export class DeleteDeploymentCase {
       deployment,
       "DELETED",
     );
-    await this.deploymentRepository.update(deletedDeployment);
+    await repo.deployment.update(deletedDeployment);
     return deletedDeployment;
   }
 }

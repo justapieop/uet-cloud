@@ -1,14 +1,13 @@
 import type { Deployment } from "@kumo/domain";
 import type {
-  AzureDeployPort,
   DeleteResourceGroupParams,
 } from "../../ports/azure-deploy.js";
-import type { DeploymentRepository } from "../../ports/deployment.js";
 import {
   isAzureNotFound,
   sanitizeDeploymentError,
   withDeploymentStatus,
 } from "./delete-helpers.js";
+import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 
 export interface DeleteUserResourceGroupInput {
   readonly userId: string;
@@ -22,17 +21,21 @@ export interface DeleteUserResourceGroupResult {
 
 export class DeleteUserResourceGroupCase {
   public constructor(
-    private readonly deployService: AzureDeployPort,
-    private readonly deploymentRepository: DeploymentRepository,
-  ) {}
+    private readonly uow: UnitOfWork,
+  ) { }
+  
+  public exec(input: DeleteUserResourceGroupInput): Promise<DeleteUserResourceGroupResult> {
+    return this.uow.run((repo: UnitOfWorkRepositories) => this.deleteRg(repo, input));
+  }
 
-  public async exec(
+  private async deleteRg(
+    repo: UnitOfWorkRepositories,
     input: DeleteUserResourceGroupInput,
   ): Promise<DeleteUserResourceGroupResult> {
     const resourceGroupName: string =
-      this.deployService.getUserResourceGroupName(input.userId);
+      repo.azure.getUserResourceGroupName(input.userId);
     const deployments: Deployment[] =
-      await this.deploymentRepository.findByUserId(input.userId);
+      await repo.deployment.findByUserId(input.userId);
     const activeDeployments: Deployment[] = deployments.filter(
       (deployment: Deployment): boolean => deployment.status !== "DELETED",
     );
@@ -41,7 +44,7 @@ export class DeleteUserResourceGroupCase {
         withDeploymentStatus(deployment, "DELETING"),
     );
 
-    await this.deploymentRepository.updateMany(deletingDeployments);
+    await repo.deployment.updateMany(deletingDeployments);
 
     const deleteParams: DeleteResourceGroupParams = {
       userId: input.userId,
@@ -49,7 +52,7 @@ export class DeleteUserResourceGroupCase {
     };
 
     try {
-      await this.deployService.deleteResourceGroup(deleteParams);
+      await repo.azure.deleteResourceGroup(deleteParams);
     } catch (error: unknown) {
       if (!isAzureNotFound(error)) {
         const errorMessage: string = sanitizeDeploymentError(error);
@@ -57,7 +60,7 @@ export class DeleteUserResourceGroupCase {
           (deployment: Deployment): Deployment =>
             withDeploymentStatus(deployment, "FAILED", errorMessage),
         );
-        await this.deploymentRepository.updateMany(failedDeployments);
+        await repo.deployment.updateMany(failedDeployments);
         throw error;
       }
     }
@@ -66,7 +69,7 @@ export class DeleteUserResourceGroupCase {
       (deployment: Deployment): Deployment =>
         withDeploymentStatus(deployment, "DELETED"),
     );
-    await this.deploymentRepository.updateMany(deletedDeployments);
+    await repo.deployment.updateMany(deletedDeployments);
 
     return {
       resourceGroupName,

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Deployment, type DeploymentDetails, type DeploymentSpec } from "@kumo/domain";
-import type { AzureDeployPort, DeployAppParams } from "../../ports/azure-deploy.js";
-import type { DeploymentRepository } from "../../ports/deployment.js";
+import type { DeployAppParams } from "../../ports/azure-deploy.js";
+import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 
 export interface CreateDeploymentInput {
   readonly id?: string;
@@ -12,11 +12,14 @@ export interface CreateDeploymentInput {
 
 export class CreateDeploymentCase {
   public constructor(
-    private readonly deployService: AzureDeployPort,
-    private readonly deploymentRepository?: DeploymentRepository,
-  ) {}
+    private readonly uow: UnitOfWork,
+  ) { }
+  
+  public exec(input: CreateDeploymentInput): Promise<Deployment> {
+    return this.uow.run((repo: UnitOfWorkRepositories) => this.createDeployment(repo, input));
+  }
 
-  public async exec(input: CreateDeploymentInput): Promise<Deployment> {
+  public async createDeployment(repo: UnitOfWorkRepositories, input: CreateDeploymentInput): Promise<Deployment> {
     const deploymentId: string = input.id ?? randomUUID();
     const initialDetails: DeploymentDetails = {
       id: deploymentId,
@@ -30,12 +33,12 @@ export class CreateDeploymentCase {
 
     const pendingDeployment: Deployment = new Deployment(initialDetails);
 
-    if (this.deploymentRepository) {
-      await this.deploymentRepository.save(pendingDeployment);
+    if (repo.deployment) {
+      await repo.deployment.save(pendingDeployment);
     }
 
     try {
-      const resourceGroupName: string = await this.deployService.ensureUserResourceGroup(input.userId);
+      const resourceGroupName: string = await repo.azure.ensureUserResourceGroup(input.userId);
 
       const deployParams: DeployAppParams = {
         resourceGroupName,
@@ -43,7 +46,7 @@ export class CreateDeploymentCase {
         spec: pendingDeployment.spec,
       };
 
-      const result: { fqdn: string } = await this.deployService.deployContainerApp(deployParams);
+      const result: { fqdn: string } = await repo.azure.deployContainerApp(deployParams);
 
       const runningDetails: DeploymentDetails = {
         ...initialDetails,
@@ -53,8 +56,8 @@ export class CreateDeploymentCase {
       };
       const runningDeployment: Deployment = new Deployment(runningDetails);
 
-      if (this.deploymentRepository) {
-        await this.deploymentRepository.update(runningDeployment);
+      if (repo.deployment) {
+        await repo.deployment.update(runningDeployment);
       }
 
       return runningDeployment;
@@ -68,8 +71,8 @@ export class CreateDeploymentCase {
       };
       const failedDeployment: Deployment = new Deployment(failedDetails);
 
-      if (this.deploymentRepository) {
-        await this.deploymentRepository.update(failedDeployment);
+      if (repo.deployment) {
+        await repo.deployment.update(failedDeployment);
       }
 
       throw error;

@@ -1,6 +1,6 @@
 import { Deployment, type DeploymentDetails, type DeploymentSpec } from "@kumo/domain";
-import type { AzureDeployPort, UpdateAppParams } from "../../ports/azure-deploy.js";
-import type { DeploymentRepository } from "../../ports/deployment.js";
+import type { UpdateAppParams } from "../../ports/azure-deploy.js";
+import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/index.js";
 
 export interface UpdateDeploymentInput {
   readonly id: string;
@@ -11,17 +11,20 @@ export interface UpdateDeploymentInput {
 
 export class UpdateDeploymentCase {
   public constructor(
-    private readonly deployService: AzureDeployPort,
-    private readonly deploymentRepository?: DeploymentRepository,
-  ) {}
+    private readonly uow: UnitOfWork
+  ) { }
 
-  public async exec(input: UpdateDeploymentInput): Promise<Deployment> {
-    const existingDeployment: Deployment | null = this.deploymentRepository
-      ? await this.deploymentRepository.findById(input.id)
+  public exec(input: UpdateDeploymentInput): Promise<Deployment> {
+    return this.uow.run((repo: UnitOfWorkRepositories) => this.updateDeployment(repo, input));
+  }
+
+  private async updateDeployment(repo: UnitOfWorkRepositories, input: UpdateDeploymentInput): Promise<Deployment> {
+    const existingDeployment: Deployment | null = repo.deployment
+      ? await repo.deployment.findById(input.id)
       : null;
 
     const appName: string = input.name ?? existingDeployment?.name ?? input.id;
-    const resourceGroupName: string = await this.deployService.ensureUserResourceGroup(input.userId);
+    const resourceGroupName: string = await repo.azure.ensureUserResourceGroup(input.userId);
 
     const updateParams: UpdateAppParams = {
       resourceGroupName,
@@ -30,7 +33,7 @@ export class UpdateDeploymentCase {
     };
 
     try {
-      const result: { fqdn: string } = await this.deployService.updateContainerApp(updateParams);
+      const result: { fqdn: string } = await repo.azure.updateContainerApp(updateParams);
 
       const mergedSpec: DeploymentSpec = {
         image: input.spec.image ?? existingDeployment?.spec.image ?? "unknown",
@@ -60,15 +63,15 @@ export class UpdateDeploymentCase {
 
       const updatedDeployment: Deployment = new Deployment(updatedDetails);
 
-      if (this.deploymentRepository) {
-        await this.deploymentRepository.update(updatedDeployment);
+      if (repo.deployment) {
+        await repo.deployment.update(updatedDeployment);
       }
 
       return updatedDeployment;
     } catch (error: unknown) {
       const errorMessage: string = error instanceof Error ? error.message : String(error);
 
-      if (existingDeployment && this.deploymentRepository) {
+      if (existingDeployment && repo.deployment) {
         const failedDetails: DeploymentDetails = {
           id: existingDeployment.id,
           userId: existingDeployment.userId,
@@ -80,7 +83,7 @@ export class UpdateDeploymentCase {
           createdAt: existingDeployment.createdAt,
           updatedAt: new Date(),
         };
-        await this.deploymentRepository.update(new Deployment(failedDetails));
+        await repo.deployment.update(new Deployment(failedDetails));
       }
 
       throw error;
