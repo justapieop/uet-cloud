@@ -1,5 +1,8 @@
 import { Domain, InvalidDomainParams } from "./domain.js";
+import { Permission, type PermissionDefinition } from "./permission.js";
 import { isBlankStr } from "./utils.js";
+
+export { Permission, type PermissionDefinition } from "./permission.js";
 
 export class Role extends Domain<RoleDetails> {
   public readonly id: string;
@@ -49,7 +52,7 @@ export class Role extends Domain<RoleDetails> {
     return (this.permission & requiredMask) === requiredMask;
   }
 
-  public getGrantedPermissions(): Permission[] {
+  public getGrantedPermissions(): PermissionDefinition[] {
     return Object.values(Permission).filter(
       (permission: Permission): boolean => this.hasPermission(permission),
     );
@@ -59,22 +62,6 @@ export class Role extends Domain<RoleDetails> {
     return this.permission;
   }
 }
-
-export interface PermissionDefinition {
-  readonly offset: number;
-  readonly name: string;
-  readonly description: string;
-}
-
-export const Permission: Readonly<Record<"Super", PermissionDefinition>> = {
-  Super: {
-    offset: 0,
-    name: "Super",
-    description: "Super role that has all permissions. Granting this permission is not recommended.",
-  },
-};
-
-export type Permission = (typeof Permission)[keyof typeof Permission];
 
 export interface RoleDetails {
   id: string;
