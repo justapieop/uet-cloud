@@ -1,0 +1,56 @@
+# Pipeline definition stays in Kumo's repository. Application repositories need
+# only a Dockerfile. Configure the three variables described in docs/configuration.md.
+trigger: none
+pr: none
+
+parameters:
+  - name: buildId
+    type: string
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    persistCredentials: false
+
+  - bash: python3 infra/azure/pipelines/download-build-source.py
+    displayName: Download the assigned build source
+    env:
+      KUMO_BUILD_ID: ${{ parameters.buildId }}
+      KUMO_API_URL: $(kumoApiUrl)
+      KUMO_SOURCE_TOKEN: $(kumoSourceToken)
+      KUMO_BUILD_DIRECTORY: $(Pipeline.Workspace)/kumo-build
+
+  - bash: |
+      set -euo pipefail
+      mkdir -p "$BUILD_DIRECTORY/context"
+      tar --no-same-owner --no-same-permissions -xzf "$BUILD_DIRECTORY/source.tar.gz" -C "$BUILD_DIRECTORY/context"
+      IMAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["image"])' "$BUILD_DIRECTORY/manifest.json")"
+      DOCKERFILE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["dockerfile_path"])' "$BUILD_DIRECTORY/manifest.json")"
+      docker build --file "$BUILD_DIRECTORY/context/$DOCKERFILE" --tag "$IMAGE" "$BUILD_DIRECTORY/context"
+    displayName: Build application image
+    env:
+      BUILD_DIRECTORY: $(Pipeline.Workspace)/kumo-build
+
+  - task: AzureCLI@2
+    displayName: Push image to ACR
+    inputs:
+      azureSubscription: $(acrServiceConnection)
+      scriptType: bash
+      scriptLocation: inlineScript
+      visibleAzLogin: false
+      inlineScript: |
+        set -euo pipefail
+        IMAGE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["image"])' "$BUILD_DIRECTORY/manifest.json")"
+        az acr login --name "$ACR_NAME"
+        docker push "$IMAGE"
+    env:
+      BUILD_DIRECTORY: $(Pipeline.Workspace)/kumo-build
+      ACR_NAME: $(acrRegistryName)
+
+  - bash: rm -rf -- "$BUILD_DIRECTORY"
+    displayName: Remove downloaded source
+    condition: always()
+    env:
+      BUILD_DIRECTORY: $(Pipeline.Workspace)/kumo-build
