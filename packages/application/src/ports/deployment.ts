@@ -6,7 +6,7 @@ export interface DeploymentRepository {
   findByUserId(userId: string): Promise<Deployment[]>;
   save(deployment: Deployment): Promise<void>;
   update(deployment: Deployment): Promise<void>;
-  updateMany(deployments: Deployment[]): Promise<void>;
+  delete(deploymentId: string, userId: string): Promise<void>;
 }
 
 export const DEPLOYMENT_REPOSITORY: symbol = Symbol("DEPLOYMENT_REPOSITORY");

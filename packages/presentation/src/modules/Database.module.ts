@@ -3,15 +3,12 @@ import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { PinoLogger } from "nestjs-pino";
 import {
-  DEPLOYMENT_REPOSITORY,
   UNIT_OF_WORK,
-  type UnitOfWork,
 } from "@kumo/application";
-import { CreateUserCase } from "@kumo/application";
 import {
   InfraDeployment,
+  Builds1791970000000,
   InfraDeploymentRepository,
-  InfraDeploymentSpec,
   InfraRole,
   InfraRoleRepository,
   InfraUser,
@@ -19,9 +16,11 @@ import {
   TypeOrmLoggerAdapter,
   TypeOrmUnitOfWork,
 } from "@kumo/infrastructure";
+import { AppConfigModule } from "./AppConfig.module.js";
 
 @Module({
   imports: [
+    AppConfigModule,
     TypeOrmModule.forRootAsync({
       useFactory: async (config: ConfigService, pinoLogger: PinoLogger) => {
         const devMode: boolean = config.get<string>("NODE_ENV", "production").trim().toLowerCase() === "development";
@@ -42,14 +41,14 @@ import {
           },
           migrationsRun: true,
           migrationsTransactionMode: "all",
-          migrations: ["packages/infrastructure/src/db/migrations"],
+          migrations: ["packages/infrastructure/src/db/migrations", Builds1791970000000],
           logging: devMode ? "all" : undefined,
           logger: new TypeOrmLoggerAdapter(pinoLogger),
         };
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment, InfraDeploymentSpec]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment]),
   ],
   providers: [
     InfraUserRepository,
@@ -60,20 +59,10 @@ import {
       provide: UNIT_OF_WORK,
       useExisting: TypeOrmUnitOfWork,
     },
-    {
-      provide: DEPLOYMENT_REPOSITORY,
-      useExisting: InfraDeploymentRepository,
-    },
-    {
-      provide: CreateUserCase,
-      useFactory: (unitOfWork: UnitOfWork): CreateUserCase => new CreateUserCase(unitOfWork),
-      inject: [UNIT_OF_WORK],
-    },
   ],
   exports: [
     UNIT_OF_WORK,
-    DEPLOYMENT_REPOSITORY,
-    CreateUserCase,
+    InfraDeploymentRepository,
     InfraUserRepository,
     InfraRoleRepository,
   ]

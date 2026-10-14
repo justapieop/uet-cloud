@@ -14,7 +14,8 @@
     "generate:api": "npm run generate -w packages/rest"
   },
   "dependencies": {
-    "mssql": "^12.0.0"
+    "mssql": "^12.0.0",
+    "tar": "^7.5.22"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

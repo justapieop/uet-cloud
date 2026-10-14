@@ -14,6 +14,9 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 ## Confirmed direction
 
 - Azure Container Apps is the deployment platform for applications deployed through the PaaS.
+- Source builds use a Dockerfile from a GitHub repository. Azure Pipelines builds and pushes images to ACR; ACR stores images. Automatic rebuild triggers remain an open decision.
+- Private repository access uses GitHub App installation tokens limited to selected repositories with Contents read permission. The infrastructure GitHub provider manually constructs an app JWT, signs it through the existing Azure Key Vault KMS provider, and exchanges it for a token without persisting it.
+- `POST /deployment/build` checks the authenticated user's current GitHub repository access, resolves a Git reference to a commit, persists a build record, and schedules the platform Azure Pipeline. A secret per-build credential authorizes the pipeline to fetch the manifest and source directly from Kumo. Only the credential hash is stored by Kumo, and GitHub credentials stay in the backend. The response is HTTP 202 with build ID, pipeline run ID and URL, status, image address, and commit SHA. The pipeline downloads the saved commit, builds, and pushes the image. An owner-scoped build query refreshes pipeline status on demand. Automatic ACA deployment after build completion remains unimplemented.
 - The PaaS itself will be hosted on Azure.
 - Azure SQL Database is the persistence database for the project.
 - The API uses Microsoft Entra passwordless authentication for Azure SQL Database.
@@ -34,4 +37,4 @@ The README provides a setup guide and links to this brief. Use this brief and th
 
 ## Open questions
 
-The product scope, supported deployment inputs, user journey, tenancy model, Azure service choices beyond ACA, frontend framework, communication between applications, and operational requirements have not yet been established here. Treat these as open until decided.
+The remaining product scope, deployment inputs beyond GitHub repositories with Dockerfiles, user journey, tenancy model beyond the current shared environment, additional Azure service choices, frontend framework, communication between applications, and operational requirements remain open. Treat these as open until decided.
