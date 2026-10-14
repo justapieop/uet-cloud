@@ -37,6 +37,49 @@ Set `GITHUB_OAUTH2_CLIENT_ID`, `GITHUB_OAUTH2_SECRET`, and `GITHUB_OAUTH2_REDIRE
 
 Application settings are loaded at startup; changes in Azure require an API restart to take effect. Feature flags are loaded at startup by a separate module and polled from Azure App Configuration every 12 hours. Consumers of the `FEATURE_FLAGS` provider read its current `feature_flags` property to get the latest snapshot. If a poll fails, the last known flags remain available until a later poll succeeds. With `CONFIG_SOURCE=local`, the provider supplies an empty flag list and does not poll.
 
+## GitHub installation tokens
+
+Import `GitHubModule` from `@kumo/infrastructure` in a consuming NestJS module and inject `GitHubProvider`. Call `getRepositoryAccessToken(owner, repo)` with the GitHub account or organization name and repository name after authorizing the user's access to the repository. The provider looks up the repository's app installation and returns a fresh token limited to that repository with `contents: read`; it does not store or log the token.
+
+| Setting | Purpose |
+| --- | --- |
+| `GITHUB_APP_CLIENT_ID` | Optional explicit GitHub App client ID; falls back to `GITHUB_OAUTH2_CLIENT_ID`. The configured app must correspond to the key used for signing. |
+| `GITHUB_APP_PRIVATE_KEY_NAME` | Name of the RSA key under Key Vault **Keys**, corresponding to the GitHub App's registered public key. |
+| `AZURE_VAULT_NAME` | Key Vault name or full vault URL, such as `https://example.vault.azure.net`. |
+
+The provider manually constructs the app JWT and uses `KmsProvider` to sign it with RS256 in Key Vault. The private key is never downloaded. The Azure identity needs permission to retrieve key metadata and sign with the selected key. The GitHub App must be installed on the selected repositories and have Contents read permission. The token expires according to GitHub's response (normally one hour); request another token when needed. This flow uses Key Vault's key API separately from App Configuration's secret references.
+
+## Triggering image builds
+
+`POST /deployment/build` requires an authenticated GitHub session. Sign in through `/auth/login`, then submit the request using the same session cookie. The requesting user must be a collaborator (including the repository owner) on the repository, and the GitHub App must be installed on it with Contents read permission. Kumo checks access, resolves the commit, saves a build record, and starts an Azure Pipeline. The pipeline requests its source later from Kumo.
+
+```json
+{
+  "repo": "https://github.com/owner/private-app.git",
+  "image_name": "my-app",
+  "dockerfile_path": "Dockerfile",
+  "ref": "main"
+}
+```
+
+`dockerfile_path` is optional and defaults to `Dockerfile`. It is relative to the repository root, which remains the Docker build context even when the Dockerfile is in a subdirectory. `ref` is optional: it overrides a repository URL's `#ref` fragment, otherwise uses the default branch. The provider resolves the reference to a commit SHA. Image names use lowercase letters, digits, and separators (`.`, `_`, `-`). The pipeline uses its configured agent pool; the request does not select an Azure region.
+
+| Setting | Purpose |
+| --- | --- |
+| `AZURE_DEVOPS_ORGANIZATION` | Azure DevOps organization name, without a URL scheme. |
+| `AZURE_DEVOPS_PROJECT` | Project name or ID containing the platform build pipeline. |
+| `AZURE_DEVOPS_PIPELINE_ID` | Numeric pipeline ID. |
+| `AZURE_DEVOPS_PAT` | Optional secret for local testing, with Build Read & execute access. When absent, DefaultAzureCredential acquires a Microsoft Entra token for Azure DevOps. |
+| `AZURE_CONTAINER_REGISTRY_SERVER` | Registry login hostname, such as `kumoregistry.azurecr.io`, without `https://`. |
+
+The API identity needs permission to read and sign the GitHub App key (for example Key Vault Crypto User). Add the backend's Azure identity to the Azure DevOps organization and grant it permission to queue and view this pipeline. The pipeline uses a separate Azure service connection to authenticate image pushes to ACR. ACR Tasks permissions are not needed for the active build path. See [Azure Pipelines setup](azure-pipelines.md) for the pipeline variables, service connection, public API URL, and agent requirements.
+
+The build request downloads no archive and uploads no source to storage. It persists the authorized repository, commit, Dockerfile path, image, pipeline run, and a hash of a random build-source credential. Only the build ID is passed as a pipeline parameter; the credential is passed as a secret pipeline variable. It expires after 24 hours and is rejected for terminal builds. Authorization headers and cookies are redacted from request logs.
+
+`GET /builds/:id/manifest` and `GET /builds/:id/source` authenticate with the credential assigned to that build. The manifest exposes only image, Dockerfile path, and commit SHA. The source endpoint rechecks GitHub access, downloads the saved commit, removes GitHub's wrapper directory, verifies the Dockerfile exists, and serves a gzip archive. GitHub tokens remain in Kumo's backend. Temporary local files are removed after source preparation. Compressed GitHub source is limited to 100 MiB and extracted source to 256 MiB. Archive downloads do not fetch Git history or recursively clone submodules.
+
+The HTTP 202 response contains `build_id`, `run_id`, `run_url`, `status`, `image`, and `commit_sha`. The image uses a unique tag under `kumo/<GitHub-user-ID>/<image_name>`. The pipeline builds and pushes the image to ACR. `GET /deployment/build/:id` is restricted to the build's owner and refreshes its status from Azure DevOps. Status updates are polled on demand; there is no completion webhook or automatic ACA deployment. The new `builds` SQL migration runs through the API's existing migration mechanism on startup.
+
 ## Deployment & Azure Container Apps
 
 The deployment provisioning and mutation service requires Azure ARM and Container Apps credentials and environment references:

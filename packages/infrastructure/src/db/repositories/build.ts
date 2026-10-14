@@ -1,0 +1,35 @@
+import { Build, type BuildDetails, type BuildStatus } from "@kumo/domain";
+import type { BuildRepository } from "@kumo/application";
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Column, Entity, PrimaryColumn, Repository } from "typeorm";
+
+@Entity({ name: "builds" })
+export class InfraBuild implements BuildDetails {
+  @PrimaryColumn({ type: "nvarchar", length: 36 }) public readonly id!: string;
+  @Column({ type: "nvarchar", length: 255, name: "user_id" }) public readonly userId!: string;
+  @Column({ type: "nvarchar", length: 2048 }) public readonly repo!: string;
+  @Column({ type: "nvarchar", length: 40, name: "commit_sha" }) public readonly commitSha!: string;
+  @Column({ type: "nvarchar", length: 1024, name: "dockerfile_path" }) public readonly dockerFilePath!: string;
+  @Column({ type: "nvarchar", length: 1024 }) public readonly image!: string;
+  @Column({ type: "nvarchar", length: 32 }) public readonly status!: BuildStatus;
+  @Column({ type: "nvarchar", length: 64, name: "source_token_hash", select: false }) public readonly sourceTokenHash!: string;
+  @Column({ type: "datetime2", name: "source_expires_at" }) public readonly sourceExpiresAt!: Date;
+  @Column({ type: "nvarchar", length: 32, name: "run_id", nullable: true }) public readonly runId!: string | null;
+  @Column({ type: "nvarchar", length: 2048, name: "run_url", nullable: true }) public readonly runUrl!: string | null;
+  @Column({ type: "datetime2", name: "created_at" }) public readonly createdAt!: Date;
+  @Column({ type: "datetime2", name: "updated_at" }) public readonly updatedAt!: Date;
+}
+
+@Injectable()
+export class InfraBuildRepository implements BuildRepository {
+  public constructor(@InjectRepository(InfraBuild) private readonly repository: Repository<InfraBuild>) {}
+  public async findById(id: string): Promise<Build | null> {
+    const record: InfraBuild | null = await this.repository.createQueryBuilder("build")
+      .addSelect("build.sourceTokenHash").where("build.id = :id", { id }).getOne();
+    return record ? new Build(record) : null;
+  }
+  public async save(build: Build): Promise<void> {
+    await this.repository.save(this.repository.create(build.getDetails()));
+  }
+}

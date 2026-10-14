@@ -40,6 +40,7 @@ export async function bootstrap(): Promise<void> {
     app,
     () => SwaggerModule.createDocument(app,
       new DocumentBuilder()
+        .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "opaque" }, "build-source")
         .addOAuth2(
           {
             type: "oauth2",

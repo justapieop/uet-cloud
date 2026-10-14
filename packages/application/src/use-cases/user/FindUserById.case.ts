@@ -5,11 +5,10 @@ export class FindUserByIdCase {
   public constructor(private readonly unitOfWork: UnitOfWork) { }
 
   public exec(id: string): Promise<User | null> {
-    return this.unitOfWork.run((repositories: UnitOfWorkRepositories): Promise<User | null> =>
-      this.createIfNotExists(repositories, id));
+    return this.unitOfWork.run((repositories: UnitOfWorkRepositories) => this.findUserById(repositories, id));
   }
 
-  private async createIfNotExists(
+  private async findUserById(
     repositories: UnitOfWorkRepositories,
     id: string,
   ): Promise<User | null> {

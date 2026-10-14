@@ -2,70 +2,60 @@ import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
   DeleteDeploymentCase,
-  DeleteUserResourceGroupCase,
-  DEPLOYMENT_REPOSITORY,
+  UNIT_OF_WORK,
   UpdateDeploymentCase,
-  type DeploymentRepository,
+  type UnitOfWork,
 } from "@kumo/application";
-import { AzureDeployService } from "@kumo/infrastructure";
-import { DeploymentMutationController } from "../controllers/DeploymentMutation.controller.js";
 import { DatabaseModule } from "./Database.module.js";
+import { BuildModule } from "@kumo/infrastructure";
+import { DeploymentController } from "../controllers/Deployment.controller.js";
+import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 
 @Module({
-  imports: [DatabaseModule],
-  controllers: [DeploymentMutationController],
+  imports: [DatabaseModule, BuildModule],
+  controllers: [
+    DeploymentController,
+    BuildSourceController,
+  ],
   providers: [
-    AzureDeployService,
     {
       provide: CreateDeploymentCase,
       useFactory: (
-        deployService: AzureDeployService,
-        deploymentRepository: DeploymentRepository,
+        uow: UnitOfWork,
       ): CreateDeploymentCase => {
-        return new CreateDeploymentCase(deployService, deploymentRepository);
+        return new CreateDeploymentCase(uow);
       },
-      inject: [AzureDeployService, DEPLOYMENT_REPOSITORY],
+      inject: [
+        UNIT_OF_WORK,
+      ],
     },
     {
       provide: UpdateDeploymentCase,
       useFactory: (
-        deployService: AzureDeployService,
-        deploymentRepository: DeploymentRepository,
+        uow: UnitOfWork,
       ): UpdateDeploymentCase => {
-        return new UpdateDeploymentCase(deployService, deploymentRepository);
+        return new UpdateDeploymentCase(uow);
       },
-      inject: [AzureDeployService, DEPLOYMENT_REPOSITORY],
+      inject: [
+        UNIT_OF_WORK,
+      ],
     },
     {
       provide: DeleteDeploymentCase,
       useFactory: (
-        deployService: AzureDeployService,
-        deploymentRepository: DeploymentRepository,
+        uow: UnitOfWork,
       ): DeleteDeploymentCase => {
-        return new DeleteDeploymentCase(deployService, deploymentRepository);
+        return new DeleteDeploymentCase(uow);
       },
-      inject: [AzureDeployService, DEPLOYMENT_REPOSITORY],
-    },
-    {
-      provide: DeleteUserResourceGroupCase,
-      useFactory: (
-        deployService: AzureDeployService,
-        deploymentRepository: DeploymentRepository,
-      ): DeleteUserResourceGroupCase => {
-        return new DeleteUserResourceGroupCase(
-          deployService,
-          deploymentRepository,
-        );
-      },
-      inject: [AzureDeployService, DEPLOYMENT_REPOSITORY],
+      inject: [
+        UNIT_OF_WORK,
+      ],
     },
   ],
   exports: [
-    AzureDeployService,
     CreateDeploymentCase,
     UpdateDeploymentCase,
     DeleteDeploymentCase,
-    DeleteUserResourceGroupCase,
   ],
 })
 export class DeploymentModule {}

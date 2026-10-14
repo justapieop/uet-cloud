@@ -19,6 +19,7 @@ import { AppCacheModule } from "./AppCache.module.js";
         const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production"));
         return {
           pinoHttp: {
+            redact: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"],
             level: devMode ? "debug" : "info",
             quietReqLogger: devMode,
             quietResLogger: devMode,
