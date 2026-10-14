@@ -4,4 +4,4 @@ export * from "./repositories/user.js";
 export * from "./uow.js";
 export * from "./logger.js";
 export * from "./repositories/build.js";
-export * from "./migrations/1791970000000-builds.js";
+export * from "./migrations.js";

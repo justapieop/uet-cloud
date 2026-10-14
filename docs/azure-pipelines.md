@@ -1,6 +1,6 @@
 # Azure Pipelines image builds
 
-Kumo authorizes and records a GitHub commit, then starts a platform-controlled pipeline. The pipeline downloads the assigned source from Kumo and builds and pushes its Docker image to ACR. Users do not need pipeline files in their application repositories. ACR Tasks and Azure Repos mirrors are not used in this path.
+Kumo accepts a build into a database-backed queue and returns HTTP 202 after saving it. An API background worker authorizes the GitHub repository, resolves and records a commit, then starts a platform-controlled pipeline. The pipeline downloads the assigned source from Kumo and builds and pushes its Docker image to ACR. Users do not need pipeline files in their application repositories.
 
 ## Pipeline setup
 
@@ -51,7 +51,11 @@ Sign in through `/auth/login`. Using that session, call `POST /deployment/build`
 }
 ```
 
-The response includes a `build_id`, Azure DevOps `run_id`, and `run_url`. Open the run URL to view pipeline logs. Poll `GET /deployment/build/<build_id>` with the same session to refresh the status. `SUCCEEDED` means the pipeline built and pushed the image; use its returned image address for deployment. Automatic ACA deployment is not connected to completion yet.
+The trigger immediately returns a persisted `build_id`, image address, and `PENDING` status. `run_id`, `run_url`, and `commit_sha` are initially null. Poll `GET /deployment/build/<build_id>` with the same session every few seconds. The worker changes the status to `PREPARING`, resolves the commit, and schedules Azure Pipelines. Once scheduled, the response includes `run_id` and `run_url`; open the URL for pipeline logs. Subsequent polls refresh the pipeline status (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELED`). Stop polling on a terminal status. Preparation or scheduling failures return `FAILED` with an `error` message through the status endpoint, rather than failing the already accepted POST. For failures inside Azure Pipelines, use `run_url` to inspect the logs.
+
+The queue worker runs inside each API process, checks for work every second, and processes one preparation at a time. Database conditional updates prevent multiple workers from claiming the same pending build. Pending builds survive API restarts. Preparation interrupted by a crash or older than ten minutes is marked `FAILED`; submit a new build to retry. Pipeline scheduling is not automatically retried because a lost response could leave an already accepted Azure run. Scale-to-zero pauses pending work until an API instance is running again.
+
+The `AsyncBuilds1791975000000` migration adds the requested Git reference and preparation error and makes the commit SHA nullable until resolution. It is registered for startup migration execution. `SUCCEEDED` means the pipeline built and pushed the image; use its returned image address for deployment. Automatic ACA deployment is not connected to completion yet.
 
 The pipeline fetches `/builds/<build_id>/manifest` and `/builds/<build_id>/source` with its secret bearer credential. A user session does not authorize those endpoints. Credentials are scoped to a single build and expire after 24 hours. Kumo stores only their SHA-256 hashes; GitHub installation tokens are neither returned to the pipeline nor saved in build records.
 

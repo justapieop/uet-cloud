@@ -51,7 +51,7 @@ The provider manually constructs the app JWT and uses `KmsProvider` to sign it w
 
 ## Triggering image builds
 
-`POST /deployment/build` requires an authenticated GitHub session. Sign in through `/auth/login`, then submit the request using the same session cookie. The requesting user must be a collaborator (including the repository owner) on the repository, and the GitHub App must be installed on it with Contents read permission. Kumo checks access, resolves the commit, saves a build record, and starts an Azure Pipeline. The pipeline requests its source later from Kumo.
+`POST /deployment/build` requires an authenticated GitHub session. Sign in through `/auth/login`, then submit the request using the same session cookie. Kumo saves a pending build and returns HTTP 202 without waiting for GitHub, Key Vault, or Azure DevOps. A database-backed API worker checks access, resolves the commit, and starts an Azure Pipeline. The requesting user must be a collaborator (including the repository owner) on the repository, and the GitHub App must be installed on it with Contents read permission. Preparation failures appear in the polled build's `error` field. The pipeline requests its source later from Kumo.
 
 ```json
 {
@@ -78,7 +78,7 @@ The build request downloads no archive and uploads no source to storage. It pers
 
 `GET /builds/:id/manifest` and `GET /builds/:id/source` authenticate with the credential assigned to that build. The manifest exposes only image, Dockerfile path, and commit SHA. The source endpoint rechecks GitHub access, downloads the saved commit, removes GitHub's wrapper directory, verifies the Dockerfile exists, and serves a gzip archive. GitHub tokens remain in Kumo's backend. Temporary local files are removed after source preparation. Compressed GitHub source is limited to 100 MiB and extracted source to 256 MiB. Archive downloads do not fetch Git history or recursively clone submodules.
 
-The HTTP 202 response contains `build_id`, `run_id`, `run_url`, `status`, `image`, and `commit_sha`. The image uses a unique tag under `kumo/<GitHub-user-ID>/<image_name>`. The pipeline builds and pushes the image to ACR. `GET /deployment/build/:id` is restricted to the build's owner and refreshes its status from Azure DevOps. Status updates are polled on demand; there is no completion webhook or automatic ACA deployment. The new `builds` SQL migration runs through the API's existing migration mechanism on startup.
+The HTTP 202 response contains `build_id`, `status: PENDING`, and `image`; `run_id`, `run_url`, `commit_sha`, and `error` are initially null. The image uses a unique tag under `kumo/<GitHub-user-ID>/<image_name>`. The pipeline builds and pushes the image to ACR. `GET /deployment/build/:id` is restricted to the build's owner and reports preparation progress or failure, then refreshes scheduled run status from Azure DevOps. Poll every few seconds until `SUCCEEDED`, `FAILED`, or `CANCELED`. The worker starts with the API, claims pending builds once, and marks interrupted preparation failed after ten minutes. Pending work resumes after a restart. Status updates are polled on demand; there is no completion webhook or automatic ACA deployment. The builds and asynchronous queue SQL migrations run through the API's existing migration mechanism on startup. See [Azure Pipelines setup](azure-pipelines.md) for worker and recovery details.
 
 ## Deployment & Azure Container Apps
 

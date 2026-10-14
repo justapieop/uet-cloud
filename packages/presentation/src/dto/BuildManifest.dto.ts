@@ -8,6 +8,7 @@ export class BuildManifestDto {
   @Expose({ name: "commit_sha" }) @ApiProperty({ name: "commit_sha" }) public readonly commitSha: string;
   @Expose() @ApiProperty() public readonly image: string;
   public constructor(build: BuildDetails) {
+    if (!build.commitSha) throw new Error("Build source is not prepared");
     this.dockerFilePath = build.dockerFilePath;
     this.commitSha = build.commitSha;
     this.image = build.image;

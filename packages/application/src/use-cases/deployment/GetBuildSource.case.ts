@@ -11,7 +11,7 @@ export class GetBuildSourceCase {
     const details: BuildDetails = build.getDetails();
     const provided: Buffer = createHash("sha256").update(token).digest();
     const stored: Buffer = Buffer.from(details.sourceTokenHash, "hex");
-    if (!timingSafeEqual(provided, stored) || details.sourceExpiresAt.getTime() <= Date.now() || ["SUCCEEDED", "FAILED", "CANCELED"].includes(details.status)) {
+    if (!details.commitSha || !timingSafeEqual(provided, stored) || details.sourceExpiresAt.getTime() <= Date.now() || ["SUCCEEDED", "FAILED", "CANCELED"].includes(details.status)) {
       throw new BuildAccessDenied("Invalid or expired build source credential");
     }
     return details;
@@ -19,7 +19,7 @@ export class GetBuildSourceCase {
 
   public async exec(id: string, token: string): Promise<Uint8Array> {
     const details: BuildDetails = await this.authorize(id, token);
-    const source: BuildSource = await this.source.downloadBuildSource({ userId: details.userId, repo: details.repo, ref: details.commitSha });
+    const source: BuildSource = await this.source.downloadBuildSource({ userId: details.userId, repo: details.repo, ref: details.commitSha! });
     return this.archive.prepare(source.archive, details.dockerFilePath);
   }
 }

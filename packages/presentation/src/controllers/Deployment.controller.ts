@@ -18,11 +18,11 @@ export class DeploymentController {
   @Post("build")
   @HttpCode(HttpStatus.ACCEPTED)
   @UseGuards(LoggedInGuard)
-  @ApiOperation({ summary: "Authorize a GitHub commit and queue an Azure Pipeline image build" })
-  @ApiAcceptedResponse({ description: "Build queued; the image is pushed when the build succeeds", type: BuildResponseDto })
-  @ApiBadRequestResponse({ description: "Invalid build input or missing Dockerfile" })
-  @ApiForbiddenResponse({ description: "No authenticated session, suspended user, or no repository access" })
-  @ApiBadGatewayResponse({ description: "GitHub, Key Vault, or Azure DevOps request failed" })
+  @ApiOperation({ summary: "Accept an image build for background preparation and scheduling" })
+  @ApiAcceptedResponse({ description: "Build persisted as PENDING; poll GET /deployment/build/:id for progress and preparation failures", type: BuildResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid build input" })
+  @ApiForbiddenResponse({ description: "No authenticated session or suspended user" })
+  @ApiBadGatewayResponse({ description: "Unable to persist the accepted build" })
   public async triggerBuild(
     @Req() request: Request,
     @Body(new ValidationPipe({ transform: true, whitelist: true })) body: TriggerBuildDto,
@@ -42,7 +42,7 @@ export class DeploymentController {
       if (error instanceof InvalidBuildInput) throw new BadRequestException(error.message);
       if (error instanceof BuildAccessDenied) throw new ForbiddenException(error.message);
       if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
-      throw new BadGatewayException("Build preparation failed; verify GitHub, Key Vault, and Azure DevOps configuration and permissions");
+      throw new BadGatewayException("Unable to accept the build");
     }
   }
 
@@ -59,7 +59,7 @@ export class DeploymentController {
     if (!user || user.suspended) throw new ForbiddenException();
     try {
       const details: BuildDetails = await this.getBuildCase.exec(id, user.id);
-      return new BuildResponseDto({ buildId: details.id, runId: details.runId ?? "", runUrl: details.runUrl ?? "", image: details.image, status: details.status, commitSha: details.commitSha });
+      return new BuildResponseDto({ buildId: details.id, runId: details.runId, runUrl: details.runUrl, image: details.image, status: details.status, commitSha: details.commitSha, error: details.error });
     } catch (error: unknown) {
       if (error instanceof BuildNotFound) throw new NotFoundException(error.message);
       if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
