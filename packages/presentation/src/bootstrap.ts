@@ -32,6 +32,8 @@ export async function bootstrap(): Promise<void> {
       mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
     }),
   }));
+  app.enableCsrfProtection();
+  app.useSecurityHeaders();
 
   app.use(passport.initialize());
   app.use(passport.session());

@@ -2,12 +2,15 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { GetBuildCase, GetBuildSourceCase, ProcessBuildCase, TriggerBuildCase } from "@kumo/application";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { GitHubModule } from "../github/module.js";
-import { GitHubProvider } from "../github/provider.js";
-import { AzurePipelinesProvider } from "./pipelines.js";
-import { SourceArchiveProvider } from "./source-archive.js";
-import { InfraBuild, InfraBuildRepository } from "../db/repositories/build.js";
-import { BuildWorker } from "./build-worker.js";
+import {
+  AzurePipelinesProvider,
+  BuildWorker,
+  GitHubModule,
+  GitHubProvider,
+  InfraBuild,
+  InfraBuildRepository,
+  SourceArchiveProvider,
+} from "@kumo/infrastructure";
 
 @Module({
   imports: [ConfigModule, GitHubModule, TypeOrmModule.forFeature([InfraBuild])],

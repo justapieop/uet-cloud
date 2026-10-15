@@ -7,7 +7,7 @@ import {
   type UnitOfWork,
 } from "@kumo/application";
 import { DatabaseModule } from "./Database.module.js";
-import { BuildModule } from "@kumo/infrastructure";
+import { BuildModule } from "./Build.module.js";
 import { DeploymentController } from "../controllers/Deployment.controller.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 
