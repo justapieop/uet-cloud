@@ -11,7 +11,8 @@
     "test:api": "npm run build:api && node --test",
     "start:api": "node apps/api/dist/main.js",
     "dev:api": "npm run build:api && node apps/api/dist/main.js | pino-pretty",
-    "generate:api": "npm run generate -w packages/rest"
+    "generate:api": "npm run generate -w packages/rest",
+    "dev:web": "npm run -w apps/web dev"
   },
   "dependencies": {
     "mssql": "^12.0.0",

@@ -1,5 +1,16 @@
-import type { JSX } from "react";
-import { LoginButton } from "@/features/auth";
+import { Suspense, type JSX } from "react";
+import { LoginButton, UserAvatar } from "@/features/auth";
+import { getCurrentUser, type CurrentUser } from "@/features/auth/server";
+
+async function NavbarAccount(): Promise<JSX.Element> {
+  const user: CurrentUser | null = await getCurrentUser();
+
+  return user ? (
+    <UserAvatar displayName={user.display_name} />
+  ) : (
+    <LoginButton variant="navbar" />
+  );
+}
 
 export function Navbar(): JSX.Element {
   return (
@@ -42,7 +53,17 @@ export function Navbar(): JSX.Element {
             aria-hidden="true"
           />
 
-          <LoginButton variant="navbar" />
+          <Suspense
+            fallback={
+              <span
+                role="status"
+                aria-label="Loading account"
+                className="size-9 shrink-0 rounded-full bg-[var(--surface)]"
+              />
+            }
+          >
+            <NavbarAccount />
+          </Suspense>
         </div>
       </div>
     </header>
