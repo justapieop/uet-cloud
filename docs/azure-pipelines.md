@@ -50,6 +50,8 @@ The `AsyncBuilds1791975000000` migration adds the requested Git reference and pr
 
 The pipeline fetches `/builds/<build_id>/manifest` and `/builds/<build_id>/source` with its secret bearer credential. A user session does not authorize those endpoints. Credentials are scoped to a single build and expire after 24 hours. Kumo stores only their SHA-256 hashes; GitHub installation tokens are neither returned to the pipeline nor saved in build records.
 
+The downloader prints its version, API hostname, assigned build ID, and the endpoint being requested without printing credentials. If logs lack these diagnostics, update the script in the Kumo repository branch checked out by the pipeline. A request to `/builds/<valid-uuid>/manifest` without authorization should return HTTP 401 with Kumo's bearer-token error; HTTP 404 suggests the request is not reaching that route. Check the effective `kumoApiUrl`, any base-path prefix, and the tunnel's forwarded API port and availability. A successful probe now does not establish that the tunnel was available during an earlier failed run.
+
 Source snapshots omit Git history and do not recursively fetch submodules. The build context is always the repository root. A missing Dockerfile is reported during the pipeline's source-download step.
 
 ## References

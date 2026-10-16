@@ -33,6 +33,7 @@ export function validateDeploymentPorts(targetPort: number, ports?: readonly Dep
 }
 
 export interface DeploymentSpec {
+  readonly region?: string;
   readonly repo: string;
   readonly tag: string;
   readonly imageName?: string;
@@ -95,6 +96,9 @@ export class Deployment extends Domain<DeploymentDetails> {
     }
     const spec: DeploymentSpec | null | undefined = this.details.spec;
     if (spec) {
+      if (spec.region !== undefined && (typeof spec.region !== "string" || !/^[a-z][a-z0-9]{0,63}$/.test(spec.region))) {
+        return new InvalidDomainParams("Region must be a lowercase Azure region name such as japaneast");
+      }
       if (!Number.isFinite(spec.maxVcpu) || spec.maxVcpu <= 0 || !Number.isInteger(spec.maxVcpu * 4) ||
         !Number.isFinite(spec.maxMemory) || spec.maxMemory !== spec.maxVcpu * 2) {
         return new InvalidDomainParams("Memory in GiB must be exactly twice vCPU; vCPU must be positive in increments of 0.25");

@@ -1,5 +1,5 @@
 import { Deployment, type DeploymentDetails } from "@kumo/domain";
-import { BuildProviderError } from "../../ports/build.js";
+import { BuildAccessDenied, BuildProviderError, InvalidBuildInput } from "../../ports/build.js";
 import type { DeploymentProvisioner, DeploymentProvisionResult, DeploymentRepository } from "../../ports/deployment.js";
 
 export class ProcessDeploymentCase {
@@ -17,7 +17,8 @@ export class ProcessDeploymentCase {
       });
       await this.repository.save(new Deployment({ ...details, ...result, status: "RUNNING", error: null, updatedAt: new Date() }));
     } catch (error: unknown) {
-      const message: string = error instanceof BuildProviderError ? error.message.slice(0, 1000) : "Deployment provisioning failed";
+      const message: string = error instanceof BuildProviderError || error instanceof BuildAccessDenied || error instanceof InvalidBuildInput
+        ? error.message.slice(0, 1000) : "Deployment provisioning failed";
       await this.repository.save(new Deployment({ ...details, status: "FAILED", error: message, updatedAt: new Date() }));
     }
   }

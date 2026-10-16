@@ -33,6 +33,12 @@ export class AdditionalDeploymentPortResponseDto {
 }
 
 export class CreateDeploymentDto {
+  @ApiPropertyOptional({ example: "japaneast", description: "Region for the shared user environment; must match it if already created" })
+  @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
+  @IsString()
+  @Matches(/^[a-z][a-z0-9]{0,63}$/)
+  public region?: string;
+
   @ApiProperty()
   @IsString()
   @Matches(/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/)
@@ -105,6 +111,7 @@ export class CreateDeploymentDto {
 
 @Exclude()
 export class DeploymentResponseDto {
+  @Expose() @ApiProperty({ type: String, nullable: true, description: "Requested region, or null when omitted" }) public readonly region: string | null;
   @Expose() @ApiProperty({ format: "uuid" }) public readonly id: string;
   @Expose() @ApiProperty() public readonly name: string;
   @Expose({ name: "target_port" }) @ApiProperty({ name: "target_port", type: Number, nullable: true }) public readonly targetPort: number | null;
@@ -123,6 +130,7 @@ export class DeploymentResponseDto {
   @Expose({ name: "updated_at" }) @ApiProperty({ name: "updated_at", type: Date }) public readonly updatedAt: Date;
 
   public constructor(deployment: Deployment) {
+    this.region = deployment.spec?.region ?? null;
     this.id = deployment.id;
     this.name = deployment.name;
     this.targetPort = deployment.spec?.targetPort ?? null;

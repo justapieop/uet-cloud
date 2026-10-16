@@ -14,6 +14,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 ## Confirmed direction
 
 - Azure Container Apps is the deployment platform for applications deployed through the PaaS.
+- New user managed environments use the standard Workload Profiles environment type with its Consumption profile. Existing Express environments require separate replacement or migration; the provider rejects them before building.
+- Users can choose a deployment `region`. The first managed environment establishes that user's shared workload region; subsequent requests selecting a different region fail before building. Omitting the field reuses an existing environment or follows the default provisioning location. Azure still determines whether the subscription can deploy in the selected region.
 - Source builds use a Dockerfile from a GitHub repository. Azure Pipelines builds and pushes images to ACR; ACR stores images. Automatic rebuild triggers remain an open decision.
 - Image addresses use `<registry>/<name>:<tag>`, with the tag supplied in deployment input and no user namespace. Build tracking IDs remain separate generated UUIDs. The optional image name defaults to the app name.
 - Private repository access uses GitHub App installation tokens limited to selected repositories with Contents read permission. The infrastructure GitHub provider manually constructs an app JWT, signs it through the existing Azure Key Vault KMS provider, and exchanges it for a token without persisting it.

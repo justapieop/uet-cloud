@@ -25,6 +25,7 @@ export class DeploymentsController {
       const deployment: Deployment = await this.createDeployment.exec({
         userId: user.id, name: input.name,
         spec: {
+          region: input.region,
           repo: input.repo, tag: input.tag, imageName: input.image_name, dockerFilePath: input.dockerfile_path,
           ref: input.ref, targetPort: input.target_port, maxVcpu: input.max_vcpu, maxMemory: input.max_memory,
           additionalPorts: input.additional_ports?.map((port: AdditionalDeploymentPortDto): DeploymentPortMapping => ({

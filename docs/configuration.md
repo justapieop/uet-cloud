@@ -89,7 +89,9 @@ These settings can be configured via `.env` for local execution or Azure App Con
 
 Set `AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME=azure-managed-id` for an identity named `azure-managed-id` in the configured subscription and platform resource group. The provider constructs the full resource ID required by Azure internally. Container Apps authenticates image pulls with that managed identity, rather than a registry password or a temporary backend token. The identity is configured with lifecycle `None` so code inside user containers cannot obtain its tokens. See [managed identity availability](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity#control-managed-identity-availability).
 
-The provider defaults to `southeastasia` for a new resource group. A new environment uses the existing group's location, and the app uses its environment's region. Deployment creation requires a target port and explicit CPU, memory, and scaling choices. The app has external HTTPS ingress. Resources created before a failed build are retained for later deployments.
+Users select their region through the optional `region` field in a deployment creation request. The selected region applies to new groups and environments, including new environments in an existing group. When omitted, a new group defaults to `southeastasia` and a new environment uses its group's location. An existing shared environment must match any explicitly selected region; a mismatch fails before building. Selection does not move or recreate an existing environment. The app uses its environment's region. Deployment creation requires a target port and explicit CPU, memory, and scaling choices. The app has external HTTPS ingress. Resources created before a failed build are retained for later deployments.
+
+New environments explicitly use `environmentMode: WorkloadProfiles` with a `Consumption` profile, and apps select that profile. Existing Express environments are rejected before starting a build. An `ExpressEnvironmentFeatureNotSupported` error indicates the environment does not support part of the requested app configuration. Restarting the API or changing the app name does not replace the shared user environment: it must be separately migrated or replaced with a standard environment. Kumo does not automatically delete environments or their workloads. See [Express capabilities](https://learn.microsoft.com/azure/container-apps/express-overview).
 
 ## Deployment creation
 
@@ -98,6 +100,7 @@ Submit an authenticated `POST /deployments` request:
 ```json
 {
   "name": "my-app",
+  "region": "japaneast",
   "repo": "https://github.com/example/my-app",
   "tag": "v1",
   "target_port": 3000,
@@ -110,9 +113,13 @@ Submit an authenticated `POST /deployments` request:
 
 Memory is in GiB and must be exactly twice vCPU. Both settings apply per replica; vCPU must be a positive multiple of 0.25. Scaling values are integer replica counts with `0 <= min_scaling <= max_scaling` and `max_scaling >= 1`. Invalid choices return HTTP 400. Optional fields are `image_name` (defaults to the app name), `dockerfile_path` (defaults to `Dockerfile`), `ref`, and `env_vars` (string values). Names must be unique per user; duplicates return HTTP 409.
 
+`region` is also optional and must be a lowercase Azure location name, such as `japaneast`, without spaces. Azure validates service availability and subscription restrictions. Responses echo the requested region, or `null` when none was supplied. Region is persisted in the existing creation JSON; no database migration is needed.
+
 The API returns HTTP 202 with the deployment ID and `PENDING` status. Poll `GET /deployments/:id` for progress, or list owned deployments with `GET /deployments`. The worker marks the request `PROVISIONING`, ensures the resource group and shared user environment are ready, starts a build, and waits for success before creating the Container App. It deploys that build's image and applies the chosen resources and replica counts. Build failure or cancellation prevents app creation. The existing owner-scoped `GET /deployment/build/:id` provides build details once `build_id` is available.
 
 Successful provisioning records `RUNNING`, the image, Azure resource ID, and FQDN. `RUNNING` means Azure provisioning succeeded; application health is not independently checked. Failures record `FAILED` and an error. Pending requests survive API restarts. Provisioning interrupted beyond `AZURE_DEPLOYMENT_TIMEOUT_MS` plus one minute is marked failed without automatic resubmission. The worker processes one deployment at a time per API instance; claims are conditional database updates so instances do not process the same pending request.
+
+Provisioning errors identify the failed step (resource group, managed environment, Container App lookup, private registry lookup, build submission/completion, or app creation). Azure failures expose sanitized error names/codes and HTTP status rather than response bodies or credentials. Missing deployment configuration identifies the required key without exposing its value. A failure with no `build_id` means no build reference was recorded; inspect the stage before checking Azure Pipelines. Resource-group and managed-environment readiness precede build submission.
 
 The appended deployment workflow migration runs at API startup and adds persisted creation requests, build/image/resource references, a queue index, and a unique user/name index. Existing duplicate user/name rows must be resolved before that index can be created. No new pipeline parameters are needed for CPU, memory, or scaling; these are applied by the Azure provider after the build.
 
