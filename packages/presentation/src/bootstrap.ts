@@ -16,6 +16,7 @@ export async function bootstrap(): Promise<void> {
   });
   const config: ConfigService = app.get(ConfigService);
   const port: number = Number(config.get<string>("PORT", "3000"));
+  app.enableShutdownHooks();
 
   const logger: Logger = app.get(Logger)
 
@@ -31,6 +32,8 @@ export async function bootstrap(): Promise<void> {
       mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
     }),
   }));
+  app.enableCsrfProtection();
+  app.useSecurityHeaders();
 
   app.use(passport.initialize());
   app.use(passport.session());

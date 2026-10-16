@@ -31,10 +31,14 @@ export interface ContainerBuildPort {
   triggerBuild(input: BuildTriggerInput): Promise<BuildRun>;
 }
 
-export interface TriggerBuildResult extends BuildRun {
-  readonly commitSha: string;
+export interface TriggerBuildResult {
+  readonly runId: string | null;
+  readonly status: BuildStatus;
+  readonly image: string;
+  readonly commitSha: string | null;
   readonly buildId: string;
-  readonly runUrl: string;
+  readonly runUrl: string | null;
+  readonly error?: string | null;
 }
 
 export interface RepositoryBuildSourcePort extends BuildSourcePort {
@@ -48,7 +52,7 @@ export interface PipelineRun {
 }
 
 export interface PipelineBuildPort {
-  getImageAddress(userId: string, imageName: string, tag: string): string;
+  getImageAddress(imageName: string, tag: string): string;
   startBuild(buildId: string, sourceToken: string): Promise<PipelineRun>;
   getRun(runId: string): Promise<PipelineRun>;
 }
@@ -56,6 +60,11 @@ export interface PipelineBuildPort {
 export interface BuildRepository {
   findById(id: string): Promise<Build | null>;
   save(build: Build): Promise<void>;
+}
+
+export interface BuildQueueRepository extends BuildRepository {
+  claimNextPending(): Promise<Build | null>;
+  failStalePreparations(before: Date): Promise<void>;
 }
 
 export interface SourceArchivePort {

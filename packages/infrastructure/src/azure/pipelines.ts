@@ -5,6 +5,20 @@ import { BuildProviderError, type PipelineBuildPort, type PipelineRun } from "@k
 import type { BuildStatus } from "@kumo/domain";
 import { runBuildStep } from "../build-errors.js";
 
+function redactPipelineMessage(message: string, sensitiveValues: readonly string[]): string {
+  let redacted: string = message;
+  for (let index: number = 0; index < sensitiveValues.length; index++) {
+    const value: string = sensitiveValues[index]!;
+    if (value) redacted = redacted.split(value).join("[redacted]");
+  }
+  return redacted
+    .replace(/https?:\/\/[^\s<>"']+/gi, "[URL redacted]")
+    .replace(/\b(?:Bearer|Basic)\s+[^\s,"'}]+/gi, "[credential redacted]")
+    .replace(/[A-Za-z0-9_+\/.=-]{40,}/g, "[redacted]")
+    .replace(/[\x00-\x1f\x7f]/g, " ")
+    .slice(0, 800);
+}
+
 @Injectable()
 export class AzurePipelinesProvider implements PipelineBuildPort {
   private readonly credential: DefaultAzureCredential = new DefaultAzureCredential();
@@ -26,8 +40,8 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
     this.pat = config.get<string>("AZURE_DEVOPS_PAT") || undefined;
   }
 
-  public getImageAddress(userId: string, imageName: string, tag: string): string {
-    return `${this.registry}/kumo/${userId}/${imageName}:${tag}`;
+  public getImageAddress(imageName: string, tag: string): string {
+    return `${this.registry}/${imageName}:${tag}`;
   }
 
   public startBuild(buildId: string, sourceToken: string): Promise<PipelineRun> {
@@ -37,7 +51,7 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
         templateParameters: { buildId },
         variables: { kumoSourceToken: { value: sourceToken, isSecret: true } },
       }),
-    }));
+    }, [sourceToken]));
   }
 
   public getRun(runId: string): Promise<PipelineRun> {
@@ -45,7 +59,7 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
     return runBuildStep("Azure Pipeline status request", () => this.request(`/${runId}`, { method: "GET" }));
   }
 
-  private async request(path: string, options: RequestInit): Promise<PipelineRun> {
+  private async request(path: string, options: RequestInit, sensitiveValues: readonly string[] = []): Promise<PipelineRun> {
     let authorization: string;
     if (this.pat) {
       authorization = `Basic ${Buffer.from(`:${this.pat}`).toString("base64")}`;
@@ -59,7 +73,20 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
       headers: { Authorization: authorization, "Content-Type": "application/json", Accept: "application/json" },
       redirect: "error", signal: AbortSignal.timeout(30_000),
     });
-    if (!response.ok) throw new BuildProviderError(`Azure Pipeline request failed: HTTP ${response.status}`);
+    if (!response.ok) {
+      let detail: string = "";
+      try {
+        const failure: unknown = await response.json();
+        if (typeof failure === "object" && failure !== null && "message" in failure && typeof failure.message === "string") {
+          detail = redactPipelineMessage(failure.message, [
+            ...sensitiveValues, authorization, authorization.split(" ")[1] ?? "", this.pat ?? "",
+          ]);
+        }
+      } catch {
+        // Non-JSON responses may be proxy HTML; keep the HTTP status without exposing it.
+      }
+      throw new BuildProviderError(`Azure Pipeline request failed: HTTP ${response.status}${detail ? `; ${detail}` : ""}`);
+    }
     let data: unknown;
     try { data = await response.json(); } catch { throw new BuildProviderError("Azure DevOps returned an invalid run response"); }
     if (typeof data !== "object" || data === null || !("id" in data) || typeof data.id !== "number" || !Number.isSafeInteger(data.id) || data.id <= 0) {

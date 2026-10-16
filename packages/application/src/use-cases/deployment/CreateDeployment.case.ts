@@ -1,10 +1,12 @@
-import { Deployment } from "@kumo/domain";
+import { randomUUID } from "node:crypto";
+import { Deployment, InvalidDomainParams, type DeploymentSpec } from "@kumo/domain";
+import { DeploymentAlreadyExists } from "../../ports/deployment.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 
 export interface CreateDeploymentInput {
-  id: string;
   userId: string;
   name: string;
+  spec: DeploymentSpec;
 }
 
 export class CreateDeploymentCase {
@@ -17,11 +19,19 @@ export class CreateDeploymentCase {
   }
 
   public async createDeployment(repo: UnitOfWorkRepositories, input: CreateDeploymentInput): Promise<Deployment> {
+    if (!input.spec) throw new InvalidDomainParams("A deployment creation specification is required");
     const deployment: Deployment = new Deployment({
-      id: input.id,
+      id: randomUUID(),
       name: input.name,
       userId: input.userId,
+      spec: input.spec,
+      status: "PENDING",
     });
+
+    const existing: Deployment[] = await repo.deployment.findByUserId(input.userId);
+    if (existing.some((item: Deployment): boolean => item.name === input.name)) {
+      throw new DeploymentAlreadyExists("A deployment with this name already exists for the user");
+    }
 
     await repo.deployment.save(deployment);
 

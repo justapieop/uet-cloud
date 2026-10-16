@@ -2,22 +2,47 @@ import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
   DeleteDeploymentCase,
+  GetBuildCase,
+  GetDeploymentCase,
+  ProcessDeploymentCase,
+  TriggerBuildCase,
   UNIT_OF_WORK,
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
+import { AzureProvider, DeploymentWorker, InfraDeploymentRepository } from "@kumo/infrastructure";
+import { ConfigService } from "@nestjs/config";
 import { DatabaseModule } from "./Database.module.js";
-import { BuildModule } from "@kumo/infrastructure";
+import { BuildModule } from "./Build.module.js";
 import { DeploymentController } from "../controllers/Deployment.controller.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
+import { DeploymentsController } from "../controllers/Deployments.controller.js";
 
 @Module({
   imports: [DatabaseModule, BuildModule],
   controllers: [
     DeploymentController,
     BuildSourceController,
+    DeploymentsController,
   ],
   providers: [
+    DeploymentWorker,
+    {
+      provide: GetDeploymentCase,
+      useFactory: (repository: InfraDeploymentRepository): GetDeploymentCase => new GetDeploymentCase(repository),
+      inject: [InfraDeploymentRepository],
+    },
+    {
+      provide: ProcessDeploymentCase,
+      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): ProcessDeploymentCase => new ProcessDeploymentCase(repository, provider),
+      inject: [InfraDeploymentRepository, AzureProvider],
+    },
+    {
+      provide: AzureProvider,
+      useFactory: (config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase): AzureProvider =>
+        new AzureProvider(config, triggerBuild, getBuild),
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase],
+    },
     {
       provide: CreateDeploymentCase,
       useFactory: (
@@ -53,7 +78,9 @@ import { BuildSourceController } from "../controllers/BuildSource.controller.js"
     },
   ],
   exports: [
+    AzureProvider,
     CreateDeploymentCase,
+    GetDeploymentCase,
     UpdateDeploymentCase,
     DeleteDeploymentCase,
   ],

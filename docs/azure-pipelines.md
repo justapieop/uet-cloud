@@ -1,6 +1,6 @@
 # Azure Pipelines image builds
 
-Kumo authorizes and records a GitHub commit, then starts a platform-controlled pipeline. The pipeline downloads the assigned source from Kumo and builds and pushes its Docker image to ACR. Users do not need pipeline files in their application repositories. ACR Tasks and Azure Repos mirrors are not used in this path.
+Kumo processes builds from a database-backed queue. An API background worker authorizes the GitHub repository, resolves and records a commit, then starts a platform-controlled pipeline. The pipeline downloads the assigned source from Kumo and builds and pushes its Docker image to ACR. Users do not need pipeline files in their application repositories. The temporary HTTP build trigger has been removed; there is currently no public route for submitting new builds.
 
 ## Pipeline setup
 
@@ -38,20 +38,15 @@ The existing GitHub App and Key Vault settings remain required. The app needs Co
 
 The API startup applies the new `builds` table migration using the existing `migrationsRun` configuration. The database identity must be able to create that table and its user index. No database changes are performed by the coding agent.
 
-## Test flow
+## Build processing and status
 
-Sign in through `/auth/login`. Using that session, call `POST /deployment/build`:
+Deployment input requires a `tag`, for example `v1.2.3`. The image is pushed as `<registry>/<name>:<tag>`, without a user namespace; `name` is the requested image name, defaulting to the app name. The generated build UUID is used for tracking and source authorization independently of the tag. The source manifest includes `build_id`, which the pipeline verifies against its assigned build before downloading source. Reusing the same name and tag replaces that registry reference.
 
-```json
-{
-  "repo": "https://github.com/owner/private-app.git",
-  "image_name": "my-app",
-  "dockerfile_path": "Dockerfile",
-  "ref": "main"
-}
-```
+For an existing build, sign in through `/auth/login` and poll `GET /deployment/build/<build_id>` with the same session every few seconds. Pending builds initially have null `run_id`, `run_url`, and `commit_sha` values. The worker changes the status to `PREPARING`, resolves the commit, and schedules Azure Pipelines. Once scheduled, the response includes `run_id` and `run_url`; open the URL for pipeline logs. Subsequent polls refresh the pipeline status (`QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELED`). Stop polling on a terminal status. Preparation or scheduling failures return `FAILED` with an `error` message through the status endpoint. For failures inside Azure Pipelines, use `run_url` to inspect the logs.
 
-The response includes a `build_id`, Azure DevOps `run_id`, and `run_url`. Open the run URL to view pipeline logs. Poll `GET /deployment/build/<build_id>` with the same session to refresh the status. `SUCCEEDED` means the pipeline built and pushed the image; use its returned image address for deployment. Automatic ACA deployment is not connected to completion yet.
+The queue worker runs inside each API process, checks for work every second, and processes one preparation at a time. Database conditional updates prevent multiple workers from claiming the same pending build. Pending builds survive API restarts. Preparation interrupted by a crash or older than ten minutes is marked `FAILED`. Pipeline scheduling is not automatically retried because a lost response could leave an already accepted Azure run. Scale-to-zero pauses pending work until an API instance is running again.
+
+The `AsyncBuilds1791975000000` migration adds the requested Git reference and preparation error and makes the commit SHA nullable until resolution. It is registered for startup migration execution. `SUCCEEDED` means the pipeline built and pushed the image; use its returned image address for deployment. Automatic ACA deployment is not connected to completion yet.
 
 The pipeline fetches `/builds/<build_id>/manifest` and `/builds/<build_id>/source` with its secret bearer credential. A user session does not authorize those endpoints. Credentials are scoped to a single build and expire after 24 hours. Kumo stores only their SHA-256 hashes; GitHub installation tokens are neither returned to the pipeline nor saved in build records.
 

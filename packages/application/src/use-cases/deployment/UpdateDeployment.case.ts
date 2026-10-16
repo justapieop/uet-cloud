@@ -25,10 +25,12 @@ export class UpdateDeploymentCase {
     }
 
     await repo.deployment.update(new Deployment({
+      ...currentDeployment.getDetails(),
       id: input.id,
       userId: input.userId,
       name: input.name ?? currentDeployment.name,
       createdAt: currentDeployment.createdAt,
+      updatedAt: new Date(),
     }));
   }
 }

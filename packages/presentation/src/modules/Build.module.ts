@@ -1,12 +1,16 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { GetBuildCase, GetBuildSourceCase, TriggerBuildCase } from "@kumo/application";
+import { GetBuildCase, GetBuildSourceCase, ProcessBuildCase, TriggerBuildCase } from "@kumo/application";
 import { TypeOrmModule } from "@nestjs/typeorm";
-import { GitHubModule } from "../github/module.js";
-import { GitHubProvider } from "../github/provider.js";
-import { AzurePipelinesProvider } from "./pipelines.js";
-import { SourceArchiveProvider } from "./source-archive.js";
-import { InfraBuild, InfraBuildRepository } from "../db/repositories/build.js";
+import {
+  AzurePipelinesProvider,
+  BuildWorker,
+  GitHubModule,
+  GitHubProvider,
+  InfraBuild,
+  InfraBuildRepository,
+  SourceArchiveProvider,
+} from "@kumo/infrastructure";
 
 @Module({
   imports: [ConfigModule, GitHubModule, TypeOrmModule.forFeature([InfraBuild])],
@@ -14,9 +18,15 @@ import { InfraBuild, InfraBuildRepository } from "../db/repositories/build.js";
     AzurePipelinesProvider,
     SourceArchiveProvider,
     InfraBuildRepository,
+    BuildWorker,
     {
       provide: TriggerBuildCase,
-      useFactory: (github: GitHubProvider, pipeline: AzurePipelinesProvider, repository: InfraBuildRepository): TriggerBuildCase => new TriggerBuildCase(github, pipeline, repository),
+      useFactory: (pipeline: AzurePipelinesProvider, repository: InfraBuildRepository): TriggerBuildCase => new TriggerBuildCase(pipeline, repository),
+      inject: [AzurePipelinesProvider, InfraBuildRepository],
+    },
+    {
+      provide: ProcessBuildCase,
+      useFactory: (github: GitHubProvider, pipeline: AzurePipelinesProvider, repository: InfraBuildRepository): ProcessBuildCase => new ProcessBuildCase(github, pipeline, repository),
       inject: [GitHubProvider, AzurePipelinesProvider, InfraBuildRepository],
     },
     {

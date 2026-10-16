@@ -2,13 +2,15 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { PinoLogger } from "nestjs-pino";
+import { TypeORMError } from "typeorm";
 import {
   UNIT_OF_WORK,
 } from "@kumo/application";
 import {
   InfraDeployment,
-  Builds1791970000000,
+  DATABASE_MIGRATIONS,
   InfraDeploymentRepository,
+  InfraPlan,
   InfraRole,
   InfraRoleRepository,
   InfraUser,
@@ -40,15 +42,17 @@ import { AppConfigModule } from "./AppConfig.module.js";
             encrypt: enableEncryption,
           },
           migrationsRun: true,
+          // Migration and SQL failures need correction, not another startup attempt.
+          toRetry: (error: unknown): boolean => !(error instanceof TypeORMError),
           migrationsTransactionMode: "all",
-          migrations: ["packages/infrastructure/src/db/migrations", Builds1791970000000],
+          migrations: DATABASE_MIGRATIONS,
           logging: devMode ? "all" : undefined,
           logger: new TypeOrmLoggerAdapter(pinoLogger),
         };
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment, InfraPlan]),
   ],
   providers: [
     InfraUserRepository,

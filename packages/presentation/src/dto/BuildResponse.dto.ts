@@ -9,23 +9,27 @@ export class BuildResponseDto {
   public readonly buildId: string;
 
   @Expose({ name: "run_url" })
-  @ApiProperty({ name: "run_url" })
-  public readonly runUrl: string;
+  @ApiProperty({ name: "run_url", type: String, nullable: true })
+  public readonly runUrl: string | null;
   @Expose({ name: "run_id" })
-  @ApiProperty({ name: "run_id", example: "42" })
-  public readonly runId: string;
+  @ApiProperty({ name: "run_id", type: String, nullable: true, example: "42" })
+  public readonly runId: string | null;
 
   @Expose()
-  @ApiProperty({ example: "QUEUED" })
+  @ApiProperty({ example: "PENDING", enum: ["PENDING", "PREPARING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELED"] })
   public readonly status: string;
 
   @Expose()
-  @ApiProperty({ example: "registry.azurecr.io/kumo/123/my-app:unique-build-tag" })
+  @ApiProperty({ example: "registry.azurecr.io/my-app:v1.2.3" })
   public readonly image: string;
 
   @Expose({ name: "commit_sha" })
-  @ApiProperty({ name: "commit_sha" })
-  public readonly commitSha: string;
+  @ApiProperty({ name: "commit_sha", type: String, nullable: true })
+  public readonly commitSha: string | null;
+
+  @Expose()
+  @ApiProperty({ type: String, nullable: true, description: "Preparation or scheduling failure; null when none has been recorded" })
+  public readonly error: string | null;
 
   public constructor(result: TriggerBuildResult) {
     this.buildId = result.buildId;
@@ -34,5 +38,6 @@ export class BuildResponseDto {
     this.status = result.status;
     this.image = result.image;
     this.commitSha = result.commitSha;
+    this.error = result.error ?? null;
   }
 }

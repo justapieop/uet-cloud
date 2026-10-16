@@ -49,20 +49,11 @@ Import `GitHubModule` from `@kumo/infrastructure` in a consuming NestJS module a
 
 The provider manually constructs the app JWT and uses `KmsProvider` to sign it with RS256 in Key Vault. The private key is never downloaded. The Azure identity needs permission to retrieve key metadata and sign with the selected key. The GitHub App must be installed on the selected repositories and have Contents read permission. The token expires according to GitHub's response (normally one hour); request another token when needed. This flow uses Key Vault's key API separately from App Configuration's secret references.
 
-## Triggering image builds
+## Image build processing
 
-`POST /deployment/build` requires an authenticated GitHub session. Sign in through `/auth/login`, then submit the request using the same session cookie. The requesting user must be a collaborator (including the repository owner) on the repository, and the GitHub App must be installed on it with Contents read permission. Kumo checks access, resolves the commit, saves a build record, and starts an Azure Pipeline. The pipeline requests its source later from Kumo.
+The temporary HTTP build trigger has been removed. The internal build use case and database-backed API worker remain available, but there is currently no public route for submitting new builds. The worker checks access, resolves the commit, and starts an Azure Pipeline. The requesting user must be a collaborator (including the repository owner) on the repository, and the GitHub App must be installed on it with Contents read permission. Preparation failures appear in the polled build's `error` field. The pipeline requests its source later from Kumo.
 
-```json
-{
-  "repo": "https://github.com/owner/private-app.git",
-  "image_name": "my-app",
-  "dockerfile_path": "Dockerfile",
-  "ref": "main"
-}
-```
-
-`dockerfile_path` is optional and defaults to `Dockerfile`. It is relative to the repository root, which remains the Docker build context even when the Dockerfile is in a subdirectory. `ref` is optional: it overrides a repository URL's `#ref` fragment, otherwise uses the default branch. The provider resolves the reference to a commit SHA. Image names use lowercase letters, digits, and separators (`.`, `_`, `-`). The pipeline uses its configured agent pool; the request does not select an Azure region.
+The internal build input accepts a Dockerfile path relative to the repository root, defaulting to `Dockerfile`. The repository root remains the Docker build context even when the Dockerfile is in a subdirectory. An optional Git reference overrides a repository URL's `#ref` fragment, otherwise the default branch is used. The provider resolves the reference to a commit SHA. Image names use lowercase letters, digits, and separators (`.`, `_`, `-`). Deployment input requires a `tag`, such as `v1.2.3`, and the optional `imageName` defaults to the app name. Tags are 1-128 letters, digits, underscores, periods, or hyphens and must start with a letter, digit, or underscore. The pipeline uses its configured agent pool.
 
 | Setting | Purpose |
 | --- | --- |
@@ -74,22 +65,77 @@ The provider manually constructs the app JWT and uses `KmsProvider` to sign it w
 
 The API identity needs permission to read and sign the GitHub App key (for example Key Vault Crypto User). Add the backend's Azure identity to the Azure DevOps organization and grant it permission to queue and view this pipeline. The pipeline uses a separate Azure service connection to authenticate image pushes to ACR. ACR Tasks permissions are not needed for the active build path. See [Azure Pipelines setup](azure-pipelines.md) for the pipeline variables, service connection, public API URL, and agent requirements.
 
-The build request downloads no archive and uploads no source to storage. It persists the authorized repository, commit, Dockerfile path, image, pipeline run, and a hash of a random build-source credential. Only the build ID is passed as a pipeline parameter; the credential is passed as a secret pipeline variable. It expires after 24 hours and is rejected for terminal builds. Authorization headers and cookies are redacted from request logs.
+The internal build use case persists a pending build with its repository, Dockerfile path, image address, and a hash of a random build-source credential. The worker resolves the authorized commit and records the pipeline run. Only the build ID is passed as a pipeline parameter; the credential is passed as a secret pipeline variable. It expires after 24 hours and is rejected for terminal builds. Authorization headers and cookies are redacted from request logs.
 
-`GET /builds/:id/manifest` and `GET /builds/:id/source` authenticate with the credential assigned to that build. The manifest exposes only image, Dockerfile path, and commit SHA. The source endpoint rechecks GitHub access, downloads the saved commit, removes GitHub's wrapper directory, verifies the Dockerfile exists, and serves a gzip archive. GitHub tokens remain in Kumo's backend. Temporary local files are removed after source preparation. Compressed GitHub source is limited to 100 MiB and extracted source to 256 MiB. Archive downloads do not fetch Git history or recursively clone submodules.
+`GET /builds/:id/manifest` and `GET /builds/:id/source` authenticate with the credential assigned to that build. The manifest exposes build ID, image, Dockerfile path, and commit SHA. The pipeline verifies that the manifest build ID matches its assigned build independently of the image tag. The source endpoint rechecks GitHub access, downloads the saved commit, removes GitHub's wrapper directory, verifies the Dockerfile exists, and serves a gzip archive. GitHub tokens remain in Kumo's backend. Temporary local files are removed after source preparation. Compressed GitHub source is limited to 100 MiB and extracted source to 256 MiB. Archive downloads do not fetch Git history or recursively clone submodules.
 
-The HTTP 202 response contains `build_id`, `run_id`, `run_url`, `status`, `image`, and `commit_sha`. The image uses a unique tag under `kumo/<GitHub-user-ID>/<image_name>`. The pipeline builds and pushes the image to ACR. `GET /deployment/build/:id` is restricted to the build's owner and refreshes its status from Azure DevOps. Status updates are polled on demand; there is no completion webhook or automatic ACA deployment. The new `builds` SQL migration runs through the API's existing migration mechanism on startup.
+New internal builds have status `PENDING`; `run_id`, `run_url`, `commit_sha`, and `error` are initially null. The image address is `<registry>/<imageName>:<tag>`, for example `registry.azurecr.io/my-app:v1.2.3`, without a user namespace. Build tracking IDs remain unique UUIDs. Reusing an image name and tag pushes to the same registry reference; names and tags share the registry namespace across users. The pipeline builds and pushes the image to ACR. `GET /deployment/build/:id` is restricted to the build's owner and reports preparation progress or failure, then refreshes scheduled run status from Azure DevOps. Poll every few seconds until `SUCCEEDED`, `FAILED`, or `CANCELED`. The worker starts with the API, claims pending builds once, and marks interrupted preparation failed after ten minutes. Pending work resumes after a restart. Status updates are polled on demand; there is no completion webhook or automatic ACA deployment. The builds and asynchronous queue SQL migrations run through the API's existing migration mechanism on startup. See [Azure Pipelines setup](azure-pipelines.md) for worker and recovery details.
 
 ## Deployment & Azure Container Apps
 
-The deployment provisioning and mutation service requires Azure ARM and Container Apps credentials and environment references:
+`AzureProvider.createDeployment()` ensures `user-rg-<userId>` exists, then ensures `user-aca-env-<userId>` is ready. All of a user's apps share that environment. Existing apps are returned without rebuilding. For a new app, the provider checks the private registry, submits a build through the existing internal build use case, and waits for success before creating the app. Build failure, cancellation, or timeout prevents app creation. The deployment HTTP entry point is not connected to this operation yet.
 
 | Setting | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `AZURE_CONTAINER_APP_ENV_ID` | Yes | None | Fully qualified Azure Resource ID of the shared Managed Environment, e.g. `/subscriptions/.../resourceGroups/int3319-test/providers/Microsoft.App/managedEnvironments/test-shared-env`. |
-| `AZURE_SUBSCRIPTION_ID` | Optional | Extracted from `AZURE_CONTAINER_APP_ENV_ID` | Azure Subscription ID for ARM and Container Apps management clients. |
-| `AZURE_LOCATION` | Optional | `eastasia` | Azure region where per-user Resource Groups (`user-rg-<userId>`) are provisioned. |
-| `AZURE_PLATFORM_RESOURCE_GROUP` | Recommended | `int3319-test` | Resource Group hosting the platform itself. Deployment teardown refuses to modify or delete this group. |
-| `RUN_AZURE_LIVE_TESTS` | Optional | `false` | When set to `true`, enables live cloud integration tests in `packages/infrastructure/test/azure-deploy-live.test.ts` during test execution. |
+| `AZURE_SUBSCRIPTION_ID` | Yes | None | Subscription used by the ARM and Container Apps clients. |
+| `AZURE_PLATFORM_RESOURCE_GROUP` | Yes, or supply `AZURE_RG_NAME` | Falls back to `AZURE_RG_NAME` | Platform resource group that user workload operations must never target. |
+| `AZURE_CONTAINER_REGISTRY_SERVER` | For app creation | None | Private ACR login hostname; must match the registry resource and built image. |
+| `AZURE_CONTAINER_REGISTRY_RESOURCE_ID` | For app creation, or supply the fallback settings | Derived from subscription ID, `AZURE_RG_NAME`, and `AZURE_CONTAINER_REGISTRY_NAME` | ACR resource ID used to verify that anonymous pull is disabled. |
+| `AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME` | For app creation | None | Name of an existing user-assigned managed identity with ACR pull access, for example `azure-managed-id`. Its resource ID is constructed using `AZURE_SUBSCRIPTION_ID` and the platform resource group (`AZURE_PLATFORM_RESOURCE_GROUP`, falling back to `AZURE_RG_NAME`). |
+| `AZURE_DEPLOYMENT_TIMEOUT_MS` | No | `3600000` | Maximum time for one deployment operation, including provisioning and waiting for its build. |
+| `AZURE_DEPLOYMENT_POLL_INTERVAL_MS` | No | `5000` | Interval for checking in-progress environments and builds. Must be positive and no greater than the timeout. |
 
-These settings can be configured via `.env` for local execution or via Azure App Configuration. The API uses `DefaultAzureCredential` to authenticate with ARM and Azure Container Apps.
+These settings can be configured via `.env` for local execution or Azure App Configuration. The API uses `DefaultAzureCredential` to authenticate ARM operations. Its identity needs permission to create resources in the user groups, read the ACR resource, and assign the configured user-assigned identity to Container Apps. The pull identity needs `AcrPull` for an RBAC registry or the appropriate repository reader role for an ABAC registry. Keep ACR anonymous pulls disabled; the provider rejects registries where the flag is enabled or cannot be confirmed as disabled. See [ACR anonymous pull access](https://learn.microsoft.com/en-us/azure/container-registry/anonymous-pull-access).
+
+Set `AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME=azure-managed-id` for an identity named `azure-managed-id` in the configured subscription and platform resource group. The provider constructs the full resource ID required by Azure internally. Container Apps authenticates image pulls with that managed identity, rather than a registry password or a temporary backend token. The identity is configured with lifecycle `None` so code inside user containers cannot obtain its tokens. See [managed identity availability](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity#control-managed-identity-availability).
+
+The provider defaults to `southeastasia` for a new resource group. A new environment uses the existing group's location, and the app uses its environment's region. Deployment creation requires a target port and explicit CPU, memory, and scaling choices. The app has external HTTPS ingress. Resources created before a failed build are retained for later deployments.
+
+## Deployment creation
+
+Submit an authenticated `POST /deployments` request:
+
+```json
+{
+  "name": "my-app",
+  "repo": "https://github.com/example/my-app",
+  "tag": "v1",
+  "target_port": 3000,
+  "max_vcpu": 0.5,
+  "max_memory": 1,
+  "min_scaling": 0,
+  "max_scaling": 2
+}
+```
+
+Memory is in GiB and must be exactly twice vCPU. Both settings apply per replica; vCPU must be a positive multiple of 0.25. Scaling values are integer replica counts with `0 <= min_scaling <= max_scaling` and `max_scaling >= 1`. Invalid choices return HTTP 400. Optional fields are `image_name` (defaults to the app name), `dockerfile_path` (defaults to `Dockerfile`), `ref`, and `env_vars` (string values). Names must be unique per user; duplicates return HTTP 409.
+
+The API returns HTTP 202 with the deployment ID and `PENDING` status. Poll `GET /deployments/:id` for progress, or list owned deployments with `GET /deployments`. The worker marks the request `PROVISIONING`, ensures the resource group and shared user environment are ready, starts a build, and waits for success before creating the Container App. It deploys that build's image and applies the chosen resources and replica counts. Build failure or cancellation prevents app creation. The existing owner-scoped `GET /deployment/build/:id` provides build details once `build_id` is available.
+
+Successful provisioning records `RUNNING`, the image, Azure resource ID, and FQDN. `RUNNING` means Azure provisioning succeeded; application health is not independently checked. Failures record `FAILED` and an error. Pending requests survive API restarts. Provisioning interrupted beyond `AZURE_DEPLOYMENT_TIMEOUT_MS` plus one minute is marked failed without automatic resubmission. The worker processes one deployment at a time per API instance; claims are conditional database updates so instances do not process the same pending request.
+
+The appended deployment workflow migration runs at API startup and adds persisted creation requests, build/image/resource references, a queue index, and a unique user/name index. Existing duplicate user/name rows must be resolved before that index can be created. No new pipeline parameters are needed for CPU, memory, or scaling; these are applied by the Azure provider after the build.
+
+The subsequent `RemoveUnusedDeploymentSpecs1792108800001` migration drops the obsolete `deployment_specs` table and its legacy rows. Current deployment settings remain in `deployments.creation_request`. Rolling back recreates the legacy table, indexes, and foreign key, but does not recover dropped rows. Historical migrations remain registered for existing databases and fresh installations.
+
+The `Plans1792108800002` migration creates `plans` from the domain plan fields: `id` and `name` (`nvarchar(255)`), `price` (`decimal(19,4)`), `vcpu` and `memory` (`float`), and `deployments` and `disk` (`int`). All fields are required; `id` is the primary key. Database checks require nonnegative price, positive vCPU, memory equal to twice vCPU, and positive deployment/disk counts. No plans are seeded. The `InfraPlan` entity is registered with TypeORM. Currency, billing period, and disk units are not defined by this schema.
+
+`PlanActive1792108800003` adds the non-null `active` bit column, defaulting to `true` for existing and new rows. The domain model also defaults omitted `active` values to `true` and accepts explicit `false`.
+
+### Additional ports
+
+Keep `target_port` for the main application ingress. Add up to five extra TCP mappings using `additional_ports`, for example:
+
+```json
+{
+  "target_port": 3000,
+  "additional_ports": [
+    { "target_port": 8080 },
+    { "target_port": 9090, "exposed_port": 9091, "external": false }
+  ]
+}
+```
+
+This is a fragment of the creation request; the other required fields still apply. Each mapping forwards its exposed TCP port to the target port inside the container. The exposed port defaults to the target port, and `external` defaults to `false`, allowing access within the shared user environment. The application must listen on every configured target port. Deployment responses include the main target and normalized additional mappings; older requests without additional mappings return an empty list. Mappings are stored in the existing creation JSON, requiring no additional database migration or pipeline change.
+
+Additional target ports must be distinct from each other and from the primary target. Additional exposed ports must be distinct within the app. Port numbers must be integers from 1 to 65535; Azure reserves 36985. External mappings also cannot expose 80 or 443. Azure requires external exposed ports to be unique across the environment and requires VNet integration for external additional ports. Kumo rejects external mappings before building when the environment lacks an infrastructure subnet. The current environment creation flow does not provision a VNet, so newly created environments support internal additional ports. Additional ports use TCP; built-in HTTP ingress features apply to the primary ingress. See [Azure additional TCP port requirements](https://learn.microsoft.com/en-us/azure/container-apps/ingress?tabs=bash#additional-tcp-ports).
