@@ -11,6 +11,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Start GitHub authentication */
         get: operations["AuthController_login"];
         put?: never;
         post?: never;
@@ -27,6 +28,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Complete GitHub authentication and establish a session */
         get: operations["AuthController_callback"];
         put?: never;
         post?: never;
@@ -45,6 +47,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Log out of the current session */
         post: operations["AuthController_logout"];
         delete?: never;
         options?: never;
@@ -59,7 +62,59 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Get the current authenticated user's profile */
         get: operations["UserController_getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/build/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an owned build and refresh its pipeline status */
+        get: operations["DeploymentController_getBuild"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/builds/{id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the manifest for a pipeline's assigned build */
+        get: operations["BuildSourceController_manifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/builds/{id}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the saved commit's Docker build context */
+        get: operations["BuildSourceController_download"];
         put?: never;
         post?: never;
         delete?: never;
@@ -75,10 +130,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["DeploymentsController_list"];
         put?: never;
-        /** Create and deploy a new container application */
-        post: operations["DeploymentMutationController_create"];
+        /** Queue a repository build and deploy its successful image */
+        post: operations["DeploymentsController_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -92,29 +147,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get an owned deployment's provisioning status */
+        get: operations["DeploymentsController_get"];
         put?: never;
         post?: never;
-        /** Delete an existing container application */
-        delete: operations["DeploymentMutationController_delete"];
-        options?: never;
-        head?: never;
-        /** Update an existing container application configuration */
-        patch: operations["DeploymentMutationController_update"];
-        trace?: never;
-    };
-    "/deployments/resource-group/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete the current user's resource group */
-        delete: operations["DeploymentMutationController_deleteResourceGroup"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -124,113 +161,115 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ResourcesDto: {
-            /**
-             * @description CPU allocation (in cores, e.g. 0.25, 0.5, 1)
-             * @example 0.25
-             */
-            cpu?: number;
-            /**
-             * @description Memory allocation in GiB (e.g. 0.5, 1, 2)
-             * @example 0.5
-             */
-            memory?: number;
+        UserResponseDto: {
+            id: string;
+            display_name: string;
+            /** Format: date-time */
+            created_at: string;
+            suspended: boolean;
         };
-        ScalingDto: {
+        BuildResponseDto: {
+            /** Format: uuid */
+            build_id: string;
+            run_url: string | null;
+            /** @example 42 */
+            run_id: string | null;
             /**
-             * @description Min replicas (0 for scale-to-zero)
-             * @default 0
-             * @example 0
+             * @example PENDING
+             * @enum {string}
              */
-            minReplicas: number;
-            /**
-             * @description Max replicas
-             * @default 2
-             * @example 2
-             */
-            maxReplicas: number;
-        };
-        CreateDeploymentSpecDto: {
-            /**
-             * @description Docker container image URI
-             * @example mcr.microsoft.com/k8se/quickstart:latest
-             */
+            status: "PENDING" | "PREPARING" | "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+            /** @example registry.azurecr.io/my-app:v1.2.3 */
             image: string;
+            commit_sha: string | null;
+            /** @description Preparation or scheduling failure; null when none has been recorded */
+            error: string | null;
+        };
+        BuildManifestDto: {
+            /** Format: uuid */
+            build_id: string;
+            dockerfile_path: string;
+            commit_sha: string;
+            image: string;
+        };
+        AdditionalDeploymentPortDto: {
             /**
-             * @description Target container port to expose
-             * @example 80
+             * @description Additional TCP port the container listens on
+             * @example 8080
              */
-            targetPort: number;
-            resources?: components["schemas"]["ResourcesDto"];
-            scaling?: components["schemas"]["ScalingDto"];
+            target_port: number;
             /**
-             * @description Key-value environment variables
-             * @example {
-             *       "NODE_ENV": "production"
-             *     }
+             * @description Defaults to target_port
+             * @example 8080
              */
-            envVars?: Record<string, never>;
+            exposed_port?: number;
+            /**
+             * @description Expose outside the environment; requires VNet integration
+             * @default false
+             */
+            external: boolean;
         };
         CreateDeploymentDto: {
             /**
-             * @description Application name (2-32 lowercase alphanumeric characters or hyphens)
-             * @example sample-app
+             * @description Region for the shared user environment; must match it if already created
+             * @example japaneast
              */
+            region?: string;
             name: string;
-            /** @description Container deployment specification */
-            spec: components["schemas"]["CreateDeploymentSpecDto"];
+            repo: string;
+            tag: string;
+            target_port: number;
+            /** @description Up to five additional TCP port mappings */
+            additional_ports?: components["schemas"]["AdditionalDeploymentPortDto"][];
+            /**
+             * @description vCPU allocated per replica, in increments of 0.25
+             * @example 0.5
+             */
+            max_vcpu: number;
+            /**
+             * @description GiB allocated per replica; must equal max_vcpu * 2
+             * @example 1
+             */
+            max_memory: number;
+            /** @example 0 */
+            min_scaling: number;
+            /** @example 2 */
+            max_scaling: number;
+            image_name?: string;
+            dockerfile_path?: string;
+            ref?: string;
+            env_vars?: {
+                [key: string]: string;
+            };
+        };
+        AdditionalDeploymentPortResponseDto: {
+            target_port: number;
+            exposed_port: number;
+            external: boolean;
         };
         DeploymentResponseDto: {
-            /** @example d9e847c1-2f3b-4c5a-b6d7-123456789abc */
+            /** @description Requested region, or null when omitted */
+            region: string | null;
+            /** Format: uuid */
             id: string;
-            /** @example user-123 */
-            user_id: string;
-            /** @example sample-app */
             name: string;
-            /** @example RUNNING */
-            status: string;
-            /** @description Container deployment specification */
-            spec: components["schemas"]["CreateDeploymentSpecDto"];
-            /** @example https://sample-app.internal.azurecontainerapps.io */
-            fqdn?: Record<string, never>;
-            error_message?: Record<string, never>;
+            target_port: number | null;
+            additional_ports: components["schemas"]["AdditionalDeploymentPortResponseDto"][];
+            /** @enum {string} */
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "FAILED" | "DELETED";
+            image: string | null;
+            build_id: string | null;
+            resource_id: string | null;
+            fqdn: string | null;
+            error: string | null;
+            max_vcpu: number | null;
+            max_memory: number | null;
+            min_scaling: number | null;
+            max_scaling: number | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
-        };
-        UpdateDeploymentSpecDto: {
-            /**
-             * @description Updated container image URI
-             * @example mcr.microsoft.com/k8se/quickstart:latest
-             */
-            image?: string;
-            /**
-             * @description Updated target container port
-             * @example 80
-             */
-            targetPort?: number;
-            resources?: components["schemas"]["ResourcesDto"];
-            scaling?: components["schemas"]["ScalingDto"];
-            /**
-             * @description Updated environment variables
-             * @example {
-             *       "DEBUG": "false"
-             *     }
-             */
-            envVars?: Record<string, never>;
-        };
-        UpdateDeploymentDto: {
-            /** @description Updated container deployment specification */
-            spec?: components["schemas"]["UpdateDeploymentSpecDto"];
-        };
-        DeleteResourceGroupResponseDto: {
-            /** @example user-rg-dev01 */
-            resource_group_name: string;
-            /** @example DELETED */
-            status: string;
-            /** @example 2 */
-            deployments_synchronized: number;
         };
     };
     responses: never;
@@ -250,8 +289,11 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            /** @description Redirects the user to GitHub for authentication */
+            302: {
                 headers: {
+                    /** @description GitHub authorization URL */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -267,8 +309,11 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            /** @description Redirects the authenticated user to the frontend */
+            302: {
                 headers: {
+                    /** @description Configured frontend URL */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -284,6 +329,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Logout completed; response body is empty */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -301,7 +347,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Current user profile */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponseDto"];
+                };
+            };
+            /** @description The request has no authenticated session */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -309,7 +365,170 @@ export interface operations {
             };
         };
     };
-    DeploymentMutationController_create: {
+    DeploymentController_getBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildResponseDto"];
+                };
+            };
+            /** @description Invalid build ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session or suspended user */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Build not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Pipeline status request failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuildSourceController_manifest: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildManifestDto"];
+                };
+            };
+            /** @description Invalid build ID or Dockerfile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired credential for this build */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub download or archive preparation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuildSourceController_download: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": string;
+                };
+            };
+            /** @description Invalid build ID or Dockerfile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired credential for this build */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub download or archive preparation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"][];
+                };
+            };
+            /** @description No authenticated session or suspended user */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_create: {
         parameters: {
             query?: never;
             header?: never;
@@ -322,7 +541,6 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Deployment has been initiated */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -331,21 +549,40 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
+            /** @description Invalid deployment input; memory must equal twice vCPU */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session or suspended user */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment name already exists for this user */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    DeploymentMutationController_delete: {
+    DeploymentsController_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Deployment ID */
                 id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Container App was deleted and its deployment was synchronized */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -354,52 +591,19 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
-        };
-    };
-    DeploymentMutationController_update: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Deployment ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDeploymentDto"];
-            };
-        };
-        responses: {
-            /** @description Deployment update has been initiated */
-            202: {
+            /** @description No authenticated session or suspended user */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponseDto"];
-                };
+                content?: never;
             };
-        };
-    };
-    DeploymentMutationController_deleteResourceGroup: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Resource group and deployment records were synchronized */
-            200: {
+            /** @description Deployment not found for this user */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["DeleteResourceGroupResponseDto"];
-                };
+                content?: never;
             };
         };
     };
