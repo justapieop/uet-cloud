@@ -55,6 +55,7 @@ def main():
         raise DownloadError("kumoApiUrl must be an HTTPS API URL without credentials, query, or fragment")
     if parsed.hostname.lower() in ("localhost", "127.0.0.1", "::1"):
         raise DownloadError("kumoApiUrl points to localhost; hosted agents need a public HTTPS API or tunnel")
+    print(f"Build source downloader v2: API host {parsed.hostname}; assigned build {build_id}", flush=True)
     token = required_environment("KUMO_SOURCE_TOKEN")
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
         raise DownloadError("Invalid kumoSourceToken; start a new build through Kumo to supply its per-build credential")
@@ -70,6 +71,11 @@ def main():
                 headers={"Authorization": f"Bearer {token}"},
             ), timeout=180)
         except urllib.error.HTTPError as error:
+            if error.code == 404:
+                raise DownloadError(
+                    f"{endpoint} request failed: HTTP 404; verify kumoApiUrl, the tunnel's forwarded API port, "
+                    "and the deployed /builds routes"
+                ) from None
             raise DownloadError(f"{endpoint} request failed: HTTP {error.code}") from None
         except urllib.error.URLError as error:
             if isinstance(error.reason, socket.gaierror):
