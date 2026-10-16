@@ -1,8 +1,8 @@
 import { ContainerAppsAPIClient, type ContainerApp, type ContainerResources, type EnvironmentVar, type ManagedEnvironment } from "@azure/arm-appcontainers";
 import { ResourceManagementClient, type ResourceGroup } from "@azure/arm-resources";
 import { DefaultAzureCredential } from "@azure/identity";
-import { BuildProviderError, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
-import type { BuildDetails } from "@kumo/domain";
+import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
+import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { setTimeout as delay } from "node:timers/promises";
@@ -27,10 +27,13 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
   dockerFilePath?: string;
   ref?: string;
   targetPort: number;
+  additionalPorts?: readonly DeploymentPortMapping[];
   resources?: ContainerResources;
   envVars?: Readonly<Record<string, string>>;
   minReplicas?: number;
   maxReplicas?: number;
+  deploymentId?: string;
+  onBuildAccepted?: (id: string, image: string) => Promise<void>;
 }
 
 export interface AzureProviderClients {
@@ -41,7 +44,7 @@ export interface AzureProviderClients {
 }
 
 @Injectable()
-export class AzureProvider {
+export class AzureProvider implements DeploymentProvisioner {
   private readonly clients: AzureProviderClients;
   private readonly platformResourceGroup: string;
   private readonly timeoutMs: number;
@@ -116,7 +119,23 @@ export class AzureProvider {
     return environment;
   }
 
+  public async provisionDeployment(input: DeploymentProvisionInput, onBuildAccepted: (id: string, image: string) => Promise<void>): Promise<DeploymentProvisionResult> {
+    const app: ContainerApp = await this.createDeployment({
+      ...input.spec, name: input.name, userId: input.userId, deploymentId: input.id,
+      resources: { cpu: input.spec.maxVcpu, memory: `${input.spec.maxMemory}Gi` },
+      minReplicas: input.spec.minScaling, maxReplicas: input.spec.maxScaling, onBuildAccepted,
+    });
+    const buildId: string | undefined = app.tags?.["kumo-build-id"];
+    const image: string | undefined = app.template?.containers?.[0]?.image;
+    if (!app.id || !buildId || !image || app.provisioningState !== "Succeeded") {
+      throw new Error("Azure did not return a successfully provisioned app with build metadata");
+    }
+    return { buildId, image, resourceId: app.id, fqdn: app.configuration?.ingress?.fqdn ?? null };
+  }
+
   public async createDeployment(input: AzureDeploymentCreateInput): Promise<ContainerApp> {
+    const portError: InvalidDomainParams | null = validateDeploymentPorts(input.targetPort, input.additionalPorts);
+    if (portError) throw portError;
     const rgName: string = this.userResourceGroup(input.userId);
     if (!/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(input.name)) {
       throw new Error("Container App name must be 2-32 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit");
@@ -126,6 +145,13 @@ export class AzureProvider {
     }
     const minReplicas: number = input.minReplicas ?? 0;
     const maxReplicas: number = input.maxReplicas ?? 2;
+    const resources: ContainerResources = input.resources ?? { cpu: 0.25, memory: "0.5Gi" };
+    const memory: number = typeof resources.memory === "string" && /^(?:\d+(?:\.\d+)?)Gi$/.test(resources.memory)
+      ? Number(resources.memory.slice(0, -2)) : NaN;
+    if (typeof resources.cpu !== "number" || !Number.isFinite(resources.cpu) || resources.cpu <= 0 ||
+      !Number.isInteger(resources.cpu * 4) || !Number.isFinite(memory) || memory !== resources.cpu * 2) {
+      throw new Error("Memory in GiB must be exactly twice vCPU; vCPU must be positive in increments of 0.25");
+    }
     if (!Number.isInteger(input.targetPort) || input.targetPort < 1 || input.targetPort > 65535 ||
       !Number.isInteger(minReplicas) || minReplicas < 0 || !Number.isInteger(maxReplicas) || maxReplicas < 1 || maxReplicas < minReplicas) {
       throw new Error("Invalid container port or replica limits");
@@ -139,6 +165,9 @@ export class AzureProvider {
     const pullIdentity: string = `/subscriptions/${this.config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${this.platformResourceGroup}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${pullIdentityName}`;
     const signal: AbortSignal = this.operationSignal(input.abortSignal);
     const environment: ManagedEnvironment = await this.getAcaEnvironment({ ...input, abortSignal: signal });
+    if (input.additionalPorts?.some((port: DeploymentPortMapping): boolean => port.external === true) && !environment.vnetConfiguration?.infrastructureSubnetId) {
+      throw new BuildProviderError("External additional TCP ports require a managed environment connected to a virtual network");
+    }
     let existing: ContainerApp | undefined;
     try {
       existing = await this.clients.containerApps.get(rgName, input.name, { abortSignal: signal });
@@ -146,6 +175,9 @@ export class AzureProvider {
       if (!this.isNotFound(error)) throw error;
     }
     if (existing) {
+      if (input.deploymentId && existing.tags?.["kumo-deployment-id"] !== input.deploymentId) {
+        throw new Error("An unrelated Container App already uses this deployment name");
+      }
       if ((existing.environmentId ?? existing.managedEnvironmentId)?.toLowerCase() !== environment.id!.toLowerCase()) {
         throw new Error("Existing Container App does not belong to the user's managed environment");
       }
@@ -171,6 +203,7 @@ export class AzureProvider {
     };
     signal.throwIfAborted();
     const build: TriggerBuildResult = await this.triggerBuild.exec(buildInput);
+    await input.onBuildAccepted?.(build.buildId, build.image);
     const completed: BuildDetails = await this.waitForBuild(build.buildId, input.userId, signal);
     if (!completed.image.startsWith(`${registry}/`)) {
       throw new Error("Build image does not belong to the configured private registry");
@@ -179,17 +212,23 @@ export class AzureProvider {
       ([name, value]: [string, string]): EnvironmentVar => ({ name, value }),
     );
     const app: ContainerApp = {
+      tags: { "kumo-build-id": build.buildId, ...(input.deploymentId ? { "kumo-deployment-id": input.deploymentId } : {}) },
       location: environment.location,
       environmentId: environment.id,
       identity: { type: "UserAssigned", userAssignedIdentities: { [pullIdentity]: {} } },
       configuration: {
         activeRevisionsMode: "Single",
-        ingress: { external: true, targetPort: input.targetPort, allowInsecure: false },
+        ingress: {
+          external: true, targetPort: input.targetPort, allowInsecure: false,
+          additionalPortMappings: input.additionalPorts?.map((port: DeploymentPortMapping) => ({
+            targetPort: port.targetPort, exposedPort: port.exposedPort ?? port.targetPort, external: port.external ?? false,
+          })),
+        },
         registries: [{ server: registry, identity: pullIdentity }],
         identitySettings: [{ identity: pullIdentity, lifecycle: "None" }],
       },
       template: {
-        containers: [{ name: input.name, image: completed.image, env, resources: input.resources ?? { cpu: 0.25, memory: "0.5Gi" } }],
+        containers: [{ name: input.name, image: completed.image, env, resources }],
         scale: { minReplicas, maxReplicas },
       },
     };

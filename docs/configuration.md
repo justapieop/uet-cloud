@@ -89,4 +89,49 @@ These settings can be configured via `.env` for local execution or Azure App Con
 
 Set `AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME=azure-managed-id` for an identity named `azure-managed-id` in the configured subscription and platform resource group. The provider constructs the full resource ID required by Azure internally. Container Apps authenticates image pulls with that managed identity, rather than a registry password or a temporary backend token. The identity is configured with lifecycle `None` so code inside user containers cannot obtain its tokens. See [managed identity availability](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity#control-managed-identity-availability).
 
-The optional deployment input region defaults to `southeastasia` for a new resource group. A new environment uses the requested region or the existing group's location, and the app uses its environment's region. The input requires a target port; the app has external HTTPS ingress, defaults to 0.25 CPU and 0.5 GiB memory, and scales between zero and two replicas unless overridden. Resources created before a failed build are retained for later deployments.
+The provider defaults to `southeastasia` for a new resource group. A new environment uses the existing group's location, and the app uses its environment's region. Deployment creation requires a target port and explicit CPU, memory, and scaling choices. The app has external HTTPS ingress. Resources created before a failed build are retained for later deployments.
+
+## Deployment creation
+
+Submit an authenticated `POST /deployments` request:
+
+```json
+{
+  "name": "my-app",
+  "repo": "https://github.com/example/my-app",
+  "tag": "v1",
+  "target_port": 3000,
+  "max_vcpu": 0.5,
+  "max_memory": 1,
+  "min_scaling": 0,
+  "max_scaling": 2
+}
+```
+
+Memory is in GiB and must be exactly twice vCPU. Both settings apply per replica; vCPU must be a positive multiple of 0.25. Scaling values are integer replica counts with `0 <= min_scaling <= max_scaling` and `max_scaling >= 1`. Invalid choices return HTTP 400. Optional fields are `image_name` (defaults to the app name), `dockerfile_path` (defaults to `Dockerfile`), `ref`, and `env_vars` (string values). Names must be unique per user; duplicates return HTTP 409.
+
+The API returns HTTP 202 with the deployment ID and `PENDING` status. Poll `GET /deployments/:id` for progress, or list owned deployments with `GET /deployments`. The worker marks the request `PROVISIONING`, ensures the resource group and shared user environment are ready, starts a build, and waits for success before creating the Container App. It deploys that build's image and applies the chosen resources and replica counts. Build failure or cancellation prevents app creation. The existing owner-scoped `GET /deployment/build/:id` provides build details once `build_id` is available.
+
+Successful provisioning records `RUNNING`, the image, Azure resource ID, and FQDN. `RUNNING` means Azure provisioning succeeded; application health is not independently checked. Failures record `FAILED` and an error. Pending requests survive API restarts. Provisioning interrupted beyond `AZURE_DEPLOYMENT_TIMEOUT_MS` plus one minute is marked failed without automatic resubmission. The worker processes one deployment at a time per API instance; claims are conditional database updates so instances do not process the same pending request.
+
+The appended deployment workflow migration runs at API startup and adds persisted creation requests, build/image/resource references, a queue index, and a unique user/name index. Existing duplicate user/name rows must be resolved before that index can be created. No new pipeline parameters are needed for CPU, memory, or scaling; these are applied by the Azure provider after the build.
+
+The subsequent `RemoveUnusedDeploymentSpecs1792108800001` migration drops the obsolete `deployment_specs` table and its legacy rows. Current deployment settings remain in `deployments.creation_request`. Rolling back recreates the legacy table, indexes, and foreign key, but does not recover dropped rows. Historical migrations remain registered for existing databases and fresh installations.
+
+### Additional ports
+
+Keep `target_port` for the main application ingress. Add up to five extra TCP mappings using `additional_ports`, for example:
+
+```json
+{
+  "target_port": 3000,
+  "additional_ports": [
+    { "target_port": 8080 },
+    { "target_port": 9090, "exposed_port": 9091, "external": false }
+  ]
+}
+```
+
+This is a fragment of the creation request; the other required fields still apply. Each mapping forwards its exposed TCP port to the target port inside the container. The exposed port defaults to the target port, and `external` defaults to `false`, allowing access within the shared user environment. The application must listen on every configured target port. Deployment responses include the main target and normalized additional mappings; older requests without additional mappings return an empty list. Mappings are stored in the existing creation JSON, requiring no additional database migration or pipeline change.
+
+Additional target ports must be distinct from each other and from the primary target. Additional exposed ports must be distinct within the app. Port numbers must be integers from 1 to 65535; Azure reserves 36985. External mappings also cannot expose 80 or 443. Azure requires external exposed ports to be unique across the environment and requires VNet integration for external additional ports. Kumo rejects external mappings before building when the environment lacks an infrastructure subnet. The current environment creation flow does not provision a VNet, so newly created environments support internal additional ports. Additional ports use TCP; built-in HTTP ingress features apply to the primary ingress. See [Azure additional TCP port requirements](https://learn.microsoft.com/en-us/azure/container-apps/ingress?tabs=bash#additional-tcp-ports).

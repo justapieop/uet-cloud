@@ -315,7 +315,6 @@ export class DeploymentSpecs1790395540679 implements MigrationInterface {
               ],
             );
           } catch {
-            // Ignore JSON parse errors for corrupt legacy entries
           }
         }
       }
@@ -410,7 +409,6 @@ export class AsyncBuilds1791975000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    // Restoring the constraint fails safely if unresolved build records still exist.
     await queryRunner.changeColumn("builds", "commit_sha", new TableColumn({ name: "commit_sha", type: "nvarchar", length: "40", isNullable: false }));
     await queryRunner.dropIndex("builds", "IDX_builds_status_created_at");
     await queryRunner.dropColumn("builds", "error");
@@ -418,12 +416,72 @@ export class AsyncBuilds1791975000000 implements MigrationInterface {
   }
 }
 
-// Preserve the historical names: TypeORM uses them to recognize applied migrations.
+export class DeploymentWorkflow1792108800000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumns("deployments", [
+      new TableColumn({ name: "creation_request", type: "nvarchar", length: "MAX", isNullable: true }),
+      new TableColumn({ name: "image", type: "nvarchar", length: "1024", isNullable: true }),
+      new TableColumn({ name: "build_id", type: "nvarchar", length: "36", isNullable: true }),
+      new TableColumn({ name: "azure_resource_id", type: "nvarchar", length: "2048", isNullable: true }),
+    ]);
+    await queryRunner.createIndex("deployments", new TableIndex({ name: "UQ_deployments_user_name", columnNames: ["user_id", "name"], isUnique: true }));
+    await queryRunner.createIndex("deployments", new TableIndex({ name: "IDX_deployments_queue", columnNames: ["status", "updated_at"] }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropIndex("deployments", "IDX_deployments_queue");
+    await queryRunner.dropIndex("deployments", "UQ_deployments_user_name");
+    await queryRunner.dropColumn("deployments", "azure_resource_id");
+    await queryRunner.dropColumn("deployments", "build_id");
+    await queryRunner.dropColumn("deployments", "image");
+    await queryRunner.dropColumn("deployments", "creation_request");
+  }
+}
+
+export class RemoveUnusedDeploymentSpecs1792108800001 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("deployment_specs", true);
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    // Rollback restores the legacy schema; dropped rows cannot be recovered.
+    await queryRunner.createTable(new Table({
+      name: "deployment_specs",
+      columns: [
+        { name: "id", type: "nvarchar", length: "255", isPrimary: true },
+        { name: "deployment_id", type: "nvarchar", length: "255", isUnique: true },
+        { name: "image", type: "nvarchar", length: "1024" },
+        { name: "target_port", type: "int" },
+        { name: "cpu", type: "float", default: 0.25 },
+        { name: "memory", type: "float", default: 0.5 },
+        { name: "min_replicas", type: "int", default: 0 },
+        { name: "max_replicas", type: "int", default: 2 },
+        { name: "env_vars", type: "nvarchar", length: "MAX", isNullable: true },
+        { name: "created_at", type: "datetime2", precision: 7, default: "GETDATE()" },
+        { name: "updated_at", type: "datetime2", precision: 7, default: "GETDATE()" },
+      ],
+      foreignKeys: [new TableForeignKey({
+        name: "FK_deployment_specs_deployment_id",
+        columnNames: ["deployment_id"],
+        referencedTableName: "deployments",
+        referencedColumnNames: ["id"],
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      })],
+    }));
+    await queryRunner.createIndex("deployment_specs", new TableIndex({
+      name: "IDX_deployment_specs_deployment_id", columnNames: ["deployment_id"], isUnique: true,
+    }));
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
   DeploymentSpecs1790395540679,
   Builds1791970000000,
   AsyncBuilds1791975000000,
+  DeploymentWorkflow1792108800000,
+  RemoveUnusedDeploymentSpecs1792108800001,
 ];
 
