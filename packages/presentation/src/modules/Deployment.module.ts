@@ -2,10 +2,14 @@ import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
   DeleteDeploymentCase,
+  GetBuildCase,
+  TriggerBuildCase,
   UNIT_OF_WORK,
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
+import { AzureProvider } from "@kumo/infrastructure";
+import { ConfigService } from "@nestjs/config";
 import { DatabaseModule } from "./Database.module.js";
 import { BuildModule } from "./Build.module.js";
 import { DeploymentController } from "../controllers/Deployment.controller.js";
@@ -18,6 +22,12 @@ import { BuildSourceController } from "../controllers/BuildSource.controller.js"
     BuildSourceController,
   ],
   providers: [
+    {
+      provide: AzureProvider,
+      useFactory: (config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase): AzureProvider =>
+        new AzureProvider(config, triggerBuild, getBuild),
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase],
+    },
     {
       provide: CreateDeploymentCase,
       useFactory: (
@@ -53,6 +63,7 @@ import { BuildSourceController } from "../controllers/BuildSource.controller.js"
     },
   ],
   exports: [
+    AzureProvider,
     CreateDeploymentCase,
     UpdateDeploymentCase,
     DeleteDeploymentCase,

@@ -73,14 +73,20 @@ New internal builds have status `PENDING`; `run_id`, `run_url`, `commit_sha`, an
 
 ## Deployment & Azure Container Apps
 
-The deployment provisioning and mutation service requires Azure ARM and Container Apps credentials and environment references:
+`AzureProvider.createDeployment()` ensures `user-rg-<userId>` exists, then ensures `user-aca-env-<userId>` is ready. All of a user's apps share that environment. Existing apps are returned without rebuilding. For a new app, the provider checks the private registry, submits a build through the existing internal build use case, and waits for success before creating the app. Build failure, cancellation, or timeout prevents app creation. The deployment HTTP entry point is not connected to this operation yet.
 
 | Setting | Required | Default | Purpose |
 | --- | --- | --- | --- |
-| `AZURE_CONTAINER_APP_ENV_ID` | Yes | None | Fully qualified Azure Resource ID of the shared Managed Environment, e.g. `/subscriptions/.../resourceGroups/int3319-test/providers/Microsoft.App/managedEnvironments/test-shared-env`. |
-| `AZURE_SUBSCRIPTION_ID` | Optional | Extracted from `AZURE_CONTAINER_APP_ENV_ID` | Azure Subscription ID for ARM and Container Apps management clients. |
-| `AZURE_LOCATION` | Optional | `eastasia` | Azure region where per-user Resource Groups (`user-rg-<userId>`) are provisioned. |
-| `AZURE_PLATFORM_RESOURCE_GROUP` | Recommended | `int3319-test` | Resource Group hosting the platform itself. Deployment teardown refuses to modify or delete this group. |
-| `RUN_AZURE_LIVE_TESTS` | Optional | `false` | When set to `true`, enables live cloud integration tests in `packages/infrastructure/test/azure-deploy-live.test.ts` during test execution. |
+| `AZURE_SUBSCRIPTION_ID` | Yes | None | Subscription used by the ARM and Container Apps clients. |
+| `AZURE_PLATFORM_RESOURCE_GROUP` | Yes, or supply `AZURE_RG_NAME` | Falls back to `AZURE_RG_NAME` | Platform resource group that user workload operations must never target. |
+| `AZURE_CONTAINER_REGISTRY_SERVER` | For app creation | None | Private ACR login hostname; must match the registry resource and built image. |
+| `AZURE_CONTAINER_REGISTRY_RESOURCE_ID` | For app creation, or supply the fallback settings | Derived from subscription ID, `AZURE_RG_NAME`, and `AZURE_CONTAINER_REGISTRY_NAME` | ACR resource ID used to verify that anonymous pull is disabled. |
+| `AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME` | For app creation | None | Name of an existing user-assigned managed identity with ACR pull access, for example `azure-managed-id`. Its resource ID is constructed using `AZURE_SUBSCRIPTION_ID` and the platform resource group (`AZURE_PLATFORM_RESOURCE_GROUP`, falling back to `AZURE_RG_NAME`). |
+| `AZURE_DEPLOYMENT_TIMEOUT_MS` | No | `3600000` | Maximum time for one deployment operation, including provisioning and waiting for its build. |
+| `AZURE_DEPLOYMENT_POLL_INTERVAL_MS` | No | `5000` | Interval for checking in-progress environments and builds. Must be positive and no greater than the timeout. |
 
-These settings can be configured via `.env` for local execution or via Azure App Configuration. The API uses `DefaultAzureCredential` to authenticate with ARM and Azure Container Apps.
+These settings can be configured via `.env` for local execution or Azure App Configuration. The API uses `DefaultAzureCredential` to authenticate ARM operations. Its identity needs permission to create resources in the user groups, read the ACR resource, and assign the configured user-assigned identity to Container Apps. The pull identity needs `AcrPull` for an RBAC registry or the appropriate repository reader role for an ABAC registry. Keep ACR anonymous pulls disabled; the provider rejects registries where the flag is enabled or cannot be confirmed as disabled. See [ACR anonymous pull access](https://learn.microsoft.com/en-us/azure/container-registry/anonymous-pull-access).
+
+Set `AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME=azure-managed-id` for an identity named `azure-managed-id` in the configured subscription and platform resource group. The provider constructs the full resource ID required by Azure internally. Container Apps authenticates image pulls with that managed identity, rather than a registry password or a temporary backend token. The identity is configured with lifecycle `None` so code inside user containers cannot obtain its tokens. See [managed identity availability](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity#control-managed-identity-availability).
+
+The optional deployment input region defaults to `southeastasia` for a new resource group. A new environment uses the requested region or the existing group's location, and the app uses its environment's region. The input requires a target port; the app has external HTTPS ingress, defaults to 0.25 CPU and 0.5 GiB memory, and scales between zero and two replicas unless overridden. Resources created before a failed build are retained for later deployments.
