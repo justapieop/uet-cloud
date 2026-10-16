@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { LoginButton } from "@/features/auth";
 
 export function Navbar(): JSX.Element {
   return (
@@ -17,23 +18,32 @@ export function Navbar(): JSX.Element {
           </span>
         </a>
 
-        <nav
-          aria-label="Main Navigation"
-          className="flex items-center gap-6 sm:gap-8"
-        >
-          <a
-            href="#features"
-            className="text-sm text-gray-400 transition-colors hover:text-white"
+        <div className="flex items-center gap-6 sm:gap-8">
+          <nav
+            aria-label="Main Navigation"
+            className="flex items-center gap-6 sm:gap-8"
           >
-            Features
-          </a>
-          <a
-            href="#guide"
-            className="text-sm text-gray-400 transition-colors hover:text-white"
-          >
-            Guide
-          </a>
-        </nav>
+            <a
+              href="#features"
+              className="text-sm text-gray-400 transition-colors hover:text-white"
+            >
+              Features
+            </a>
+            <a
+              href="#guide"
+              className="text-sm text-gray-400 transition-colors hover:text-white"
+            >
+              Guide
+            </a>
+          </nav>
+
+          <div
+            className="h-4 w-px bg-[var(--surface-border)]"
+            aria-hidden="true"
+          />
+
+          <LoginButton variant="navbar" />
+        </div>
       </div>
     </header>
   );

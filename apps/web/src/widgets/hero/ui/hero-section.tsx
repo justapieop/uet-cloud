@@ -20,7 +20,7 @@ export function HeroSection(): JSX.Element {
 
           <div className="mt-8 flex items-center justify-center gap-3">
             <a
-              href="/deploy"
+              href="/login"
               className="inline-flex h-11 items-center rounded-lg bg-blue-600 px-6 text-sm font-medium text-white transition-colors hover:bg-blue-500 active:scale-[0.98]"
             >
               Start deploying

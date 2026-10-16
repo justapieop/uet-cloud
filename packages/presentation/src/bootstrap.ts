@@ -23,13 +23,16 @@ export async function bootstrap(): Promise<void> {
   app.useLogger(logger);
   app.useGlobalPipes(new ValidationPipe());
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  const sessionSecret: string = config.get<string>("SESSION_SECRET") ?? "kumo-local-session-secret-key-development";
+  const mongoUrl: string = config.get<string>("MONGODB_CONNECTION_STRING") ?? "mongodb://127.0.0.1:27017/kumo-session";
+
   app.use(session({
     saveUninitialized: false,
     resave: true,
-    secret: config.getOrThrow("SESSION_SECRET"),
+    secret: sessionSecret,
     cookie: createSessionCookieOptions(config.get<string>("NODE_ENV", "production")),
     store: MongoStore.create({
-      mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
+      mongoUrl,
     }),
   }));
   app.enableCsrfProtection();
