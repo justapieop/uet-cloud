@@ -1,4 +1,4 @@
-import { Table, TableColumn, TableForeignKey, TableIndex, type MigrationInterface, type QueryRunner } from "typeorm";
+import { Table, TableCheck, TableColumn, TableForeignKey, TableIndex, type MigrationInterface, type QueryRunner } from "typeorm";
 
 export class Init1790395540677 implements MigrationInterface {
     public async up(queryRunner: QueryRunner): Promise<void> {
@@ -475,6 +475,46 @@ export class RemoveUnusedDeploymentSpecs1792108800001 implements MigrationInterf
   }
 }
 
+export class Plans1792108800002 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({
+      name: "plans",
+      columns: [
+        { name: "id", type: "nvarchar", length: "255", isPrimary: true },
+        { name: "name", type: "nvarchar", length: "255" },
+        { name: "price", type: "decimal", precision: 19, scale: 4 },
+        { name: "vcpu", type: "float" },
+        { name: "memory", type: "float" },
+        { name: "deployments", type: "int" },
+        { name: "disk", type: "int" },
+      ],
+      checks: [
+        new TableCheck({ name: "CK_plans_price", expression: "price >= 0" }),
+        new TableCheck({ name: "CK_plans_vcpu", expression: "vcpu > 0" }),
+        new TableCheck({ name: "CK_plans_memory", expression: "memory > 0 AND memory = vcpu * 2" }),
+        new TableCheck({ name: "CK_plans_deployments", expression: "deployments > 0" }),
+        new TableCheck({ name: "CK_plans_disk", expression: "disk > 0" }),
+      ],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("plans");
+  }
+}
+
+export class PlanActive1792108800003 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("plans", new TableColumn({
+      name: "active", type: "bit", isNullable: false, default: 1,
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropColumn("plans", "active");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -483,5 +523,7 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   AsyncBuilds1791975000000,
   DeploymentWorkflow1792108800000,
   RemoveUnusedDeploymentSpecs1792108800001,
+  Plans1792108800002,
+  PlanActive1792108800003,
 ];
 

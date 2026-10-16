@@ -10,6 +10,7 @@ import {
   InfraDeployment,
   DATABASE_MIGRATIONS,
   InfraDeploymentRepository,
+  InfraPlan,
   InfraRole,
   InfraRoleRepository,
   InfraUser,
@@ -51,7 +52,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment, InfraPlan]),
   ],
   providers: [
     InfraUserRepository,

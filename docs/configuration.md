@@ -118,6 +118,10 @@ The appended deployment workflow migration runs at API startup and adds persiste
 
 The subsequent `RemoveUnusedDeploymentSpecs1792108800001` migration drops the obsolete `deployment_specs` table and its legacy rows. Current deployment settings remain in `deployments.creation_request`. Rolling back recreates the legacy table, indexes, and foreign key, but does not recover dropped rows. Historical migrations remain registered for existing databases and fresh installations.
 
+The `Plans1792108800002` migration creates `plans` from the domain plan fields: `id` and `name` (`nvarchar(255)`), `price` (`decimal(19,4)`), `vcpu` and `memory` (`float`), and `deployments` and `disk` (`int`). All fields are required; `id` is the primary key. Database checks require nonnegative price, positive vCPU, memory equal to twice vCPU, and positive deployment/disk counts. No plans are seeded. The `InfraPlan` entity is registered with TypeORM. Currency, billing period, and disk units are not defined by this schema.
+
+`PlanActive1792108800003` adds the non-null `active` bit column, defaulting to `true` for existing and new rows. The domain model also defaults omitted `active` values to `true` and accepts explicit `false`.
+
 ### Additional ports
 
 Keep `target_port` for the main application ingress. Add up to five extra TCP mappings using `additional_ports`, for example:
