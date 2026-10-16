@@ -67,7 +67,7 @@ test("quick build uploads source then schedules a push without creating a task",
         assert.equal(request.type, "DockerBuildRequest");
         assert.equal(request.sourceLocation, "context/source.tar.gz");
         assert.equal(request.isPushEnabled, true);
-        assert.deepEqual(request.imageNames, ["registry.azurecr.io/kumo/123/app:unique-tag"]);
+        assert.deepEqual(request.imageNames, ["registry.azurecr.io/app:unique-tag"]);
         assert.ok(!("contextAccessToken" in request));
         assert.deepEqual((request as unknown as { credentials: unknown }).credentials, {
           sourceRegistry: { identity: "[caller]", loginMode: "Default" },
@@ -86,11 +86,11 @@ test("quick build uploads source then schedules a push without creating a task",
   const result: unknown = await provider.triggerBuild({
     archive: await sourceArchive(), dockerFilePath: "Dockerfile", imageName: "app", userId: "123", tag: "unique-tag",
   });
-  assert.deepEqual(result, { runId: "ca1", status: "Queued", image: "registry.azurecr.io/kumo/123/app:unique-tag" });
+  assert.deepEqual(result, { runId: "ca1", status: "Queued", image: "registry.azurecr.io/app:unique-tag" });
   assert.deepEqual(calls, ["upload-location", "upload", "schedule"]);
 });
 
-test("use case preserves the source commit and gives each build a unique tag", async (): Promise<void> => {
+test("use case preserves the requested tag and gives each build a unique tracking ID", async (): Promise<void> => {
   const tags: string[] = [];
   const records: Map<string, Build> = new Map<string, Build>();
   const repository: BuildRepository = {
@@ -98,23 +98,20 @@ test("use case preserves the source commit and gives each build a unique tag", a
     save: async (build: Build): Promise<void> => { records.set(build.getDetails().id, build); },
   };
   const builder: PipelineBuildPort = {
-    getImageAddress: (_userId: string, _imageName: string, tag: string): string => { tags.push(tag); return `registry/app:${tag}`; },
-    startBuild: async (id: string, token: string) => {
-      assert.equal(records.get(id)?.getDetails().status, "PENDING");
-      assert.match(token, /^[A-Za-z0-9_-]{43}$/);
-      assert.notEqual(records.get(id)?.getDetails().sourceTokenHash, token);
-      return { runId: "123", status: "QUEUED" as const, runUrl: "https://dev.azure.com/run/123" };
-    },
+    getImageAddress: (_imageName: string, tag: string): string => { tags.push(tag); return `registry/app:${tag}`; },
+    startBuild: async (): Promise<never> => { assert.fail("Pending builds are scheduled by the worker"); },
     getRun: async () => ({ runId: "123", status: "QUEUED" as const, runUrl: "https://dev.azure.com/run/123" }),
   };
-  const useCase: TriggerBuildCase = new TriggerBuildCase({
-    resolveBuildSource: async () => ({ commitSha: "a".repeat(40) }),
-    downloadBuildSource: async () => { assert.fail("Scheduling must not download the archive"); },
-  }, builder, repository);
-  const input: { userId: string; repo: string; imageName: string } = { userId: "123", repo: "https://github.com/owner/repo", imageName: "app" };
-  assert.equal((await useCase.exec(input)).commitSha, "a".repeat(40));
+  const useCase: TriggerBuildCase = new TriggerBuildCase(builder, repository);
+  const input: { userId: string; repo: string; imageName: string; tag: string } = { userId: "123", repo: "https://github.com/owner/repo", imageName: "app", tag: "Release_1.2.3" };
+  assert.equal((await useCase.exec(input)).image, "registry/app:Release_1.2.3");
   await useCase.exec(input);
-  assert.notEqual(tags[0], tags[1]);
+  assert.deepEqual(tags, [input.tag, input.tag]);
+  assert.equal(records.size, 2);
+  assert.ok(Array.from(records.values()).every((build: Build): boolean => build.getDetails().commitSha === null && build.getDetails().status === "PENDING"));
+  await Promise.all(["", "bad tag", "bad/tag", ":bad", "a".repeat(129)].map(
+    (tag: string): Promise<void> => assert.rejects(useCase.exec({ ...input, tag }), InvalidBuildInput),
+  ));
   await assert.rejects(useCase.exec({ ...input, dockerFilePath: "../Dockerfile" }), InvalidBuildInput);
 });
 

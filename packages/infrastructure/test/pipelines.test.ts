@@ -12,7 +12,7 @@ const SOURCE_TOKEN: string = "a".repeat(43);
 function buildDetails(id: string = "00000000-0000-4000-8000-000000000001"): BuildDetails {
   return {
     id, userId: "123", repo: "https://github.com/owner/repo", commitSha: "a".repeat(40),
-    dockerFilePath: "Dockerfile", image: `registry.azurecr.io/kumo/123/app:${id}`, status: "QUEUED",
+    dockerFilePath: "Dockerfile", image: "registry.azurecr.io/app:v1.2.3", status: "QUEUED",
     runId: "42", runUrl: "https://dev.azure.com/run/42",
     sourceTokenHash: createHash("sha256").update(SOURCE_TOKEN).digest("hex"),
     sourceExpiresAt: new Date(Date.now() + 60_000), createdAt: new Date(), updatedAt: new Date(),
@@ -24,6 +24,7 @@ test("pipeline scheduling passes only build ID and a secret scoped source token"
     AZURE_DEVOPS_ORGANIZATION: "kumo", AZURE_DEVOPS_PROJECT: "Build Platform", AZURE_DEVOPS_PIPELINE_ID: "7",
     AZURE_DEVOPS_PAT: "devops-credential", AZURE_CONTAINER_REGISTRY_SERVER: "registry.azurecr.io",
   }));
+  assert.equal(provider.getImageAddress("my-app", "v1.2.3"), "registry.azurecr.io/my-app:v1.2.3");
   context.mock.method(globalThis, "fetch", async (url: string, options: RequestInit): Promise<Response> => {
     assert.equal(url, "https://dev.azure.com/kumo/Build%20Platform/_apis/pipelines/7/runs?api-version=7.1");
     assert.equal(options.method, "POST");

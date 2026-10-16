@@ -45,7 +45,7 @@ export class AcrProvider implements ContainerBuildPort {
     if (!uploaded.ok) {
       throw new BuildProviderError(`ACR source upload failed: HTTP ${uploaded.status}`);
     }
-    const image: string = `${this.registryServer}/kumo/${input.userId}/${input.imageName}:${input.tag}`;
+    const image: string = `${this.registryServer}/${input.imageName}:${input.tag}`;
     const request: DockerBuildRequest = {
       type: "DockerBuildRequest",
       sourceLocation: upload.relativePath,

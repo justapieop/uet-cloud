@@ -40,8 +40,8 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
     this.pat = config.get<string>("AZURE_DEVOPS_PAT") || undefined;
   }
 
-  public getImageAddress(userId: string, imageName: string, tag: string): string {
-    return `${this.registry}/kumo/${userId}/${imageName}:${tag}`;
+  public getImageAddress(imageName: string, tag: string): string {
+    return `${this.registry}/${imageName}:${tag}`;
   }
 
   public startBuild(buildId: string, sourceToken: string): Promise<PipelineRun> {

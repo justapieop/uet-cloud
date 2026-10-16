@@ -28,6 +28,19 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise DownloadError("Kumo endpoint redirected; configure kumoApiUrl with the final API URL")
 
 
+def validate_manifest(manifest, build_id):
+    if not isinstance(manifest, dict) or "image" not in manifest or "dockerfile_path" not in manifest:
+        raise DownloadError("Manifest is missing image or dockerfile_path; check the API URL and deployed API version")
+    if manifest.get("build_id") != build_id:
+        raise DownloadError("Manifest does not belong to the assigned build")
+    image = manifest["image"]
+    dockerfile = manifest["dockerfile_path"]
+    if not isinstance(image, str) or not re.fullmatch(r"[a-zA-Z0-9.-]+/[a-z0-9]+(?:[._-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", image):
+        raise DownloadError("Invalid build image in manifest")
+    if not isinstance(dockerfile, str) or not dockerfile or dockerfile.startswith("/") or ".." in dockerfile.split("/") or "\\" in dockerfile or ":" in dockerfile:
+        raise DownloadError("Invalid Dockerfile path in manifest")
+
+
 def main():
     try:
         build_id = str(uuid.UUID(required_environment("KUMO_BUILD_ID")))
@@ -76,14 +89,7 @@ def main():
             manifest = json.loads(response.read(65537))
         except (ValueError, UnicodeError):
             raise DownloadError("Manifest is not valid JSON; check the API URL, route prefix, and tunnel interstitial pages") from None
-    if not isinstance(manifest, dict) or "image" not in manifest or "dockerfile_path" not in manifest:
-        raise DownloadError("Manifest is missing image or dockerfile_path; check the API URL and deployed API version")
-    image = manifest["image"]
-    dockerfile = manifest["dockerfile_path"]
-    if not isinstance(image, str) or not image.endswith(f":{build_id}") or not re.fullmatch(r"[a-zA-Z0-9.-]+/kumo/[0-9]+/[a-z0-9]+(?:[._-][a-z0-9]+)*:[a-f0-9-]{36}", image):
-        raise DownloadError("Invalid build image in manifest")
-    if not isinstance(dockerfile, str) or not dockerfile or dockerfile.startswith("/") or ".." in dockerfile.split("/") or "\\" in dockerfile or ":" in dockerfile:
-        raise DownloadError("Invalid Dockerfile path in manifest")
+    validate_manifest(manifest, build_id)
     (directory / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     with request("source") as response, (directory / "source.tar.gz").open("wb") as output:
         size = 0

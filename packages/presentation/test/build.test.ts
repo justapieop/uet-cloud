@@ -30,7 +30,7 @@ test("pipeline endpoints require their assigned bearer token and never expose cr
   const id: string = "00000000-0000-4000-8000-000000000001";
   const details: BuildDetails = {
     id, userId: "123", repo: "https://github.com/owner/repo", commitSha: "a".repeat(40),
-    dockerFilePath: "Dockerfile", image: `registry.azurecr.io/kumo/123/app:${id}`, status: "QUEUED",
+    dockerFilePath: "Dockerfile", image: "registry.azurecr.io/app:v1.2.3", status: "QUEUED",
     sourceTokenHash: createHash("sha256").update(token).digest("hex"), sourceExpiresAt: new Date(Date.now() + 60_000),
     runId: "42", runUrl: "https://dev.azure.com/run/42", createdAt: new Date(), updatedAt: new Date(),
   };
@@ -54,7 +54,7 @@ test("pipeline endpoints require their assigned bearer token and never expose cr
   const manifest: Response = await fetch(`${base}/manifest`, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(manifest.status, 200);
   assert.equal(manifest.headers.get("Cache-Control"), "no-store");
-  assert.deepEqual(await manifest.json(), { image: details.image, dockerfile_path: "Dockerfile", commit_sha: details.commitSha });
+  assert.deepEqual(await manifest.json(), { build_id: id, image: details.image, dockerfile_path: "Dockerfile", commit_sha: details.commitSha });
   const source: Response = await fetch(`${base}/source`, { headers: { Authorization: `Bearer ${token}` } });
   assert.equal(source.status, 200);
   assert.match(source.headers.get("Content-Type") ?? "", /application\/gzip/);

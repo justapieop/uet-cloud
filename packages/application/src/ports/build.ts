@@ -52,7 +52,7 @@ export interface PipelineRun {
 }
 
 export interface PipelineBuildPort {
-  getImageAddress(userId: string, imageName: string, tag: string): string;
+  getImageAddress(imageName: string, tag: string): string;
   startBuild(buildId: string, sourceToken: string): Promise<PipelineRun>;
   getRun(runId: string): Promise<PipelineRun>;
 }

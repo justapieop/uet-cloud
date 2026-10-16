@@ -20,7 +20,7 @@ export class BuildResponseDto {
   public readonly status: string;
 
   @Expose()
-  @ApiProperty({ example: "registry.azurecr.io/kumo/123/my-app:unique-build-tag" })
+  @ApiProperty({ example: "registry.azurecr.io/my-app:v1.2.3" })
   public readonly image: string;
 
   @Expose({ name: "commit_sha" })
