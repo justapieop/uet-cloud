@@ -28,9 +28,18 @@ import { AppConfigModule } from "./AppConfig.module.js";
         const devMode: boolean = config.get<string>("NODE_ENV", "production").trim().toLowerCase() === "development";
         const enableEncryption: boolean = config.get<string>("DATABASE_ENABLE_ENCRYPTION", "true").trim().toLowerCase() === "true";
 
+        const connectionUrl: string | undefined = config.get<string>("DATABASE_CONNECTION_URL");
+        const connectionOptions: { url: string } | { host: string; port: number; database: string } = connectionUrl
+          ? { url: connectionUrl }
+          : {
+              host: config.getOrThrow<string>("DATABASE_URL"),
+              port: Number(config.getOrThrow<string>("DATABASE_PORT")),
+              database: config.getOrThrow<string>("DATABASE_NAME"),
+            };
+
         return {
           type: "mssql",
-          url: config.getOrThrow("DATABASE_CONNECTION_URL"),
+          ...connectionOptions,
           synchronize: false,
           autoLoadEntities: true,
           cache: true,

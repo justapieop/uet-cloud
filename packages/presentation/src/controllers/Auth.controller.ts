@@ -34,7 +34,8 @@ export class AuthController {
     },
   })
   public callback(@Res() response: Response): void {
-    response.redirect(this.configService.getOrThrow("FRONTEND_URL"));
+    const frontendUrl: string = this.configService.get<string>("FRONTEND_URL", "http://localhost:3001");
+    response.redirect(frontendUrl);
   }
 
   @Post("logout")
