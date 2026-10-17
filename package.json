@@ -10,7 +10,13 @@
     "build:api": "tsc -b packages/domain packages/contracts packages/application packages/infrastructure packages/presentation apps/api",
     "test:api": "npm run build:api && node --test",
     "start:api": "node apps/api/dist/main.js",
-    "dev:api": "npm run build:api && npm run start:api | npx pino-pretty"
+    "dev:api": "npm run build:api && node apps/api/dist/main.js | pino-pretty",
+    "generate:api": "npm run generate -w packages/rest"
+  },
+  "dependencies": {
+    "@azure/arm-monitor": "^8.0.0",
+    "mssql": "^12.0.0",
+    "tar": "^7.5.22"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
