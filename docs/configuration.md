@@ -95,6 +95,20 @@ New environments explicitly use `environmentMode: WorkloadProfiles` with a `Cons
 
 ## Deployment creation
 
+### Listing and filtering deployments
+
+`GET /deployments` returns the authenticated user's deployments, newest first. Optional query filters can be combined with AND:
+
+| Query parameter | Match |
+| --- | --- |
+| `status` | One of `PENDING`, `PROVISIONING`, `RUNNING`, `FAILED`, or `DELETED`. |
+| `name` | Case-insensitive literal substring, 1–32 characters after trimming. |
+| `region` | Exact requested region saved with the deployment, such as `japaneast`. Deployments created without an explicit region do not match this filter. |
+
+Example: `GET /deployments?status=RUNNING&name=api&region=japaneast`. Filters run in the database and cannot change the authenticated user scope. Omitting all filters returns the full owned list. Invalid, empty, repeated, or unknown parameters return HTTP 400; no matches returns an empty array.
+
+### Creating a deployment
+
 Submit an authenticated `POST /deployments` request:
 
 ```json

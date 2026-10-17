@@ -1,10 +1,11 @@
 import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
 import { InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Req, UseGuards, ValidationPipe } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, ValidationPipe } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
+import { ListDeploymentsQueryDto } from "../dto/ListDeploymentsQuery.dto.js";
 
 @ApiTags("deployments")
 @Controller("deployments")
@@ -57,10 +58,15 @@ export class DeploymentsController {
   }
 
   @Get()
+  @ApiOperation({ summary: "List owned deployments with optional status, name, and region filters" })
   @ApiOkResponse({ type: DeploymentResponseDto, isArray: true })
-  public async list(@Req() request: Request): Promise<DeploymentResponseDto[]> {
+  @ApiBadRequestResponse({ description: "Invalid or unknown query parameters" })
+  public async list(
+    @Req() request: Request,
+    @Query(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) filters: ListDeploymentsQueryDto,
+  ): Promise<DeploymentResponseDto[]> {
     const user: User = this.owner(request);
-    return (await this.getDeployment.list(user.id)).map((deployment: Deployment): DeploymentResponseDto => new DeploymentResponseDto(deployment));
+    return (await this.getDeployment.list(user.id, filters)).map((deployment: Deployment): DeploymentResponseDto => new DeploymentResponseDto(deployment));
   }
 
   private owner(request: Request): User {

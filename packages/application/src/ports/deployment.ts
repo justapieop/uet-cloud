@@ -1,9 +1,15 @@
-import type { Deployment, DeploymentSpec } from "@kumo/domain";
+import type { Deployment, DeploymentSpec, DeploymentStatus } from "@kumo/domain";
+
+export interface DeploymentListFilters {
+  readonly status?: DeploymentStatus;
+  readonly name?: string;
+  readonly region?: string;
+}
 
 export interface DeploymentRepository {
   findById(id: string): Promise<Deployment | null>;
   findByIdAndUserId(id: string, userId: string): Promise<Deployment | null>;
-  findByUserId(userId: string): Promise<Deployment[]>;
+  findByUserId(userId: string, filters?: DeploymentListFilters): Promise<Deployment[]>;
   save(deployment: Deployment): Promise<void>;
   update(deployment: Deployment): Promise<void>;
   delete(deploymentId: string, userId: string): Promise<void>;

@@ -1,8 +1,8 @@
-import { DeploymentAlreadyExists, type DeploymentQueueRepository } from "@kumo/application";
+import { DeploymentAlreadyExists, type DeploymentListFilters, type DeploymentQueueRepository } from "@kumo/application";
 import { Deployment, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Column, Entity, PrimaryColumn, Repository, type UpdateResult } from "typeorm";
+import { Column, Entity, PrimaryColumn, Repository, type SelectQueryBuilder, type UpdateResult } from "typeorm";
 
 @Entity({ name: "deployments" })
 export class InfraDeployment {
@@ -34,8 +34,17 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
     return record ? this.toDomain(record) : null;
   }
 
-  public async findByUserId(userId: string): Promise<Deployment[]> {
-    const records: InfraDeployment[] = await this.repository.find({ where: { userId }, order: { createdAt: "DESC", id: "DESC" } });
+  public async findByUserId(userId: string, filters: DeploymentListFilters = {}): Promise<Deployment[]> {
+    const query: SelectQueryBuilder<InfraDeployment> = this.repository.createQueryBuilder("deployment")
+      .where("deployment.userId = :userId", { userId });
+    if (filters.status !== undefined) query.andWhere("deployment.status = :status", { status: filters.status });
+    if (filters.name !== undefined) {
+      query.andWhere("CHARINDEX(LOWER(:name), LOWER(deployment.name)) > 0", { name: filters.name });
+    }
+    if (filters.region !== undefined) {
+      query.andWhere("JSON_VALUE(deployment.creation_request, '$.region') = :region", { region: filters.region });
+    }
+    const records: InfraDeployment[] = await query.orderBy("deployment.createdAt", "DESC").addOrderBy("deployment.id", "DESC").getMany();
     return records.map((record: InfraDeployment): Deployment => this.toDomain(record));
   }
 

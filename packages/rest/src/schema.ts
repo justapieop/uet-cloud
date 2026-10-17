@@ -130,6 +130,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List owned deployments with optional status, name, and region filters */
         get: operations["DeploymentsController_list"];
         put?: never;
         /** Queue a repository build and deploy its successful image */
@@ -504,7 +505,14 @@ export interface operations {
     };
     DeploymentsController_list: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Filter by deployment status */
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "FAILED" | "DELETED";
+                /** @description Case-insensitive literal substring of the deployment name */
+                name?: string;
+                /** @description Exact requested region saved on the deployment */
+                region?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -518,6 +526,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeploymentResponseDto"][];
                 };
+            };
+            /** @description Invalid or unknown query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No authenticated session or suspended user */
             403: {

@@ -1,5 +1,5 @@
 import type { Deployment } from "@kumo/domain";
-import { DeploymentNotFoundError, type DeploymentRepository } from "../../ports/deployment.js";
+import { DeploymentNotFoundError, type DeploymentListFilters, type DeploymentRepository } from "../../ports/deployment.js";
 
 export class GetDeploymentCase {
   public constructor(private readonly repository: DeploymentRepository) {}
@@ -10,7 +10,7 @@ export class GetDeploymentCase {
     return deployment;
   }
 
-  public list(userId: string): Promise<Deployment[]> {
-    return this.repository.findByUserId(userId);
+  public list(userId: string, filters?: DeploymentListFilters): Promise<Deployment[]> {
+    return this.repository.findByUserId(userId, filters);
   }
 }
