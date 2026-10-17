@@ -1,10 +1,11 @@
 import { BuildNotFound, BuildProviderError, GetBuildCase } from "@kumo/application";
-import { BadGatewayException, Controller, ForbiddenException, Get, NotFoundException, Param, ParseUUIDPipe, Req, UseGuards } from "@nestjs/common";
+import { BadGatewayException, Controller, ForbiddenException, Get, Header, NotFoundException, Param, ParseUUIDPipe, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ApiBadGatewayResponse, ApiBadRequestResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import type { BuildDetails, User } from "@kumo/domain";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { BuildResponseDto } from "../dto/BuildResponse.dto.js";
+import { CacheRead, UserReadCacheInterceptor } from "../common/ReadCache.js";
 
 @ApiTags("deployments")
 @Controller("deployment")
@@ -14,6 +15,9 @@ export class DeploymentController {
   ) { }
 
   @Get("build/:id")
+  @Header("Cache-Control", "private, no-store")
+  @CacheRead("builds", 2000)
+  @UseInterceptors(UserReadCacheInterceptor)
   @UseGuards(LoggedInGuard)
   @ApiOperation({ summary: "Get an owned build and refresh its pipeline status" })
   @ApiOkResponse({ type: BuildResponseDto })

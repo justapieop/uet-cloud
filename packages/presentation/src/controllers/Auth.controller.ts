@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Controller, Get, Header, Post, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ApiCreatedResponse, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import { type Request, type Response } from "express";
@@ -12,6 +12,7 @@ export class AuthController {
   ) { }
 
   @Get("login")
+  @Header("Cache-Control", "no-store")
   @UseGuards(GitHubAuthGuard)
   @ApiOperation({ summary: "Start GitHub authentication" })
   @ApiResponse({
@@ -24,6 +25,7 @@ export class AuthController {
   public login(): void {}
 
   @Get("callback")
+  @Header("Cache-Control", "no-store")
   @UseGuards(GitHubAuthGuard)
   @ApiOperation({ summary: "Complete GitHub authentication and establish a session" })
   @ApiResponse({
@@ -39,6 +41,7 @@ export class AuthController {
   }
 
   @Post("logout")
+  @Header("Cache-Control", "no-store")
   @ApiOperation({ summary: "Log out of the current session" })
   @ApiCreatedResponse({ description: "Logout completed; response body is empty" })
   public async logout(@Req() request: Request): Promise<void> {

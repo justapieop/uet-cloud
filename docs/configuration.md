@@ -95,6 +95,24 @@ New environments explicitly use `environmentMode: WorkloadProfiles` with a `Cons
 
 ## Deployment creation
 
+### API response caching
+
+The API uses the existing Redis cache configured by `REDIS_CONNECTION_URL` for explicitly selected reads:
+
+| Route | Server cache policy |
+| --- | --- |
+| `GET /deployments` | 2 seconds, scoped by authenticated user and complete filter query. |
+| `GET /deployments/:id` | 2 seconds, scoped by authenticated user and deployment ID. |
+| `GET /deployment/build/:id` | 2 seconds, scoped by authenticated user and build ID. Internal worker calls to the build use case are unaffected. |
+| `GET /user/me` | Uncached; uses the current authenticated user. |
+| Auth login/callback/logout | Uncached. |
+| Build manifest/source downloads | Uncached; authorization and expiry are checked on every request. |
+| Deployment creation | Uncached; successful creation invalidates that user's deployment list/detail cache generations. |
+
+Authentication still runs on cache hits, suspended users cannot use cached responses, and errors are not cached. Cache entries contain only exposed response fields, not domain objects, build-source tokens, or request cookies. Keys separate users, include the route/query, and sort query parameter names. Redis failures fall back to normal request processing. `X-Cache` reports `HIT`, `MISS`, or `BYPASS` for eligible reads. Clients can bypass the server cache with request `Cache-Control: no-cache` or `no-store` (or `Pragma: no-cache`).
+
+These authenticated responses retain `Cache-Control: private, no-store` so browsers and shared proxies do not retain them; the short-lived Redis cache is separate. Background worker updates can appear up to two seconds later on cached reads. Future deployment mutations must invalidate the user's deployment cache as creation does. Frontend requests that explicitly send cache-bypass directives remain fresh.
+
 ### Listing and filtering deployments
 
 `GET /deployments` returns the authenticated user's deployments, newest first. Optional query filters can be combined with AND:
@@ -106,6 +124,8 @@ New environments explicitly use `environmentMode: WorkloadProfiles` with a `Cons
 | `region` | Exact requested region saved with the deployment, such as `japaneast`. Deployments created without an explicit region do not match this filter. |
 
 Example: `GET /deployments?status=RUNNING&name=api&region=japaneast`. Filters run in the database and cannot change the authenticated user scope. Omitting all filters returns the full owned list. Invalid, empty, repeated, or unknown parameters return HTTP 400; no matches returns an empty array.
+
+The web dashboard loads this endpoint on the server through the generated REST client, forwarding the incoming session cookie with caching disabled. Its name, status, and region controls update `/dashboard` query parameters when Apply filters is selected; Reset removes the filters, and Refresh fetches the current list again. No periodic polling is enabled. The page displays sign-in, request failure, loading, and empty-result states separately. Deployment rows keep image references compact and let users expand error details. The web server uses its configured `API_URL` (falling back to `NEXT_PUBLIC_API_URL`, then `http://localhost:3000`) to reach the API.
 
 ### Creating a deployment
 

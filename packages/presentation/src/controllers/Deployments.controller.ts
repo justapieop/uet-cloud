@@ -1,20 +1,22 @@
 import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
 import { InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, ValidationPipe } from "@nestjs/common";
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe } from "@nestjs/common";
 import { ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
 import { ListDeploymentsQueryDto } from "../dto/ListDeploymentsQuery.dto.js";
+import { CacheRead, RouteReadCache, UserReadCacheInterceptor } from "../common/ReadCache.js";
 
 @ApiTags("deployments")
 @Controller("deployments")
 @UseGuards(LoggedInGuard)
 @ApiForbiddenResponse({ description: "No authenticated session or suspended user" })
 export class DeploymentsController {
-  public constructor(private readonly createDeployment: CreateDeploymentCase, private readonly getDeployment: GetDeploymentCase) {}
+  public constructor(private readonly createDeployment: CreateDeploymentCase, private readonly getDeployment: GetDeploymentCase, private readonly readCache: RouteReadCache) {}
 
   @Post()
+  @Header("Cache-Control", "private, no-store")
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: "Queue a repository build and deploy its successful image" })
   @ApiAcceptedResponse({ type: DeploymentResponseDto })
@@ -35,6 +37,7 @@ export class DeploymentsController {
           minScaling: input.min_scaling, maxScaling: input.max_scaling, envVars: input.env_vars,
         },
       });
+      await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
     } catch (error: unknown) {
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
@@ -44,6 +47,9 @@ export class DeploymentsController {
   }
 
   @Get(":id")
+  @Header("Cache-Control", "private, no-store")
+  @CacheRead("deployments", 2000)
+  @UseInterceptors(UserReadCacheInterceptor)
   @ApiOperation({ summary: "Get an owned deployment's provisioning status" })
   @ApiOkResponse({ type: DeploymentResponseDto })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
@@ -58,6 +64,9 @@ export class DeploymentsController {
   }
 
   @Get()
+  @Header("Cache-Control", "private, no-store")
+  @CacheRead("deployments", 2000)
+  @UseInterceptors(UserReadCacheInterceptor)
   @ApiOperation({ summary: "List owned deployments with optional status, name, and region filters" })
   @ApiOkResponse({ type: DeploymentResponseDto, isArray: true })
   @ApiBadRequestResponse({ description: "Invalid or unknown query parameters" })
