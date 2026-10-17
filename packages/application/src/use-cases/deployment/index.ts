@@ -7,3 +7,4 @@ export * from "./GetBuild.case.js";
 export * from "./GetBuildSource.case.js";
 export * from "./ProcessDeployment.case.js";
 export * from "./GetDeployment.case.js";
+export * from "./GetDeploymentMetrics.case.js";

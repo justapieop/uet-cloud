@@ -8,7 +8,7 @@ import type { Request, Response } from "express";
 import { createHash, randomUUID } from "node:crypto";
 import { from, mergeMap, of, type Observable } from "rxjs";
 
-type ReadCacheGroup = "deployments" | "builds";
+type ReadCacheGroup = "deployments" | "builds" | "monitoring";
 interface ReadCachePolicy { readonly group: ReadCacheGroup; readonly ttlMs: number; }
 interface CachedResponse { readonly payload: unknown; }
 const READ_CACHE_POLICY: symbol = Symbol("READ_CACHE_POLICY");

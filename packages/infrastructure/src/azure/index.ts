@@ -7,3 +7,5 @@ export * from "./build-worker.js";
 export * from "./source-archive.js";
 export * from "./pipelines.js";
 export * from "./deployment-worker.js";
+export * from "./monitoring.js";
+export * from "./Monitoring.module.js";
