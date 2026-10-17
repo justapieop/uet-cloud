@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ConfigService } from "@nestjs/config";
+import { Module, type INestApplicationContext } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { NestFactory } from "@nestjs/core";
 import type { Response } from "@azure/arm-monitor";
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics } from "@kumo/application";
 import { AzureMonitorMetricsReader, type MetricsClient, type MetricsReadInput } from "../dist/azure/monitoring.js";
+import { AzureMonitoringModule } from "../dist/azure/Monitoring.module.js";
 
 const RESOURCE_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
 const INPUT: MetricsReadInput = {
@@ -46,6 +49,27 @@ function fixture(responses: Record<string, Response>, failStatus?: number): { re
   );
   return { reader, calls };
 }
+
+test("Nest creates the Azure monitoring reader with ConfigService", async () => {
+  class FixtureModule {}
+  Module({ imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      ignoreEnvFile: true,
+      load: [(): Record<string, string> => ({
+        AZURE_SUBSCRIPTION_ID: "sub",
+        AZURE_PLATFORM_RESOURCE_GROUP: "platform",
+      })],
+    }),
+    AzureMonitoringModule,
+  ] })(FixtureModule);
+  const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false });
+  try {
+    assert.ok(context.get(AzureMonitorMetricsReader) instanceof AzureMonitorMetricsReader);
+  } finally {
+    await context.close();
+  }
+});
 
 test("reads separate replicas and revisions, converts units, and retains missing samples", async () => {
   const responses: Record<string, Response> = {
