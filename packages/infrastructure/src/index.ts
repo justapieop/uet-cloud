@@ -4,3 +4,4 @@ export * from "./feature-flags/index.js";
 export * from "./auth/index.js";
 export * from "./azure/index.js";
 export * from "./github/index.js";
+export * from "./stripe/index.js";
