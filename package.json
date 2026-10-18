@@ -26,5 +26,10 @@
     "@next/swc-linux-x64-gnu": "^16.4.0",
     "@tailwindcss/oxide-linux-x64-gnu": "^4.3.3",
     "lightningcss-linux-x64-gnu": "^1.33.0"
+  },
+  "dependencies": {
+    "@azure/core-rest-pipeline": "^1.25.0",
+    "@nestjs/idempotency": "^0.0.2",
+    "@nestjs/resilience": "^0.0.2"
   }
 }

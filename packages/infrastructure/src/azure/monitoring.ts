@@ -1,3 +1,4 @@
+import { ResilienceError } from "@nestjs/resilience";
 import type { Metric, MetricValue, Response, TimeSeriesElement } from "@azure/arm-monitor";
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics, type DeploymentMetricsReader, type MetricPoint, type MetricSeries } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
@@ -47,6 +48,7 @@ export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
         fetchMetric("Replicas", "revisionName eq '*'"),
       ]);
     } catch (error: unknown) {
+      if (error instanceof ResilienceError) throw error;
       const status: unknown = typeof error === "object" && error !== null && "statusCode" in error ? error.statusCode : undefined;
       throw new DeploymentMetricsReadError(status === 403 ? "forbidden" : status === 429 ? "throttled" : "unavailable");
     }

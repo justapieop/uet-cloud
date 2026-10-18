@@ -1,6 +1,7 @@
+import { ResilienceService } from "@nestjs/resilience";
 import { MonitorClient } from "@azure/arm-monitor";
 import { GetDeploymentMetricsCase } from "@kumo/application";
-import { AZURE_CREDENTIAL, AzureMonitorMetricsReader, InfraDeploymentRepository, type AzureCredential } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureMonitorMetricsReader, InfraDeploymentRepository, type AzureCredential } from "@kumo/infrastructure";
 import { Module } from "@nestjs/common";
 import { DeploymentMetricsController } from "../controllers/DeploymentMetrics.controller.js";
 import { DatabaseModule } from "./Database.module.js";
@@ -20,9 +21,9 @@ import { ConfigService } from "@nestjs/config";
   providers: [
     {
       provide: MonitorClient,
-      useFactory: (config: ConfigService, credential: AzureCredential): MonitorClient =>
-        new MonitorClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
-      inject: [ConfigService, AZURE_CREDENTIAL],
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): MonitorClient =>
+        new MonitorClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-monitor"), position: "perCall" }] }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
       provide: GetDeploymentMetricsCase,

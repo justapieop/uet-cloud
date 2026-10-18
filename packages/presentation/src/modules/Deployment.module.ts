@@ -1,3 +1,4 @@
+import { ResilienceService } from "@nestjs/resilience";
 import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import { ResourceManagementClient } from "@azure/arm-resources";
 import { Module } from "@nestjs/common";
@@ -12,7 +13,7 @@ import {
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
-import { AZURE_CREDENTIAL, AzureProvider, DeploymentWorker, InfraDeploymentRepository, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, DeploymentWorker, InfraDeploymentRepository, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { ExternalClientsModule } from "./ExternalClients.module.js";
@@ -33,15 +34,15 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
     DeploymentWorker,
     {
       provide: ResourceManagementClient,
-      useFactory: (config: ConfigService, credential: AzureCredential): ResourceManagementClient =>
-        new ResourceManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
-      inject: [ConfigService, AZURE_CREDENTIAL],
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): ResourceManagementClient =>
+        new ResourceManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }] }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
       provide: ContainerAppsAPIClient,
-      useFactory: (config: ConfigService, credential: AzureCredential): ContainerAppsAPIClient =>
-        new ContainerAppsAPIClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
-      inject: [ConfigService, AZURE_CREDENTIAL],
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): ContainerAppsAPIClient =>
+        new ContainerAppsAPIClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }] }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
       provide: GetDeploymentCase,

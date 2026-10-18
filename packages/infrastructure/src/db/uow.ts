@@ -1,6 +1,7 @@
 import type { UnitOfWork, UnitOfWorkRepositories } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
 import { DataSource, type EntityManager } from "typeorm";
+import { InfraDeploymentRequestRepository } from "./repositories/deployment-request.js";
 import { InfraRole, InfraRoleRepository } from "./repositories/role.js";
 import { InfraUser, InfraUserRepository } from "./repositories/user.js";
 import { InfraDeployment, InfraDeploymentRepository } from "./repositories/deployment.js";
@@ -16,6 +17,7 @@ export class TypeOrmUnitOfWork implements UnitOfWork {
         users: new InfraUserRepository(manager.getRepository(InfraUser)),
         roles: new InfraRoleRepository(manager.getRepository(InfraRole)),
         deployment: new InfraDeploymentRepository(manager.getRepository(InfraDeployment)),
+        deploymentRequests: new InfraDeploymentRequestRepository(manager),
       };
 
       return work(repositories);

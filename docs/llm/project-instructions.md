@@ -57,3 +57,5 @@ Do not write anything into README.md until told to do so.
 - Keep this instruction file focused on durable LLM guidance and technical conventions. Put product facts in the project brief.
 
 - External SDK clients, credentials, and HTTP transports must be supplied to infrastructure providers as constructor dependencies. Construct clients in Nest module factories, register explicit tokens for interface dependencies, and avoid constructor fallbacks that create real clients. See `../provider-dependencies.md` for the current wiring.
+
+- Deployment creation requires `Idempotency-Key`. Use the SQL-backed Nest HTTP store plus a deployment acceptance receipt written through the same application UnitOfWork as the deployment insert. Never separate the business receipt from that transaction or replay before authenticated/suspended-user guards. Dependency policies are supplied through the injected HTTP transport and Azure SDK pipeline; do not add nested retries around whole deployment/build workflows or retry pipeline submission. See `../reliability.md` for settings and guarantees.

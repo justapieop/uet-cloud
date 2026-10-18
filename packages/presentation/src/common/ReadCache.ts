@@ -19,7 +19,7 @@ export function CacheRead(group: ReadCacheGroup, ttlMs: number): MethodDecorator
 
 @Injectable()
 export class RouteReadCache {
-  public constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache) {}
+  public constructor(@Inject(CACHE_MANAGER) private readonly cache: Pick<Cache, "get" | "set">) {}
 
   public async key(userId: string, group: ReadCacheGroup, url: string): Promise<string | undefined> {
     try {

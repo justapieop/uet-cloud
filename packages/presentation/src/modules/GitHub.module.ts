@@ -1,6 +1,7 @@
+import { ResilienceService } from "@nestjs/resilience";
 import { KeyClient } from "@azure/keyvault-keys";
 import {
-  AZURE_CREDENTIAL, HTTP_TRANSPORT, KmsProvider, GitHubProvider,
+  createAzureResiliencePolicy, AZURE_CREDENTIAL, HTTP_TRANSPORT, KmsProvider, GitHubProvider,
   type AzureCredential, type HttpTransport,
 } from "@kumo/infrastructure";
 import { Module } from "@nestjs/common";
@@ -13,12 +14,12 @@ import { ExternalClientsModule } from "./ExternalClients.module.js";
   providers: [
     {
       provide: KeyClient,
-      useFactory: (config: ConfigService, credential: AzureCredential): KeyClient => {
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): KeyClient => {
         const vault: string = config.getOrThrow<string>("AZURE_VAULT_NAME");
         const vaultUrl: string = vault.startsWith("https://") ? vault : `https://${vault}.vault.azure.net`;
-        return new KeyClient(vaultUrl, credential);
+        return new KeyClient(vaultUrl, credential, { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "key-vault"), position: "perCall" }] });
       },
-      inject: [ConfigService, AZURE_CREDENTIAL],
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
       provide: KmsProvider,

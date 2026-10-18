@@ -1,5 +1,6 @@
+import { ResilienceService } from "@nestjs/resilience";
 import { ContainerRegistryTasksManagementClient } from "@azure/arm-containerregistrytasks";
-import { AcrProvider, AZURE_CREDENTIAL, HTTP_TRANSPORT, type AzureCredential, type HttpTransport } from "@kumo/infrastructure";
+import { AcrProvider, createAzureResiliencePolicy, AZURE_CREDENTIAL, HTTP_TRANSPORT, type AzureCredential, type HttpTransport } from "@kumo/infrastructure";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AppConfigModule } from "./AppConfig.module.js";
@@ -10,9 +11,9 @@ import { ExternalClientsModule } from "./ExternalClients.module.js";
   providers: [
     {
       provide: ContainerRegistryTasksManagementClient,
-      useFactory: (config: ConfigService, credential: AzureCredential): ContainerRegistryTasksManagementClient =>
-        new ContainerRegistryTasksManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
-      inject: [ConfigService, AZURE_CREDENTIAL],
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): ContainerRegistryTasksManagementClient =>
+        new ContainerRegistryTasksManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "acr"), position: "perCall" }] }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
       provide: AcrProvider,

@@ -1,4 +1,6 @@
 export * from "./external-clients.js";
+export * from "./reliability/resilience.js";
+export * from "./reliability/telemetry.js";
 export * from "./db/index.js";
 export * from "./config/index.js";
 export * from "./feature-flags/index.js";

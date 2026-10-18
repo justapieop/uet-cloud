@@ -515,6 +515,36 @@ export class PlanActive1792108800003 implements MigrationInterface {
   }
 }
 
+export class Reliability1792272000001 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({
+      name: "idempotency_keys",
+      columns: [
+        { name: "key_hash", type: "varchar", length: "64", isPrimary: true },
+        { name: "fingerprint", type: "varchar", length: "64" },
+        { name: "owner", type: "varchar", length: "64", collation: "Latin1_General_100_BIN2", isNullable: true },
+        { name: "response_json", type: "nvarchar", length: "MAX", isNullable: true },
+        { name: "expires_at", type: "bigint" },
+      ],
+      indices: [new TableIndex({ name: "IDX_idempotency_keys_expiry", columnNames: ["expires_at"] })],
+    }));
+    await queryRunner.createTable(new Table({
+      name: "deployment_request_receipts",
+      columns: [
+        { name: "key_hash", type: "varchar", length: "64", isPrimary: true },
+        { name: "fingerprint", type: "varchar", length: "64" },
+        { name: "deployment_json", type: "nvarchar", length: "MAX" },
+        { name: "created_at", type: "datetime2", precision: 7, default: "SYSUTCDATETIME()" },
+      ],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("deployment_request_receipts");
+    await queryRunner.dropTable("idempotency_keys");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -525,5 +555,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   RemoveUnusedDeploymentSpecs1792108800001,
   Plans1792108800002,
   PlanActive1792108800003,
+  Reliability1792272000001,
 ];
 

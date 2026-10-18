@@ -1,7 +1,8 @@
-import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
+import { Idempotent } from "@nestjs/idempotency";
+import { DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
 import { InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe } from "@nestjs/common";
-import { ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException } from "@nestjs/common";
+import { ApiHeader, ApiUnprocessableEntityResponse, ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
@@ -16,6 +17,9 @@ export class DeploymentsController {
   public constructor(private readonly createDeployment: CreateDeploymentCase, private readonly getDeployment: GetDeploymentCase, private readonly readCache: RouteReadCache) {}
 
   @Post()
+  @Idempotent({ required: true })
+  @ApiHeader({ name: "Idempotency-Key", required: true, description: "Unique key per deployment request; reuse it for retries (1–255 printable ASCII characters)" })
+  @ApiUnprocessableEntityResponse({ description: "Idempotency-Key reused with a different request" })
   @Header("Cache-Control", "private, no-store")
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: "Queue a repository build and deploy its successful image" })
@@ -26,7 +30,7 @@ export class DeploymentsController {
     const user: User = this.owner(request);
     try {
       const deployment: Deployment = await this.createDeployment.exec({
-        userId: user.id, name: input.name,
+        userId: user.id, name: input.name, idempotencyKey: request.get("Idempotency-Key"),
         spec: {
           region: input.region,
           repo: input.repo, tag: input.tag, imageName: input.image_name, dockerFilePath: input.dockerfile_path,
@@ -40,6 +44,8 @@ export class DeploymentsController {
       await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
     } catch (error: unknown) {
+      if (error instanceof DeploymentRequestKeyReused) throw new UnprocessableEntityException({ code: "IDEMPOTENCY_KEY_REUSED", message: error.message });
+      if (error instanceof DeploymentRequestInProgress) throw new ConflictException({ code: "IDEMPOTENCY_KEY_IN_USE", message: error.message });
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
       if (error instanceof DeploymentAlreadyExists) throw new ConflictException(error.message);
       throw error;

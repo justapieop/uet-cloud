@@ -1,3 +1,5 @@
+import { AppIdempotencyModule } from "./AppIdempotency.module.js";
+import { AppResilienceModule } from "./AppResilience.module.js";
 import { Module } from "@nestjs/common";
 import { AuthModule } from "./Auth.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
@@ -11,6 +13,8 @@ import { MonitoringModule } from "./Monitoring.module.js";
 @Module({
   imports: [
     AppConfigModule,
+    AppIdempotencyModule,
+    AppResilienceModule,
     FeatureModule,
     LoggerModule.forRootAsync({
       imports: [

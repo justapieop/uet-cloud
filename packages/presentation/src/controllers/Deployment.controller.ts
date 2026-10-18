@@ -1,3 +1,4 @@
+import { ResilienceError } from "@nestjs/resilience";
 import { BuildNotFound, BuildProviderError, GetBuildCase } from "@kumo/application";
 import { BadGatewayException, Controller, ForbiddenException, Get, Header, NotFoundException, Param, ParseUUIDPipe, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ApiBadGatewayResponse, ApiBadRequestResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
@@ -32,6 +33,7 @@ export class DeploymentController {
       const details: BuildDetails = await this.getBuildCase.exec(id, user.id);
       return new BuildResponseDto({ buildId: details.id, runId: details.runId, runUrl: details.runUrl, image: details.image, status: details.status, commitSha: details.commitSha, error: details.error });
     } catch (error: unknown) {
+      if (error instanceof ResilienceError) throw error;
       if (error instanceof BuildNotFound) throw new NotFoundException(error.message);
       if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
       throw new BadGatewayException("Unable to refresh the build status");

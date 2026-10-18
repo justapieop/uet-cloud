@@ -19,3 +19,5 @@ GitHubProvider, AzurePipelinesProvider, and AcrProvider receive an explicit HTTP
 To substitute a dependency in a Nest testing module, override `AZURE_CREDENTIAL`, `HTTP_TRANSPORT`, or the SDK client class token before compiling the module. For direct construction, supply the client's required interface and transport explicitly. AzureProvider uses `AzureProviderClients`, metrics uses `MetricsClient`, ACR uses `AcrClient`, and Key Vault requires the `getCryptographyClient` surface of KeyClient.
 
 App Configuration loading remains a bootstrap configuration factory, since it runs while ConfigModule is loading. It is not a provider constructor.
+
+The default injected HTTP transport now applies dependency resilience policies. Azure SDK factory registrations attach an equivalent pipeline policy and disable SDK retries to avoid multiplying attempts. See [Resilience and idempotency](reliability.md).
