@@ -515,6 +515,41 @@ export class PlanActive1792108800003 implements MigrationInterface {
   }
 }
 
+export class Subscriptions1792272000000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({
+      name: "subscriptions",
+      columns: [
+        { name: "id", type: "nvarchar", length: "255", isPrimary: true },
+        { name: "user_id", type: "nvarchar", length: "255" },
+        { name: "plan_id", type: "nvarchar", length: "255" },
+        { name: "active", type: "bit", default: 0 },
+        { name: "created_at", type: "datetime2", precision: 7, default: "SYSUTCDATETIME()" },
+      ],
+      foreignKeys: [
+        new TableForeignKey({
+          name: "FK_subscriptions_user", columnNames: ["user_id"],
+          referencedTableName: "users", referencedColumnNames: ["id"],
+          onDelete: "NO ACTION", onUpdate: "NO ACTION",
+        }),
+        new TableForeignKey({
+          name: "FK_subscriptions_plan", columnNames: ["plan_id"],
+          referencedTableName: "plans", referencedColumnNames: ["id"],
+          onDelete: "NO ACTION", onUpdate: "NO ACTION",
+        }),
+      ],
+      indices: [
+        new TableIndex({ name: "IDX_subscriptions_user_active", columnNames: ["user_id", "active"] }),
+        new TableIndex({ name: "IDX_subscriptions_plan_id", columnNames: ["plan_id"] }),
+      ],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("subscriptions");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -525,5 +560,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   RemoveUnusedDeploymentSpecs1792108800001,
   Plans1792108800002,
   PlanActive1792108800003,
+  Subscriptions1792272000000,
 ];
 

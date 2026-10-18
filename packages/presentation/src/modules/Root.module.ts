@@ -7,6 +7,7 @@ import { LoggerModule } from "nestjs-pino";
 import { ConfigService } from "@nestjs/config";
 import { AppCacheModule } from "./AppCache.module.js";
 import { MonitoringModule } from "./Monitoring.module.js";
+import { SubscriptionModule } from "./Subscription.module.js";
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { MonitoringModule } from "./Monitoring.module.js";
     AuthModule,
     DeploymentModule,
     MonitoringModule,
+    SubscriptionModule,
     AppCacheModule,
   ],
 })
