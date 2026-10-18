@@ -1,20 +1,29 @@
+import { MonitorClient } from "@azure/arm-monitor";
 import { GetDeploymentMetricsCase } from "@kumo/application";
-import { AzureMonitorMetricsReader, InfraDeploymentRepository } from "@kumo/infrastructure";
+import { AZURE_CREDENTIAL, AzureMonitorMetricsReader, InfraDeploymentRepository, type AzureCredential } from "@kumo/infrastructure";
 import { Module } from "@nestjs/common";
 import { DeploymentMetricsController } from "../controllers/DeploymentMetrics.controller.js";
 import { DatabaseModule } from "./Database.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
+import { ExternalClientsModule } from "./ExternalClients.module.js";
 import { ConfigService } from "@nestjs/config";
 
 @Module({
   imports: [
     DatabaseModule,
     AppConfigModule,
+    ExternalClientsModule,
   ],
   controllers: [
     DeploymentMetricsController,
   ],
   providers: [
+    {
+      provide: MonitorClient,
+      useFactory: (config: ConfigService, credential: AzureCredential): MonitorClient =>
+        new MonitorClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
+      inject: [ConfigService, AZURE_CREDENTIAL],
+    },
     {
       provide: GetDeploymentMetricsCase,
       useFactory: (repository: InfraDeploymentRepository, reader: AzureMonitorMetricsReader): GetDeploymentMetricsCase =>
@@ -23,8 +32,8 @@ import { ConfigService } from "@nestjs/config";
     },
     {
       provide: AzureMonitorMetricsReader,
-      useFactory: (config: ConfigService): AzureMonitorMetricsReader => new AzureMonitorMetricsReader(config),
-      inject: [ConfigService],
+      useFactory: (config: ConfigService, client: MonitorClient): AzureMonitorMetricsReader => new AzureMonitorMetricsReader(config, client.metrics),
+      inject: [ConfigService, MonitorClient],
     },
   ],
 })

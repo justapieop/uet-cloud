@@ -1,5 +1,4 @@
-import { MonitorClient, type Metric, type MetricValue, type Response, type TimeSeriesElement } from "@azure/arm-monitor";
-import { DefaultAzureCredential } from "@azure/identity";
+import type { Metric, MetricValue, Response, TimeSeriesElement } from "@azure/arm-monitor";
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics, type DeploymentMetricsReader, type MetricPoint, type MetricSeries } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
@@ -24,14 +23,12 @@ export interface MetricsReadInput {
 
 @Injectable()
 export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
-  private readonly client: MetricsClient;
   private readonly subscriptionId: string;
   private readonly platformResourceGroup: string;
 
-  public constructor(config: ConfigService, client?: MetricsClient) {
+  public constructor(config: ConfigService, private readonly client: MetricsClient) {
     this.subscriptionId = config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID");
     this.platformResourceGroup = config.get<string>("AZURE_PLATFORM_RESOURCE_GROUP") ?? config.getOrThrow<string>("AZURE_RG_NAME");
-    this.client = client ?? new MonitorClient(new DefaultAzureCredential(), this.subscriptionId).metrics;
   }
 
   public async read(input: MetricsReadInput): Promise<DeploymentMetrics> {

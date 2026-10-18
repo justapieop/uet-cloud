@@ -1,6 +1,5 @@
-import { ContainerAppsAPIClient, type ContainerApp, type ContainerResources, type EnvironmentVar, type ManagedEnvironment, type WorkloadProfile } from "@azure/arm-appcontainers";
-import { ResourceManagementClient, type ResourceGroup } from "@azure/arm-resources";
-import { DefaultAzureCredential } from "@azure/identity";
+import type { ContainerAppsAPIClient, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, WorkloadProfile } from "@azure/arm-appcontainers";
+import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
 import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
 import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
@@ -46,7 +45,6 @@ export interface AzureProviderClients {
 
 @Injectable()
 export class AzureProvider implements DeploymentProvisioner {
-  private readonly clients: AzureProviderClients;
   private readonly platformResourceGroup: string;
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
@@ -55,7 +53,7 @@ export class AzureProvider implements DeploymentProvisioner {
     private readonly config: ConfigService,
     private readonly triggerBuild: Pick<TriggerBuildCase, "exec">,
     private readonly getBuild: Pick<GetBuildCase, "exec">,
-    clients?: AzureProviderClients,
+    private readonly clients: AzureProviderClients,
   ) {
     this.platformResourceGroup = config.get<string>("AZURE_PLATFORM_RESOURCE_GROUP")
       ?? config.getOrThrow<string>("AZURE_RG_NAME");
@@ -64,20 +62,6 @@ export class AzureProvider implements DeploymentProvisioner {
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0 || this.timeoutMs > 2_147_483_647 ||
       !Number.isSafeInteger(this.pollIntervalMs) || this.pollIntervalMs <= 0 || this.pollIntervalMs > this.timeoutMs) {
       throw new BuildProviderError("Deployment timeout and polling interval must be positive integers, with the interval no greater than the timeout");
-    }
-    if (clients) {
-      this.clients = clients;
-    } else {
-      const credentials: DefaultAzureCredential = new DefaultAzureCredential();
-      const subscriptionId: string = config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID");
-      const resourceManager: ResourceManagementClient = new ResourceManagementClient(credentials, subscriptionId);
-      const acaManager: ContainerAppsAPIClient = new ContainerAppsAPIClient(credentials, subscriptionId);
-      this.clients = {
-        resources: resourceManager.resources,
-        resourceGroups: resourceManager.resourceGroups,
-        managedEnvironments: acaManager.managedEnvironments,
-        containerApps: acaManager.containerApps,
-      };
     }
   }
 

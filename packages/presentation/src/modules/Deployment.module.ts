@@ -1,3 +1,5 @@
+import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
+import { ResourceManagementClient } from "@azure/arm-resources";
 import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
@@ -10,8 +12,10 @@ import {
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
-import { AzureProvider, DeploymentWorker, InfraDeploymentRepository } from "@kumo/infrastructure";
+import { AZURE_CREDENTIAL, AzureProvider, DeploymentWorker, InfraDeploymentRepository, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
+import { AppConfigModule } from "./AppConfig.module.js";
+import { ExternalClientsModule } from "./ExternalClients.module.js";
 import { DatabaseModule } from "./Database.module.js";
 import { BuildModule } from "./Build.module.js";
 import { DeploymentController } from "../controllers/Deployment.controller.js";
@@ -19,7 +23,7 @@ import { BuildSourceController } from "../controllers/BuildSource.controller.js"
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 
 @Module({
-  imports: [DatabaseModule, BuildModule],
+  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule],
   controllers: [
     DeploymentController,
     BuildSourceController,
@@ -27,6 +31,18 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
   ],
   providers: [
     DeploymentWorker,
+    {
+      provide: ResourceManagementClient,
+      useFactory: (config: ConfigService, credential: AzureCredential): ResourceManagementClient =>
+        new ResourceManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
+      inject: [ConfigService, AZURE_CREDENTIAL],
+    },
+    {
+      provide: ContainerAppsAPIClient,
+      useFactory: (config: ConfigService, credential: AzureCredential): ContainerAppsAPIClient =>
+        new ContainerAppsAPIClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")),
+      inject: [ConfigService, AZURE_CREDENTIAL],
+    },
     {
       provide: GetDeploymentCase,
       useFactory: (repository: InfraDeploymentRepository): GetDeploymentCase => new GetDeploymentCase(repository),
@@ -39,9 +55,17 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
     },
     {
       provide: AzureProvider,
-      useFactory: (config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase): AzureProvider =>
-        new AzureProvider(config, triggerBuild, getBuild),
-      inject: [ConfigService, TriggerBuildCase, GetBuildCase],
+      useFactory: (
+        config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase,
+        resources: ResourceManagementClient, apps: ContainerAppsAPIClient,
+      ): AzureProvider => {
+        const clients: AzureProviderClients = {
+          resources: resources.resources, resourceGroups: resources.resourceGroups,
+          managedEnvironments: apps.managedEnvironments, containerApps: apps.containerApps,
+        };
+        return new AzureProvider(config, triggerBuild, getBuild, clients);
+      },
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient],
     },
     {
       provide: CreateDeploymentCase,

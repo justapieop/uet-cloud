@@ -1,9 +1,9 @@
-import { DefaultAzureCredential } from "@azure/identity";
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { BuildProviderError, type PipelineBuildPort, type PipelineRun } from "@kumo/application";
 import type { BuildStatus } from "@kumo/domain";
 import { runBuildStep } from "../build-errors.js";
+import type { AzureCredential, HttpTransport } from "../external-clients.js";
 
 function redactPipelineMessage(message: string, sensitiveValues: readonly string[]): string {
   let redacted: string = message;
@@ -21,12 +21,15 @@ function redactPipelineMessage(message: string, sensitiveValues: readonly string
 
 @Injectable()
 export class AzurePipelinesProvider implements PipelineBuildPort {
-  private readonly credential: DefaultAzureCredential = new DefaultAzureCredential();
   private readonly baseUrl: string;
   private readonly projectUrl: string;
   private readonly registry: string;
   private readonly pat: string | undefined;
-  public constructor(config: ConfigService) {
+  public constructor(
+    config: ConfigService,
+    private readonly credential: AzureCredential,
+    private readonly http: HttpTransport,
+  ) {
     const organization: string = config.getOrThrow<string>("AZURE_DEVOPS_ORGANIZATION");
     const project: string = config.getOrThrow<string>("AZURE_DEVOPS_PROJECT");
     const pipelineId: number = Number(config.getOrThrow<string>("AZURE_DEVOPS_PIPELINE_ID"));
@@ -68,7 +71,7 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
       if (!token) throw new BuildProviderError("Azure DevOps authentication did not return a token");
       authorization = `Bearer ${token.token}`;
     }
-    const response: Response = await fetch(`${this.baseUrl}${path}?api-version=7.1`, {
+    const response: Response = await this.http(`${this.baseUrl}${path}?api-version=7.1`, {
       ...options,
       headers: { Authorization: authorization, "Content-Type": "application/json", Accept: "application/json" },
       redirect: "error", signal: AbortSignal.timeout(30_000),

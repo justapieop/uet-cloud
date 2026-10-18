@@ -12,7 +12,7 @@ function createProvider(context: TestContext): GitHubProvider {
     GITHUB_APP_CLIENT_ID: "Iv1.example",
     GITHUB_APP_PRIVATE_KEY_NAME: "github-app-key",
   });
-  return new GitHubProvider(kms, config);
+  return new GitHubProvider(kms, config, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
 }
 
 test("installation token uses a KMS-signed JWT and repository-limited read permissions", async (context: TestContext): Promise<void> => {
@@ -26,7 +26,7 @@ test("installation token uses a KMS-signed JWT and repository-limited read permi
   const provider: GitHubProvider = new GitHubProvider(kms, new ConfigService({
     GITHUB_APP_CLIENT_ID: "Iv1.example",
     GITHUB_APP_PRIVATE_KEY_NAME: "github-app-key",
-  }));
+  }), (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   const before: number = Math.floor(Date.now() / 1000);
   const requests: string[] = [];
   context.mock.method(globalThis, "fetch", async (url: string, init: RequestInit): Promise<Response> => {

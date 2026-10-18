@@ -5,10 +5,11 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { c, t, type ReadEntry } from "tar";
+import type { DockerBuildRequest, RunRequestUnion } from "@azure/arm-containerregistrytasks";
 import { ConfigService } from "@nestjs/config";
 import { BuildAccessDenied, InvalidBuildInput, TriggerBuildCase, type BuildRepository, type PipelineBuildPort } from "@kumo/application";
 import { Build } from "@kumo/domain";
-import { AcrProvider } from "../dist/azure/acr.js";
+import { AcrProvider, type AcrClient } from "../dist/azure/acr.js";
 import { GitHubProvider } from "../dist/github/provider.js";
 import { KmsProvider } from "../dist/azure/kms.js";
 import { parseGitHubRepository } from "../dist/github/repository.js";
@@ -47,14 +48,14 @@ test("build context removes GitHub's archive prefix and rejects a missing Docker
 });
 
 test("quick build uploads source then schedules a push without creating a task", async (context: TestContext): Promise<void> => {
-  const provider: AcrProvider = new AcrProvider(new ConfigService({
+  const config: ConfigService = new ConfigService({
     AZURE_SUBSCRIPTION_ID: "00000000-0000-0000-0000-000000000000",
     AZURE_CONTAINER_REGISTRY_NAME: "registry",
     AZURE_CONTAINER_REGISTRY_SERVER: "registry.azurecr.io",
     AZURE_RG_NAME: "platform-rg",
-  }));
+  });
   const calls: string[] = [];
-  Object.defineProperty(provider, "acrManager", { value: {
+  const client: AcrClient = {
     registries: {
       getBuildSourceUploadUrl: async (rg: string, registry: string): Promise<{ uploadUrl: string; relativePath: string }> => {
         assert.equal(rg, "platform-rg");
@@ -62,7 +63,8 @@ test("quick build uploads source then schedules a push without creating a task",
         calls.push("upload-location");
         return { uploadUrl: "https://storage.example/source?sig=secret", relativePath: "context/source.tar.gz" };
       },
-      scheduleRun: async (_rg: string, _registry: string, request: { type: string; sourceLocation: string; isPushEnabled: boolean; imageNames: string[] }): Promise<{ properties: { runId: string; status: string } }> => {
+      scheduleRun: async (_rg: string, _registry: string, runRequest: RunRequestUnion): Promise<{ properties: { runId: string; status: string } }> => {
+        const request: DockerBuildRequest = runRequest as DockerBuildRequest;
         calls.push("schedule");
         assert.equal(request.type, "DockerBuildRequest");
         assert.equal(request.sourceLocation, "context/source.tar.gz");
@@ -75,7 +77,7 @@ test("quick build uploads source then schedules a push without creating a task",
         return { properties: { runId: "ca1", status: "Queued" } };
       },
     },
-  } });
+  };
   context.mock.method(globalThis, "fetch", async (_url: string, options: RequestInit): Promise<Response> => {
     calls.push("upload");
     assert.equal(options.method, "PUT");
@@ -83,6 +85,7 @@ test("quick build uploads source then schedules a push without creating a task",
     assert.ok(options.body instanceof ArrayBuffer);
     return new Response(null, { status: 201 });
   });
+  const provider: AcrProvider = new AcrProvider(config, client, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   const result: unknown = await provider.triggerBuild({
     archive: await sourceArchive(), dockerFilePath: "Dockerfile", imageName: "app", userId: "123", tag: "unique-tag",
   });
@@ -117,7 +120,7 @@ test("use case preserves the requested tag and gives each build a unique trackin
 
 test("source download denies another user's repository before reading its source", async (context: TestContext): Promise<void> => {
   const kms: KmsProvider = Object.create(KmsProvider.prototype) as KmsProvider;
-  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }));
+  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }), (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   context.mock.method(github, "getRepositoryAccessToken", async (): Promise<string> => "installation-token");
   const calls: string[] = [];
   context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
@@ -132,7 +135,7 @@ test("source download denies another user's repository before reading its source
 
 test("source download pins the commit and keeps the token off the archive redirect", async (context: TestContext): Promise<void> => {
   const kms: KmsProvider = Object.create(KmsProvider.prototype) as KmsProvider;
-  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }));
+  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }), (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   context.mock.method(github, "getRepositoryAccessToken", async (): Promise<string> => "installation-token");
   const sha: string = "a".repeat(40);
   context.mock.method(globalThis, "fetch", async (value: string | URL, options: RequestInit): Promise<Response> => {

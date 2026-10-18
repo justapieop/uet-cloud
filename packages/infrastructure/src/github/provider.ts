@@ -1,9 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { KmsProvider } from "../azure/kms.js";
+import type { KmsProvider } from "../azure/kms.js";
 import { BuildAccessDenied, BuildProviderError, InvalidBuildInput, type BuildSource, type BuildSourceInput, type RepositoryBuildSourcePort } from "@kumo/application";
 import { parseGitHubRepository, type GitHubRepository } from "./repository.js";
 import { runBuildStep } from "../build-errors.js";
+import type { HttpTransport } from "../external-clients.js";
 
 const GITHUB_API_VERSION: string = "2026-03-10";
 const REQUEST_TIMEOUT_MS: number = 30_000;
@@ -14,8 +15,9 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
   private readonly keyName: string;
 
   public constructor(
-    private readonly kmsClient: KmsProvider,
+    private readonly kmsClient: Pick<KmsProvider, "sign">,
     configService: ConfigService,
+    private readonly http: HttpTransport,
   ) {
     this.clientId = configService.get<string>("GITHUB_APP_CLIENT_ID")
       ?? configService.getOrThrow<string>("GITHUB_OAUTH2_CLIENT_ID");
@@ -51,7 +53,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     });
     const jwt: string = `${signingInput}.${signature}`;
 
-    const installationResponse: Response = await fetch(
+    const installationResponse: Response = await this.http(
       `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`,
       {
         method: "GET",
@@ -86,7 +88,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     }
     const installationId: number = installation.id;
 
-    const response: Response = await fetch(
+    const response: Response = await this.http(
       `https://api.github.com/app/installations/${installationId}/access_tokens`,
       {
         method: "POST",
@@ -177,7 +179,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
       throw new BuildProviderError("GitHub returned an unexpected archive download location");
     }
     // Do not forward the GitHub token to the redirected archive host.
-    const response: Response = await fetch(downloadUrl, {
+    const response: Response = await this.http(downloadUrl, {
       redirect: "error",
       signal: AbortSignal.timeout(120_000),
     });
@@ -205,7 +207,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
   }
 
   private githubRequest(path: string, token: string): Promise<Response> {
-    return fetch(`https://api.github.com${path}`, {
+    return this.http(`https://api.github.com${path}`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",

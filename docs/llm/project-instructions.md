@@ -55,3 +55,5 @@ Do not write anything into README.md until told to do so.
 - Consider the effect of proposals on the PaaS as a whole, including its frontend client, users, Azure hosting, ACA deployment workflow, and Clean Architecture boundaries.
 - Do not infer specific Azure services, languages, frameworks, tenancy models, deployment flows, or security requirements unless the user or project documents establish them.
 - Keep this instruction file focused on durable LLM guidance and technical conventions. Put product facts in the project brief.
+
+- External SDK clients, credentials, and HTTP transports must be supplied to infrastructure providers as constructor dependencies. Construct clients in Nest module factories, register explicit tokens for interface dependencies, and avoid constructor fallbacks that create real clients. See `../provider-dependencies.md` for the current wiring.

@@ -1,11 +1,14 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
+import { ConfigService } from "@nestjs/config";
+import { AppConfigModule } from "./AppConfig.module.js";
+import { ExternalClientsModule } from "./ExternalClients.module.js";
+import { GitHubModule } from "./GitHub.module.js";
 import { GetBuildCase, GetBuildSourceCase, ProcessBuildCase, TriggerBuildCase } from "@kumo/application";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import {
+  AZURE_CREDENTIAL, HTTP_TRANSPORT, type AzureCredential, type HttpTransport,
   AzurePipelinesProvider,
   BuildWorker,
-  GitHubModule,
   GitHubProvider,
   InfraBuild,
   InfraBuildRepository,
@@ -13,9 +16,14 @@ import {
 } from "@kumo/infrastructure";
 
 @Module({
-  imports: [ConfigModule, GitHubModule, TypeOrmModule.forFeature([InfraBuild])],
+  imports: [AppConfigModule, ExternalClientsModule, GitHubModule, TypeOrmModule.forFeature([InfraBuild])],
   providers: [
-    AzurePipelinesProvider,
+    {
+      provide: AzurePipelinesProvider,
+      useFactory: (config: ConfigService, credential: AzureCredential, http: HttpTransport): AzurePipelinesProvider =>
+        new AzurePipelinesProvider(config, credential, http),
+      inject: [ConfigService, AZURE_CREDENTIAL, HTTP_TRANSPORT],
+    },
     SourceArchiveProvider,
     InfraBuildRepository,
     BuildWorker,
