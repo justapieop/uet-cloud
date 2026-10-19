@@ -545,6 +545,31 @@ export class Reliability1792272000001 implements MigrationInterface {
   }
 }
 
+export class UserStripeCustomer1792368000000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("users", new TableColumn({
+      name: "stripe_customer_id", type: "varchar", length: "255", isNullable: true, collation: "Latin1_General_100_BIN2",
+    }));
+    await queryRunner.query("CREATE UNIQUE INDEX UQ_users_stripe_customer_id ON users (stripe_customer_id) WHERE stripe_customer_id IS NOT NULL");
+    await queryRunner.createTable(new Table({
+      name: "stripe_customer_links",
+      columns: [
+        { name: "user_id", type: "nvarchar", length: "255", isPrimary: true },
+        { name: "operation_id", type: "uniqueidentifier", isUnique: true },
+        { name: "first_attempt_at", type: "datetime2", precision: 7, default: "SYSUTCDATETIME()" },
+        { name: "lease_owner", type: "uniqueidentifier", isNullable: true },
+        { name: "lease_expires_at", type: "datetime2", precision: 7, isNullable: true },
+      ],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("stripe_customer_links");
+    await queryRunner.query("DROP INDEX UQ_users_stripe_customer_id ON users");
+    await queryRunner.dropColumn("users", "stripe_customer_id");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -556,5 +581,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Plans1792108800002,
   PlanActive1792108800003,
   Reliability1792272000001,
+  UserStripeCustomer1792368000000,
 ];
 

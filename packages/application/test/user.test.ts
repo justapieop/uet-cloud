@@ -9,6 +9,7 @@ function createRepositories(savedUsers: User[]): UnitOfWorkRepositories {
     users: {
       findById: async (id: string): Promise<User | null> =>
         savedUsers.find((user: User): boolean => user.id === id) ?? null,
+      findByIdForUpdate: async (id: string): Promise<User | null> => savedUsers.find((user: User): boolean => user.id === id) ?? null,
       save: async (user: User): Promise<void> => { savedUsers.push(user); },
       exists: async (id: string): Promise<boolean> =>
         savedUsers.some((user: User): boolean => user.id === id),
@@ -31,7 +32,7 @@ function createUnitOfWork(repositories: UnitOfWorkRepositories): UnitOfWork {
 test("createIfNotExists saves a missing user", async (): Promise<void> => {
   const savedUsers: User[] = [];
   const repositories: UnitOfWorkRepositories = createRepositories(savedUsers);
-  const useCases: CreateUserCase = new CreateUserCase(createUnitOfWork(repositories));
+  const useCases: CreateUserCase = new CreateUserCase(createUnitOfWork(repositories), { exec: async (id: string): Promise<User> => savedUsers.find((user: User): boolean => user.id === id)! });
 
   const created: User = await useCases.exec("user-1", "User One");
 
@@ -42,7 +43,7 @@ test("createIfNotExists saves a missing user", async (): Promise<void> => {
 test("createIfNotExists returns an existing user without another write", async (): Promise<void> => {
   const savedUsers: User[] = [];
   const repositories: UnitOfWorkRepositories = createRepositories(savedUsers);
-  const useCases: CreateUserCase = new CreateUserCase(createUnitOfWork(repositories));
+  const useCases: CreateUserCase = new CreateUserCase(createUnitOfWork(repositories), { exec: async (id: string): Promise<User> => savedUsers.find((user: User): boolean => user.id === id)! });
 
   const created: User = await useCases.exec("user-1", "User One");
   const existing: User = await useCases.exec("user-1", "Ignored Name");

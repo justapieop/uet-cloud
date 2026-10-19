@@ -12,6 +12,7 @@ test("GitHub strategy returns the user created in one unit of work", async (): P
   const repositories: UnitOfWorkRepositories = {
     users: {
       findById: async (): Promise<User | null> => null,
+      findByIdForUpdate: async (): Promise<User | null> => null,
       save: async (user: User): Promise<void> => { savedUsers.push(user); },
       exists: async (): Promise<boolean> => false,
     },
@@ -31,7 +32,7 @@ test("GitHub strategy returns the user created in one unit of work", async (): P
       ? "http://localhost:3000/auth/callback"
       : "test-value",
   } as unknown as ConfigService;
-  const provider: PassportProvider = new PassportProvider(configService, new CreateUserCase(unitOfWork));
+  const provider: PassportProvider = new PassportProvider(configService, new CreateUserCase(unitOfWork, { exec: async (id: string): Promise<User> => savedUsers.find((user: User): boolean => user.id === id)! }));
   const profile: Profile = {
     provider: "github",
     id: "123",
