@@ -116,7 +116,7 @@ export class DeploymentResponseDto {
   @Expose() @ApiProperty() public readonly name: string;
   @Expose({ name: "target_port" }) @ApiProperty({ name: "target_port", type: Number, nullable: true }) public readonly targetPort: number | null;
   @Expose({ name: "additional_ports" }) @ApiProperty({ name: "additional_ports", type: [AdditionalDeploymentPortResponseDto] }) public readonly additionalPorts: AdditionalDeploymentPortResponseDto[];
-  @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
+  @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
   @Expose() @ApiProperty({ type: String, nullable: true }) public readonly image: string | null;
   @Expose({ name: "build_id" }) @ApiProperty({ name: "build_id", type: String, nullable: true }) public readonly buildId: string | null;
   @Expose({ name: "resource_id" }) @ApiProperty({ name: "resource_id", type: String, nullable: true }) public readonly resourceId: string | null;
