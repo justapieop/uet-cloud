@@ -3,7 +3,6 @@ import { Navbar } from "@/widgets/navbar";
 import { DEPLOYMENT_STATUSES, type Deployment, type DeploymentFilters as Filters } from "@/entities/deployment";
 import { getDeployments, type DeploymentsResult } from "@/entities/deployment/server";
 import { DeploymentFilters } from "@/features/filter-deployments";
-import { DeploymentActionButton } from "@/features/manage-deployment";
 import { LoginButton } from "@/features/auth";
 
 interface DashboardPageProps {
@@ -12,7 +11,7 @@ interface DashboardPageProps {
 
 const STATUS_STYLES: Readonly<Record<Deployment["status"], string>> = {
   PENDING: "text-amber-300", PROVISIONING: "text-blue-300",
-  RUNNING: "text-emerald-300", STOPPED: "text-amber-400", FAILED: "text-red-300", DELETED: "text-muted-text",
+  RUNNING: "text-emerald-300", FAILED: "text-red-300", DELETED: "text-muted-text",
 };
 
 function formatDate(value: string): string {
@@ -78,11 +77,11 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
             </div>
           ) : (
               <div className="overflow-x-auto">
-                <table className="w-full table-fixed text-left text-sm min-w-[960px]">
+                <table className="w-full table-fixed text-left text-sm min-w-[880px]">
                   <caption className="sr-only">Your deployments, newest first</caption>
-                  <colgroup><col className="w-[30%]" /><col className="w-[14%]" /><col className="w-[12%]" /><col className="w-[18%]" /><col className="w-[14%]" /><col className="w-[12%]" /></colgroup>
+                  <colgroup><col className="w-[34%]" /><col className="w-[15%]" /><col className="w-[15%]" /><col className="w-[20%]" /><col className="w-[16%]" /></colgroup>
                   <thead className="border-b border-surface-border bg-white/[0.015] text-[11px] text-muted-text">
-                    <tr>{["Application", "Status", "Region", "Configuration", "Last updated", "Actions"].map((heading: string): JSX.Element => <th key={heading} scope="col" className="px-6 py-3.5 font-medium">{heading}</th>)}</tr>
+                    <tr>{["Application", "Status", "Region", "Configuration", "Last updated"].map((heading: string): JSX.Element => <th key={heading} scope="col" className="px-6 py-3.5 font-medium">{heading}</th>)}</tr>
                   </thead>
                   <tbody className="divide-y divide-surface-border">
                     {result.deployments.map((deployment: Deployment): JSX.Element => (
@@ -101,7 +100,6 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
                         <td className="px-6 py-5 font-mono text-[11px] text-muted-text">{deployment.region ?? "—"}</td>
                         <td className="px-6 py-5"><p className="whitespace-nowrap text-xs text-muted-text">{deployment.max_vcpu ?? "—"} vCPU <span className="mx-1 text-muted-dark">/</span> {deployment.max_memory ?? "—"} GiB</p><p className="mt-1.5 text-[11px] text-muted-dark">{deployment.min_scaling ?? "—"}–{deployment.max_scaling ?? "—"} replicas</p></td>
                         <td className="px-6 py-5 text-[11px] leading-5 text-muted-text"><time dateTime={deployment.updated_at}>{formatDate(deployment.updated_at)}</time><span className="block text-[10px] text-muted-dark">UTC</span></td>
-                        <td className="px-6 py-5"><DeploymentActionButton id={deployment.id} status={deployment.status} /></td>
                       </tr>
                     ))}
                   </tbody>

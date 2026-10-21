@@ -158,40 +158,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/deployments/{id}/start": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start an owned stopped container deployment */
-        post: operations["DeploymentsController_start"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/deployments/{id}/stop": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Stop an owned running container deployment */
-        post: operations["DeploymentsController_stop"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -291,7 +257,7 @@ export interface components {
             target_port: number | null;
             additional_ports: components["schemas"]["AdditionalDeploymentPortResponseDto"][];
             /** @enum {string} */
-            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "FAILED" | "DELETED";
             image: string | null;
             build_id: string | null;
             resource_id: string | null;
@@ -541,7 +507,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter by deployment status */
-                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "FAILED" | "DELETED";
                 /** @description Case-insensitive literal substring of the deployment name */
                 name?: string;
                 /** @description Exact requested region saved on the deployment */
@@ -656,104 +622,6 @@ export interface operations {
             };
             /** @description Deployment not found for this user */
             404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DeploymentsController_start: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponseDto"];
-                };
-            };
-            /** @description No authenticated session or suspended user */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Deployment not found for this user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Deployment is not in a stopped state */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Azure failed to start the container app */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DeploymentsController_stop: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponseDto"];
-                };
-            };
-            /** @description No authenticated session or suspended user */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Deployment not found for this user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Deployment is not in a running state */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Azure failed to stop the container app */
-            502: {
                 headers: {
                     [name: string]: unknown;
                 };
