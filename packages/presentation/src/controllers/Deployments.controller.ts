@@ -47,7 +47,12 @@ import {
   ApiOperation,
   ApiTags,
 } from "@nestjs/swagger";
+import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, SubscriptionCheckUnavailable, DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
+import { Permission, InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException, ServiceUnavailableException } from "@nestjs/common";
+import { ApiServiceUnavailableResponse, ApiHeader, ApiUnprocessableEntityResponse, ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
+import { RequirePermissions } from "../common/RequirePermissions.decorator.js";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
 import { ListDeploymentsQueryDto } from "../dto/ListDeploymentsQuery.dto.js";
@@ -56,7 +61,7 @@ import { CacheRead, RouteReadCache, UserReadCacheInterceptor } from "../common/R
 @ApiTags("deployments")
 @Controller("deployments")
 @UseGuards(LoggedInGuard)
-@ApiForbiddenResponse({ description: "No authenticated session or suspended user" })
+@ApiForbiddenResponse({ description: "No authenticated session, inactive or suspended user, or required permission missing" })
 export class DeploymentsController {
   public constructor(
     private readonly createDeployment: CreateDeploymentCase,
@@ -67,6 +72,7 @@ export class DeploymentsController {
   ) {}
 
   @Post()
+  @RequirePermissions(Permission.DeploymentCreate)
   @Idempotent({ required: true })
   @ApiHeader({ name: "Idempotency-Key", required: true, description: "Unique key per deployment request; reuse it for retries (1-255 printable ASCII characters)" })
   @ApiUnprocessableEntityResponse({ description: "Idempotency-Key reused with a different request" })
@@ -75,7 +81,9 @@ export class DeploymentsController {
   @ApiOperation({ summary: "Queue a repository build and deploy its successful image" })
   @ApiAcceptedResponse({ type: DeploymentResponseDto })
   @ApiBadRequestResponse({ description: "Invalid deployment input; memory must equal twice vCPU" })
-  @ApiConflictResponse({ description: "Deployment name already exists for this user" })
+  @ApiConflictResponse({ description: "Deployment name already exists or plan quota exceeded" })
+  @ApiForbiddenResponse({ description: "DeploymentCreate permission and an active Stripe subscription linked to an active Kumo plan are required" })
+  @ApiServiceUnavailableResponse({ description: "Stripe subscription verification is temporarily unavailable" })
   public async create(@Req() request: Request, @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) input: CreateDeploymentDto): Promise<DeploymentResponseDto> {
     const user: User = this.owner(request);
     try {
@@ -94,6 +102,9 @@ export class DeploymentsController {
       await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
     } catch (error: unknown) {
+      if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
+      if (error instanceof DeploymentQuotaExceeded) throw new ConflictException({ code: "DEPLOYMENT_QUOTA_EXCEEDED", message: error.message });
+      if (error instanceof SubscriptionCheckUnavailable) throw new ServiceUnavailableException(error.message);
       if (error instanceof DeploymentRequestKeyReused) throw new UnprocessableEntityException({ code: "IDEMPOTENCY_KEY_REUSED", message: error.message });
       if (error instanceof DeploymentRequestInProgress) throw new ConflictException({ code: "IDEMPOTENCY_KEY_IN_USE", message: error.message });
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
@@ -145,6 +156,7 @@ export class DeploymentsController {
   }
 
   @Get(":id")
+  @RequirePermissions(Permission.DeploymentRead)
   @Header("Cache-Control", "private, no-store")
   @CacheRead("deployments", 2000)
   @UseInterceptors(UserReadCacheInterceptor)
@@ -162,6 +174,7 @@ export class DeploymentsController {
   }
 
   @Get()
+  @RequirePermissions(Permission.DeploymentRead)
   @Header("Cache-Control", "private, no-store")
   @CacheRead("deployments", 2000)
   @UseInterceptors(UserReadCacheInterceptor)

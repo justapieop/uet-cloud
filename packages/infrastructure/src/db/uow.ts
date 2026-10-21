@@ -5,6 +5,7 @@ import { InfraDeploymentRequestRepository } from "./repositories/deployment-requ
 import { InfraRole, InfraRoleRepository } from "./repositories/role.js";
 import { InfraUser, InfraUserRepository } from "./repositories/user.js";
 import { InfraDeployment, InfraDeploymentRepository } from "./repositories/deployment.js";
+import { InfraPlan, InfraPlanRepository } from "./repositories/plan.js";
 
 @Injectable()
 export class TypeOrmUnitOfWork implements UnitOfWork {
@@ -18,6 +19,7 @@ export class TypeOrmUnitOfWork implements UnitOfWork {
         roles: new InfraRoleRepository(manager.getRepository(InfraRole)),
         deployment: new InfraDeploymentRepository(manager.getRepository(InfraDeployment)),
         deploymentRequests: new InfraDeploymentRequestRepository(manager),
+        plans: new InfraPlanRepository(manager.getRepository(InfraPlan)),
       };
 
       return work(repositories);

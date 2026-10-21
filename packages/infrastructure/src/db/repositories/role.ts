@@ -27,6 +27,9 @@ export class InfraRole {
   })
   public readonly createdAt!: Date;
 
+  @Column({ type: "bit", nullable: false, default: true })
+  public readonly active!: boolean;
+
   @Column({
     type: "bigint",
     nullable: false,
@@ -62,7 +65,17 @@ export class InfraRoleRepository implements RoleRepository {
       name: dbRole.name,
       permission: dbRole.permission,
       createdAt: dbRole.createdAt,
+      active: dbRole.active,
     });
+  }
+
+  public async findActiveByUserId(userId: string): Promise<Role[]> {
+    const records: InfraRole[] = await this.roleRepository.createQueryBuilder("role")
+      .innerJoin("user_roles", "assignment", "assignment.role_id = role.id")
+      .where("assignment.user_id = :userId", { userId })
+      .andWhere("role.active = :active", { active: true })
+      .orderBy("role.id", "ASC").getMany();
+    return records.map((record: InfraRole): Role => new Role({ ...record }));
   }
 
   public async save(role: Role): Promise<void> {
@@ -77,6 +90,7 @@ export class InfraRoleRepository implements RoleRepository {
       name: role.name,
       permission: permissionBits,
       createdAt: role.createdAt,
+      active: role.active,
     });
 
     await this.roleRepository.save(dbRole);

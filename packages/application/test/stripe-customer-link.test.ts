@@ -6,6 +6,7 @@ import { StripeCustomerLinkReconciliationRequired, type StripeCustomerGateway, t
 import type { UnitOfWork, UnitOfWorkRepositories } from "../dist/ports/uow.js";
 import { LinkStripeCustomerCase } from "../dist/use-cases/user/LinkStripeCustomer.case.js";
 import { CreateUserCase } from "../dist/use-cases/user/CreateUser.case.js";
+import { emptyRepositories } from "./support/repositories.ts";
 
 class MemoryLinks implements StripeCustomerLinkRepository {
   public user: User = new User({ id: "123", displayName: "Alice", suspended: false });
@@ -101,13 +102,14 @@ test("creation and legacy-user login link only after the UoW commits", async ():
   let inTransaction: boolean = false;
   let writes: number = 0;
   const repositories: UnitOfWorkRepositories = {
+    ...emptyRepositories(),
     users: {
       findByIdForUpdate: async (): Promise<User | null> => saved,
       findById: async (): Promise<User | null> => saved,
       exists: async (): Promise<boolean> => saved !== null,
       save: async (user: User): Promise<void> => { saved = user; writes++; },
     },
-  } as UnitOfWorkRepositories;
+  };
   const uow: UnitOfWork = {
     async run<T>(work: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> {
       inTransaction = true;

@@ -4,6 +4,14 @@ export interface StripeCustomerGateway {
   createCustomer(userId: string, idempotencyKey: string): Promise<{ readonly id: string }>;
 }
 
+export interface StripeSubscriptionGateway {
+  getActiveSubscriptionProductIds(customerId: string): Promise<readonly string[]>;
+}
+
+export class DeploymentSubscriptionRequired extends Error {}
+export class DeploymentQuotaExceeded extends Error {}
+export class SubscriptionCheckUnavailable extends Error {}
+
 export type StripeCustomerLinkClaim =
   | { readonly state: "linked"; readonly user: User }
   | { readonly state: "busy" }

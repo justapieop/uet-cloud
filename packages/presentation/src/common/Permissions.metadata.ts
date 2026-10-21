@@ -1,0 +1,1 @@
+export const REQUIRED_PERMISSIONS: symbol = Symbol("REQUIRED_PERMISSIONS");

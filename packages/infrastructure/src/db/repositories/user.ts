@@ -36,6 +36,9 @@ export class InfraUser {
   })
   public readonly suspended!: boolean;
 
+  @Column({ type: "bit", nullable: false, default: true })
+  public readonly active!: boolean;
+
   @Column({ name: "stripe_customer_id", type: "varchar", length: 255, nullable: true, collation: "Latin1_General_100_BIN2" })
   public readonly stripeCustomerId!: string | null;
 }
@@ -75,7 +78,7 @@ export class InfraUserRepository implements UserRepository {
   public async save(user: User): Promise<void> {
     // Linking owns stripe_customer_id. A stale domain instance must never clear or replace it.
     const dbUser: InfraUser = this.userRepository.create({
-      id: user.id, displayName: user.displayName, createdAt: user.createdAt, suspended: user.suspended,
+      id: user.id, displayName: user.displayName, createdAt: user.createdAt, suspended: user.suspended, active: user.active,
     });
 
     await this.userRepository.save(dbUser);

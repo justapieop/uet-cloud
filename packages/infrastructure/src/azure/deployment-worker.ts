@@ -1,6 +1,6 @@
-import { ProcessDeploymentCase } from "@kumo/application";
+import { ProcessDeploymentCase, type DeploymentQueueRepository } from "@kumo/application";
 import type { Deployment } from "@kumo/domain";
-import { Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InfraDeploymentRepository } from "../db/repositories/deployment.js";
 
@@ -13,8 +13,8 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
   private stopping: boolean = false;
 
   public constructor(
-    private readonly repository: InfraDeploymentRepository,
-    private readonly processDeployment: ProcessDeploymentCase,
+    @Inject(InfraDeploymentRepository) private readonly repository: DeploymentQueueRepository,
+    @Inject(ProcessDeploymentCase) private readonly processDeployment: Pick<ProcessDeploymentCase, "exec">,
     config: ConfigService,
   ) {
     this.staleAfterMs = Number(config.get<string>("AZURE_DEPLOYMENT_TIMEOUT_MS", "3600000")) + 60_000;
@@ -41,7 +41,8 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
 
   private async drain(): Promise<void> {
     await this.repository.failStaleProvisioning(new Date(Date.now() - this.staleAfterMs));
+    if (this.stopping) return;
     const deployment: Deployment | null = await this.repository.claimNextPending();
-    if (deployment && !this.stopping) await this.processDeployment.exec(deployment);
+    if (deployment) await this.processDeployment.exec(deployment);
   }
 }

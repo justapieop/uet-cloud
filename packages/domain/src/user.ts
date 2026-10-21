@@ -6,6 +6,7 @@ export class User extends Domain<UserDetails> {
   public readonly displayName: string;
   public readonly createdAt: Date;
   public readonly suspended: boolean;
+  public readonly active: boolean;
   public readonly stripeCustomerId: string | null;
 
   public constructor(details: UserDetails) {
@@ -15,10 +16,14 @@ export class User extends Domain<UserDetails> {
     this.displayName = details.displayName;
     this.createdAt = details.createdAt ?? new Date();
     this.suspended = details.suspended;
+    this.active = details.active ?? true;
     this.stripeCustomerId = details.stripeCustomerId ?? null;
   }
 
   public validate(): InvalidDomainParams | null {
+    if (this.details.active !== undefined && typeof this.details.active !== "boolean") {
+      return new InvalidDomainParams("User.active must be a boolean");
+    }
     if (isBlankStr(this.details.id)) { 
       return new InvalidDomainParams(`User.id must not be blank`);
     }
@@ -41,5 +46,6 @@ export interface UserDetails {
   displayName: string;
   createdAt?: Date;
   suspended: boolean;
+  active?: boolean;
   stripeCustomerId?: string | null;
 }

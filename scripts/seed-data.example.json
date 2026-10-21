@@ -1,0 +1,17 @@
+{
+  "plans": [
+    {
+      "id": "example-starter",
+      "name": "Example Starter",
+      "price": 5,
+      "vcpu": 0.5,
+      "memory": 1,
+      "deployments": 1,
+      "disk": 10,
+      "maxReplicas": 1,
+      "active": false,
+      "stripeProductId": null
+    }
+  ],
+  "assignments": []
+}

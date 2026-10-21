@@ -3,15 +3,19 @@ import { test } from "node:test";
 import { User } from "@kumo/domain";
 import { FindUserByIdCase, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
 import { SessionSerializer } from "../dist/auth/serializer.js";
+import { emptyRepositories } from "../../application/test/support/repositories.ts";
 
 function createSerializer(findById: (id: string) => Promise<User | null>): SessionSerializer {
   const repositories: UnitOfWorkRepositories = {
+    ...emptyRepositories(),
     users: {
       findById,
+      findByIdForUpdate: async (): Promise<never> => { throw new Error("Session restoration must not lock users"); },
       save: async (): Promise<void> => { assert.fail("Session restoration must not save users"); },
       exists: async (): Promise<boolean> => { assert.fail("Session restoration must only find users"); },
     },
     roles: {
+      ...emptyRepositories().roles,
       findById: async (): Promise<null> => null,
       save: async (): Promise<void> => {},
     },

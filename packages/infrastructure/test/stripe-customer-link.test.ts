@@ -34,7 +34,7 @@ function fixture(): Fixture {
       return [];
     }
     if (sql.startsWith("UPDATE stripe_customer_links SET lease_owner = NULL")) {
-      if (state.operation?.lease_owner === params[1]) { state.operation.lease_owner = null; state.operation.lease_expires_at = null; }
+      if (state.operation && state.operation.lease_owner === params[1]) { state.operation.lease_owner = null; state.operation.lease_expires_at = null; }
       return [];
     }
     if (sql.startsWith("UPDATE users SET stripe_customer_id")) { assert.equal(state.user.stripeCustomerId, null); state.user.stripeCustomerId = params[1] as string; return []; }

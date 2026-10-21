@@ -15,18 +15,19 @@ import {
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, DeploymentWorker, InfraDeploymentRepository, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { ExternalClientsModule } from "./ExternalClients.module.js";
 import { DatabaseModule } from "./Database.module.js";
 import { BuildModule } from "./Build.module.js";
+import { StripeModule } from "./Stripe.module.js";
 import { DeploymentController } from "../controllers/Deployment.controller.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 
 @Module({
-  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule],
+  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule],
   controllers: [
     DeploymentController,
     BuildSourceController,
@@ -84,11 +85,13 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
       provide: CreateDeploymentCase,
       useFactory: (
         uow: UnitOfWork,
+        subscriptions: StripeProvider,
       ): CreateDeploymentCase => {
-        return new CreateDeploymentCase(uow);
+        return new CreateDeploymentCase(uow, subscriptions);
       },
       inject: [
         UNIT_OF_WORK,
+        StripeProvider,
       ],
     },
     {

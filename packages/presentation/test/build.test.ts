@@ -4,19 +4,22 @@ import { test, type TestContext } from "node:test";
 import { Module, ClassSerializerInterceptor, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { SwaggerModule, DocumentBuilder, type OpenAPIObject } from "@nestjs/swagger";
-import { GetBuildCase, GetBuildSourceCase } from "@kumo/application";
-import { Build, type BuildDetails } from "@kumo/domain";
+import { CheckPermissionsCase, GetBuildCase, GetBuildSourceCase } from "@kumo/application";
+import { Build, type BuildDetails, type Role } from "@kumo/domain";
 import { createHash } from "node:crypto";
 import { DeploymentController } from "../dist/controllers/Deployment.controller.js";
 import { BuildSourceController } from "../dist/controllers/BuildSource.controller.js";
+import { CACHE_MANAGER } from "@nestjs/cache-manager";
+import { RouteReadCache } from "../dist/common/ReadCache.js";
 
 test("removed build trigger returns 404 and is absent from OpenAPI", async (context: TestContext): Promise<void> => {
   class TestModule {}
   Module({
     controllers: [DeploymentController],
-    providers: [{ provide: GetBuildCase, useValue: { exec: async (): Promise<never> => { throw new Error("Build lookup must not run for the removed trigger"); } } }],
+    // No grants are needed to verify that the removed route is absent.
+    providers: [{ provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => [] }) }, RouteReadCache, { provide: CACHE_MANAGER, useValue: { get: async (): Promise<undefined> => undefined, set: async (): Promise<void> => {} } }, { provide: GetBuildCase, useValue: { exec: async (): Promise<never> => { throw new Error("Build lookup must not run for the removed trigger"); } } }],
   })(TestModule);
-  const app: INestApplication = await NestFactory.create(TestModule, { logger: false });
+  const app: INestApplication = await NestFactory.create(TestModule, { logger: false, abortOnError: false });
   context.after(async (): Promise<void> => { await app.close(); });
   await app.listen(0, "127.0.0.1");
   const response: Response = await fetch(`${await app.getUrl()}/deployment/build`, { method: "POST" });
@@ -29,7 +32,7 @@ test("pipeline endpoints require their assigned bearer token and never expose cr
   const token: string = "a".repeat(43);
   const id: string = "00000000-0000-4000-8000-000000000001";
   const details: BuildDetails = {
-    id, userId: "123", repo: "https://github.com/owner/repo", commitSha: "a".repeat(40),
+    id, userId: "123", repo: "https://github.com/owner/repo", commitSha: "a".repeat(40), ref: null, error: null,
     dockerFilePath: "Dockerfile", image: "registry.azurecr.io/app:v1.2.3", status: "QUEUED",
     sourceTokenHash: createHash("sha256").update(token).digest("hex"), sourceExpiresAt: new Date(Date.now() + 60_000),
     runId: "42", runUrl: "https://dev.azure.com/run/42", createdAt: new Date(), updatedAt: new Date(),
@@ -39,7 +42,7 @@ test("pipeline endpoints require their assigned bearer token and never expose cr
     findById: async (requested: string): Promise<Build | null> => requested === id ? new Build(details) : null,
     save: async (): Promise<void> => {},
   }, {
-    downloadBuildSource: async () => { downloads++; return { archive: new Uint8Array([1, 2, 3]), commitSha: details.commitSha }; },
+    downloadBuildSource: async () => { downloads++; assert.ok(details.commitSha); return { archive: new Uint8Array([1, 2, 3]), commitSha: details.commitSha }; },
   }, { prepare: async (archive: Uint8Array): Promise<Uint8Array> => archive });
   class SourceTestModule {}
   Module({ controllers: [BuildSourceController], providers: [{ provide: GetBuildSourceCase, useValue: sourceCase }] })(SourceTestModule);
