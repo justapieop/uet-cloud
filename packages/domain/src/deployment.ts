@@ -1,7 +1,7 @@
 import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 
-export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
+export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "FAILED" | "DELETED";
 
 export interface DeploymentPortMapping {
   readonly targetPort: number;

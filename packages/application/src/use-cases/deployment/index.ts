@@ -8,5 +8,3 @@ export * from "./GetBuildSource.case.js";
 export * from "./ProcessDeployment.case.js";
 export * from "./GetDeployment.case.js";
 export * from "./GetDeploymentMetrics.case.js";
-export * from "./StartDeployment.case.js";
-export * from "./StopDeployment.case.js";
