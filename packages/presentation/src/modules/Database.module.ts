@@ -14,6 +14,7 @@ import {
   InfraRole,
   InfraRoleRepository,
   InfraUser,
+  InfraUserRole,
   InfraUserRepository,
   InfraStripeCustomerLinkRepository,
   TypeOrmLoggerAdapter,
@@ -62,7 +63,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment, InfraPlan]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan]),
   ],
   providers: [
     InfraUserRepository,

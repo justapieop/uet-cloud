@@ -17,6 +17,7 @@ function createRepositories(savedUsers: User[]): UnitOfWorkRepositories {
         savedUsers.some((user: User): boolean => user.id === id),
     },
     roles: {
+      ...emptyRepositories().roles,
       findById: async (): Promise<Role | null> => null,
       save: async (): Promise<void> => {},
     },

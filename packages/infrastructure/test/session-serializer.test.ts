@@ -15,6 +15,7 @@ function createSerializer(findById: (id: string) => Promise<User | null>): Sessi
       exists: async (): Promise<boolean> => { assert.fail("Session restoration must only find users"); },
     },
     roles: {
+      ...emptyRepositories().roles,
       findById: async (): Promise<null> => null,
       save: async (): Promise<void> => {},
     },

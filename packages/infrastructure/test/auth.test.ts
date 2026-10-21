@@ -19,6 +19,7 @@ test("GitHub strategy returns the user created in one unit of work", async (): P
       exists: async (): Promise<boolean> => false,
     },
     roles: {
+      ...emptyRepositories().roles,
       findById: async (): Promise<Role | null> => null,
       save: async (): Promise<void> => {},
     },

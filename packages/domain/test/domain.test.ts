@@ -33,6 +33,22 @@ test("user preserves identity and display name", (): void => {
   assert.equal(user.displayName, "Alice");
 });
 
+test("user active defaults to true and preserves explicit false", (): void => {
+  assert.equal(createUser("123", "Alice").active, true);
+  assert.equal(new User({ id: "123", displayName: "Alice", suspended: false, active: true }).active, true);
+  const inactive: User = new User({ id: "123", displayName: "Alice", suspended: false, active: false });
+  assert.equal(inactive.active, false);
+  assert.equal(inactive.validate(), null);
+});
+
+test("user active rejects non-boolean construction values", (): void => {
+  const invalid: readonly unknown[] = [null, 0, 1, "true", "false", {}, []];
+  invalid.forEach((active: unknown): void => {
+    assert.throws((): User => new User({ id: "123", displayName: "Alice", suspended: false, active: active as boolean }),
+      (error: unknown): boolean => error instanceof InvalidDomainParams && error.message === "User.active must be a boolean");
+  });
+});
+
 test("Super grants copied permissions and permissions outside the catalog", (): void => {
   const role: Role = new Role({ id: "admin", name: "Admin", permission: 1n });
   const requested: Permission = { offset: 10, name: "Example", description: "Example permission", requires: [] };

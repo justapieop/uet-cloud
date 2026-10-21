@@ -606,6 +606,52 @@ export class PlanStripeProduct1792540800001 implements MigrationInterface {
   }
 }
 
+export class UserRoles1792540800002 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({
+      name: "user_roles",
+      columns: [
+        { name: "id", type: "uniqueidentifier", isPrimary: true, isGenerated: true, generationStrategy: "uuid", default: "NEWSEQUENTIALID()" },
+        { name: "user_id", type: "nvarchar", length: "255" },
+        { name: "role_id", type: "nvarchar", length: "255" },
+      ],
+      foreignKeys: [
+        new TableForeignKey({ name: "FK_user_roles_user_id", columnNames: ["user_id"], referencedTableName: "users", referencedColumnNames: ["id"], onDelete: "CASCADE" }),
+        new TableForeignKey({ name: "FK_user_roles_role_id", columnNames: ["role_id"], referencedTableName: "roles", referencedColumnNames: ["id"], onDelete: "CASCADE" }),
+      ],
+      indices: [
+        // A nonclustered unique index supports both 255-character IDs within SQL Server's key limit.
+        new TableIndex({ name: "UQ_user_roles_user_role", columnNames: ["user_id", "role_id"], isUnique: true }),
+        new TableIndex({ name: "IDX_user_roles_role_id", columnNames: ["role_id"] }),
+      ],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("user_roles");
+  }
+}
+
+export class UserActive1792540800003 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("users", new TableColumn({ name: "active", type: "bit", isNullable: false, default: 1 }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropColumn("users", "active");
+  }
+}
+
+export class RoleActive1792540800004 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("roles", new TableColumn({ name: "active", type: "bit", isNullable: false, default: 1 }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropColumn("roles", "active");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -620,5 +666,8 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   UserStripeCustomer1792368000000,
   UniqueDeploymentName1792540800000,
   PlanStripeProduct1792540800001,
+  UserRoles1792540800002,
+  UserActive1792540800003,
+  RoleActive1792540800004,
 ];
 

@@ -13,6 +13,10 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Users and roles have an `active` boolean in the domain and database, defaulting to true for new and existing records. Permission-protected routes require an active, unsuspended user and combine only active assigned roles. A permission decorator requires all listed permission bits, with the established Super override.
+
+- User-to-role assignments use a many-to-many `user_roles` link table. Each user/role pair is unique, and deleting either parent removes its links.
+
 - Deployment names are globally unique across all users, enforced in the database.
 - New deployment requests require an active subscription verified directly with Stripe using the user's linked Stripe Customer. Subscription product IDs map to active local plans through `plans.stripe_product_id`. Subscription registration is outside the current implementation scope.
 - Plan CPU and RAM quotas apply per deployment (per-replica allocation), with a separate per-deployment maximum replica limit (`plans.max_replicas`). The plan's deployment-count quota includes queued and provisioning deployments as well as running apps. Storage is capped when it is added to an instance later; deployment creation does not allocate storage.

@@ -2,11 +2,11 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test, type TestContext } from "node:test";
-import { DataSource, type DataSourceOptions } from "typeorm";
+import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
 import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
-import { Deployment, type DeploymentSpec } from "@kumo/domain";
-import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraUser, SqlServerIdempotencyStore, TypeOrmUnitOfWork } from "../dist/db/index.js";
+import { Deployment, Role, User, type DeploymentSpec } from "@kumo/domain";
+import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, InfraUserRole, SqlServerIdempotencyStore, TypeOrmUnitOfWork } from "../dist/db/index.js";
 
 const ENABLED: boolean = process.env.RUN_SQLSERVER_TESTS === "true";
 const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
@@ -22,7 +22,7 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     options: { encrypt: false, trustServerCertificate: true }, pool: { max: 20 }, logging: false,
   };
   const admin: DataSource = new DataSource({ ...options, database: "master" });
-  const source: DataSource = new DataSource({ ...options, database, entities: [InfraUser, InfraRole, InfraDeployment, InfraPlan], migrations: DATABASE_MIGRATIONS, synchronize: false });
+  const source: DataSource = new DataSource({ ...options, database, entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan], migrations: DATABASE_MIGRATIONS, synchronize: false });
   let created: boolean = false;
   context.after(async (): Promise<void> => {
     try {
@@ -65,6 +65,45 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
   });
   assert.ok(accepted!, "Acceptance race must produce a deployment");
 
+  await context.test("user active defaults to true and persists explicit false", async (): Promise<void> => {
+    const users: InfraUserRepository = new InfraUserRepository(source.getRepository(InfraUser));
+    const user: User | null = await users.findById("123");
+    assert.ok(user);
+    assert.equal(user.active, true);
+    await users.save(new User({ ...user, active: false }));
+    assert.equal((await users.findById("123"))?.active, false);
+  });
+
+  await context.test("user-role links enforce foreign keys, unique pairs and cascading parent deletion", async (): Promise<void> => {
+    const links: Repository<InfraUserRole> = source.getRepository(InfraUserRole);
+    await source.getRepository(InfraRole).save([
+      { id: "reader", name: "Reader", permission: 0n },
+      { id: "writer", name: "Writer", permission: 0n },
+    ]);
+    await links.insert([
+      { userId: "123", roleId: "reader" }, { userId: "123", roleId: "writer" }, { userId: "456", roleId: "reader" },
+    ]);
+    assert.equal(await links.countBy({ userId: "123" }), 2);
+    assert.equal(await links.countBy({ roleId: "reader" }), 2);
+    const roles: InfraRoleRepository = new InfraRoleRepository(source.getRepository(InfraRole));
+    await roles.save(new Role({ id: "inactive", name: "Inactive Super", permission: 1n, active: false }));
+    await roles.save(new Role({ id: "other-user", name: "Other user's role", permission: 4n }));
+    await links.insert([{ userId: "123", roleId: "inactive" }, { userId: "456", roleId: "other-user" }]);
+    assert.equal((await roles.findById("inactive"))?.active, false);
+    assert.deepEqual((await roles.findActiveByUserId("123")).map((role: Role): string => role.id), ["reader", "writer"]);
+    await source.getRepository(InfraRole).delete(["inactive", "other-user"]);
+    await assert.rejects(links.insert({ userId: "123", roleId: "reader" }));
+    await assert.rejects(links.insert({ userId: "missing", roleId: "reader" }));
+    await assert.rejects(links.insert({ userId: "123", roleId: "missing" }));
+    await source.getRepository(InfraRole).delete({ id: "writer" });
+    assert.equal(await links.countBy({ roleId: "writer" }), 0);
+    await source.getRepository(InfraUser).save({ id: "789", displayName: "Temporary user", suspended: false });
+    await links.insert({ userId: "789", roleId: "reader" });
+    await source.getRepository(InfraUser).delete({ id: "789" });
+    assert.equal(await links.countBy({ userId: "789" }), 0);
+    assert.equal(await links.count(), 2);
+  });
+
   await context.test("the database enforces global names and unique plan product mappings", async (): Promise<void> => {
     await assert.rejects(repository.save(new Deployment({ id: randomUUID(), userId: "456", name: accepted.name, spec: SPEC })), DeploymentAlreadyExists);
     await assert.rejects(source.getRepository(InfraPlan).save({ id: "duplicate", name: "Duplicate", price: 5, vcpu: 0.5, memory: 1, deployments: 1, disk: 10, stripeProductId: "prod_starter" }));
@@ -99,14 +138,25 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
   }
 
   await context.test("the plan migration rolls back and reapplies without editing historical migrations", async (): Promise<void> => {
-    await source.undoLastMigration({ transaction: "all" });
+    const planIndex: number = DATABASE_MIGRATIONS.findIndex((migration): boolean => migration.name === "PlanStripeProduct1792540800001");
+    assert.ok(planIndex >= 0);
+    // Rewind later migrations too so appending another migration cannot silently change this test's target.
+    for (let index: number = DATABASE_MIGRATIONS.length - 1; index >= planIndex; index -= 1) {
+      await source.undoLastMigration({ transaction: "all" });
+    }
     const runner: ReturnType<DataSource["createQueryRunner"]> = source.createQueryRunner();
     try {
       assert.equal(await runner.hasColumn("plans", "stripe_product_id"), false);
       assert.equal(await runner.hasColumn("plans", "max_replicas"), false);
+      assert.equal(await runner.hasTable("user_roles"), false);
+      assert.equal(await runner.hasColumn("users", "active"), false);
+      assert.equal(await runner.hasColumn("roles", "active"), false);
       await source.runMigrations({ transaction: "all" });
       assert.equal(await runner.hasColumn("plans", "stripe_product_id"), true);
       assert.equal(await runner.hasColumn("plans", "max_replicas"), true);
+      assert.equal(await runner.hasTable("user_roles"), true);
+      assert.equal(await runner.hasColumn("users", "active"), true);
+      assert.equal(await runner.hasColumn("roles", "active"), true);
     } finally { await runner.release(); }
   });
 });
