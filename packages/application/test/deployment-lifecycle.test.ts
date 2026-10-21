@@ -26,7 +26,7 @@ test("StartDeploymentCase starts a stopped deployment and updates status to RUNN
     ...emptyRepositories().deployment,
     findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
       stored && stored.id === id && stored.userId === userId ? stored : null,
-    update: async (deployment: Deployment): Promise<void> => {
+    updateProgress: async (deployment: Deployment): Promise<void> => {
       stored = deployment;
     },
   };
@@ -94,7 +94,7 @@ test("StopDeploymentCase stops a running deployment and updates status to STOPPE
     ...emptyRepositories().deployment,
     findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
       stored && stored.id === id && stored.userId === userId ? stored : null,
-    update: async (deployment: Deployment): Promise<void> => {
+    updateProgress: async (deployment: Deployment): Promise<void> => {
       stored = deployment;
     },
   };

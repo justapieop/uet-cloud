@@ -15,11 +15,13 @@ const RESULT: DeploymentProvisionResult = { buildId: "build", image: "registry/a
 
 function repository(writes: Deployment[]): DeploymentRepository {
   return {
+    ...emptyRepositories().deployment,
     findById: async (): Promise<Deployment> => CLAIMED,
     findByIdAndUserId: async (_id: string, userId: string): Promise<Deployment | null> => userId === "123" ? CLAIMED : null,
     findByUserId: async (): Promise<Deployment[]> => [CLAIMED],
     save: async (deployment: Deployment): Promise<void> => { writes.push(deployment); },
     update: async (deployment: Deployment): Promise<void> => { writes.push(deployment); },
+    updateProgress: async (deployment: Deployment): Promise<void> => { writes.push(deployment); },
     delete: async (): Promise<void> => {},
   };
 }

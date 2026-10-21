@@ -14,6 +14,22 @@ const BUILD: BuildDetails = { id: "build", userId: "123", repo: "https://github.
 
 async function flush(): Promise<void> { await new Promise<void>((resolve: () => void): void => { setImmediate(resolve); }); }
 
+test("idle deployment workers back off SQL claims and sweep once a minute", async (context: TestContext): Promise<void> => {
+  context.mock.timers.enable({ apis: ["setInterval", "Date"], now: 1_000_000 });
+  context.mock.method(Math, "random", (): number => 0.5);
+  let claims: number = 0;
+  let sweeps: number = 0;
+  const worker: DeploymentWorker = new DeploymentWorker({ ...emptyRepositories().deployment,
+    claimNextPending: async (): Promise<null> => { claims++; return null; },
+    failStaleProvisioning: async (): Promise<void> => { sweeps++; },
+  }, { exec: async (): Promise<never> => { throw new Error("Idle worker must not process work"); } }, new ConfigService());
+  worker.onApplicationBootstrap(); await flush();
+  for (let second: number = 0; second < 120; second++) { context.mock.timers.tick(1000); await flush(); }
+  assert.ok(claims <= 16, `Expected backed-off claims, got ${claims}`);
+  assert.equal(sweeps, 3);
+  await worker.onApplicationShutdown();
+});
+
 test("deployment worker avoids overlap, calculates stale cutoff and waits for active work on shutdown", async (context: TestContext): Promise<void> => {
   context.mock.timers.enable({ apis: ["setInterval", "Date"], now: 1_000_000 });
   let claims: number = 0;
@@ -83,6 +99,7 @@ test("build worker bounds its batches and stops polling on shutdown", async (con
   let processed: number = 0;
   let remaining: number = 12;
   const repository: BuildQueueRepository = {
+    insert: async (): Promise<void> => {}, update: async (): Promise<void> => {}, updateRun: async (): Promise<void> => {},
     findById: async (): Promise<null> => null, save: async (): Promise<void> => {},
     failStalePreparations: async (): Promise<void> => {},
     claimNextPending: async (): Promise<Build | null> => remaining-- > 0 ? new Build(BUILD) : null,

@@ -86,7 +86,7 @@ test("status refresh is limited to the owner and persists pipeline completion", 
   };
   const useCase: GetBuildCase = new GetBuildCase({
     findById: async (): Promise<Build> => stored,
-    save: async (build: Build): Promise<void> => { stored = build; },
+    updateRun: async (_id, _userId, _status, run): Promise<void> => { stored = new Build({ ...stored.getDetails(), ...run }); },
   }, pipeline);
   await assert.rejects(useCase.exec(stored.getDetails().id, "other-user"), BuildNotFound);
   assert.equal(polls, 0);

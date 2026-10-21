@@ -116,9 +116,10 @@ test("quick build uploads source then schedules a push without creating a task",
 test("use case preserves the requested tag and gives each build a unique tracking ID", async (): Promise<void> => {
   const tags: string[] = [];
   const records: Map<string, Build> = new Map<string, Build>();
-  const repository: BuildRepository = {
+  const repository: BuildRepository & { insert(build: Build): Promise<void> } = {
     findById: async (id: string): Promise<Build | null> => records.get(id) ?? null,
     save: async (build: Build): Promise<void> => { records.set(build.getDetails().id, build); },
+    insert: async (build: Build): Promise<void> => { records.set(build.getDetails().id, build); },
   };
   const builder: PipelineBuildPort = {
     getImageAddress: (_imageName: string, tag: string): string => { tags.push(tag); return `registry/app:${tag}`; },

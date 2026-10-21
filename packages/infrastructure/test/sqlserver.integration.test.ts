@@ -5,7 +5,9 @@ import { test, type TestContext } from "node:test";
 import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
 import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
-import { Deployment, Role, User, type DeploymentSpec } from "@kumo/domain";
+import { Build, Deployment, Role, User, type DeploymentSpec } from "@kumo/domain";
+import { InfraSessionAuthorizationReader } from "../dist/auth/session-authorization.js";
+import { InfraBuild, InfraBuildRepository } from "../dist/db/repositories/build.js";
 import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, InfraUserRole, SqlServerIdempotencyStore, TypeOrmUnitOfWork, addGithubAdmin, seedDatabase, type DatabaseSeedInput } from "../dist/db/index.js";
 
 const ENABLED: boolean = process.env.RUN_SQLSERVER_TESTS === "true";
@@ -22,7 +24,7 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     options: { encrypt: false, trustServerCertificate: true }, pool: { max: 20 }, logging: false,
   };
   const admin: DataSource = new DataSource({ ...options, database: "master" });
-  const source: DataSource = new DataSource({ ...options, database, entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan], migrations: DATABASE_MIGRATIONS, synchronize: false });
+  const source: DataSource = new DataSource({ ...options, database, entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraBuild], migrations: DATABASE_MIGRATIONS, synchronize: false });
   let created: boolean = false;
   context.after(async (): Promise<void> => {
     try {
@@ -36,6 +38,7 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
   await admin.initialize();
   await admin.query(`CREATE DATABASE [${database}]`);
   created = true;
+  await admin.query(`ALTER DATABASE [${database}] SET READ_COMMITTED_SNAPSHOT ON`);
   await source.initialize();
   await source.runMigrations({ transaction: "all" });
   assert.equal(await source.showMigrations(), false);
@@ -129,6 +132,49 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     await source.getRepository(InfraDeployment).update({ id: accepted.id }, { updatedAt: new Date("2000-01-01") });
     await repository.failStaleProvisioning(new Date("2001-01-01"));
     assert.equal((await repository.findById(accepted.id))?.status, "FAILED");
+  });
+
+  await context.test("atomic queue claims return distinct deployments/builds and targeted updates retain creation inputs", async (): Promise<void> => {
+    const ids: string[] = [randomUUID(), randomUUID()];
+    for (let index: number = 0; index < ids.length; index++) {
+      await repository.insert(new Deployment({ id: ids[index]!, userId: "456", name: `claim-app-${index}`, status: "PENDING", spec: SPEC }));
+    }
+    assert.equal(await repository.countReservedByUserId("456"), 2);
+    const claims: (Deployment | null)[] = await Promise.all([repository.claimNextPending(), repository.claimNextPending()]);
+    assert.equal(new Set(claims.map((item: Deployment | null): string | undefined => item?.id)).size, 2);
+    assert.ok(claims.every((item: Deployment | null): boolean => item?.status === "PROVISIONING" && item.spec?.repo === SPEC.repo));
+    const claimed: Deployment = claims[0]!;
+    await repository.updateProgress(new Deployment({ ...claimed.getDetails(), spec: null, status: "FAILED", error: "test failure" }));
+    assert.equal((await repository.findById(claimed.id))?.spec?.repo, SPEC.repo);
+    assert.equal(await repository.countReservedByUserId("456"), 1);
+    const builds: InfraBuildRepository = new InfraBuildRepository(source.getRepository(InfraBuild));
+    for (let index: number = 0; index < ids.length; index++) {
+      await builds.insert(new Build({ id: ids[index]!, userId: "456", repo: SPEC.repo, image: "registry/app:v1", status: "PENDING",
+        commitSha: null, ref: null, error: null, dockerFilePath: "Dockerfile", sourceTokenHash: "a".repeat(64),
+        sourceExpiresAt: new Date("2030-01-01"), runId: null, runUrl: null, createdAt: new Date(), updatedAt: new Date(),
+      }));
+    }
+    const buildClaims: (Build | null)[] = await Promise.all([builds.claimNextPending(), builds.claimNextPending()]);
+    assert.equal(new Set(buildClaims.map((item: Build | null): string | undefined => item?.getDetails().id)).size, 2);
+    assert.ok(buildClaims.every((item: Build | null): boolean => item?.getDetails().status === "PREPARING"));
+    await source.getRepository(InfraBuild).update({ id: ids[0]! }, { status: "SUCCEEDED", runId: "42", commitSha: "a".repeat(40) });
+    await builds.updateRun(ids[0]!, "456", "PREPARING", { runId: "42", runUrl: "https://example.com/42", status: "RUNNING" });
+    assert.equal((await builds.findById(ids[0]!))?.getDetails().status, "SUCCEEDED");
+    await source.getRepository(InfraBuild).delete(ids);
+    await source.getRepository(InfraDeployment).delete(ids);
+  });
+
+  await context.test("one authorization query returns fresh user/role changes without a session grant cache", async (): Promise<void> => {
+    const reader: InfraSessionAuthorizationReader = new InfraSessionAuthorizationReader(source);
+    await source.getRepository(InfraRole).insert({ id: "session-role", name: "Session role", permission: 4n, active: true });
+    await source.getRepository(InfraUserRole).insert({ userId: "456", roleId: "session-role" });
+    const authorized: Awaited<ReturnType<InfraSessionAuthorizationReader["read"]>> = await reader.read("456");
+    assert.equal(authorized?.user.id, "456");
+    assert.equal(authorized?.permissionBits, 4n);
+    assert.equal(await reader.read("missing"), null);
+    await source.getRepository(InfraRole).update({ id: "session-role" }, { active: false });
+    assert.equal((await reader.read("456"))?.permissionBits, 0n);
+    await source.getRepository(InfraRole).delete({ id: "session-role" });
   });
 
   await context.test("seeding preserves customized rows, serializes reruns, and rolls back invalid assignments", async (): Promise<void> => {
