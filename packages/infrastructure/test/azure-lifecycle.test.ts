@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import type { ContainerApp } from "@azure/arm-appcontainers";
-import { BuildProviderError } from "@kumo/application";
+import { BuildProviderError, type TriggerBuildCase, type GetBuildCase } from "@kumo/application";
 import { AzureProvider, type AzureProviderClients } from "../dist/azure/provider.js";
 
 interface LifecycleFixture {
@@ -38,7 +38,7 @@ function createFixture(overrides: {
       get: async (): Promise<never> => {
         throw new Error("not implemented");
       },
-      createOrUpdate: async (): Promise<never> => {
+      createOrUpdate: (): never => {
         throw new Error("not implemented");
       },
     },
@@ -46,23 +46,23 @@ function createFixture(overrides: {
       get: async (): Promise<never> => {
         throw new Error("not implemented");
       },
-      createOrUpdate: async (): Promise<never> => {
+      createOrUpdate: (): never => {
         throw new Error("not implemented");
       },
-      start: (rg: string, app: string) => ({
+      start: (rg: string, app: string): ReturnType<AzureProviderClients["containerApps"]["start"]> => ({
         pollUntilDone: async (): Promise<ContainerApp> => {
           if (overrides.startError) throw overrides.startError;
           calls.start.push(`${rg}/${app}`);
-          return { name: app };
+          return { name: app, location: "southeastasia" };
         },
-      } as any),
-      stop: (rg: string, app: string) => ({
+      } as ReturnType<AzureProviderClients["containerApps"]["start"]>),
+      stop: (rg: string, app: string): ReturnType<AzureProviderClients["containerApps"]["stop"]> => ({
         pollUntilDone: async (): Promise<ContainerApp> => {
           if (overrides.stopError) throw overrides.stopError;
           calls.stop.push(`${rg}/${app}`);
-          return { name: app };
+          return { name: app, location: "southeastasia" };
         },
-      } as any),
+      } as ReturnType<AzureProviderClients["containerApps"]["stop"]>),
     },
   };
 
@@ -72,8 +72,8 @@ function createFixture(overrides: {
     AZURE_DEPLOYMENT_POLL_INTERVAL_MS: "100",
   });
 
-  const triggerBuild: any = { exec: async (): Promise<never> => { throw new Error("not needed"); } };
-  const getBuild: any = { exec: async (): Promise<never> => { throw new Error("not needed"); } };
+  const triggerBuild: Pick<TriggerBuildCase, "exec"> = { exec: async (): Promise<never> => { throw new Error("not needed"); } };
+  const getBuild: Pick<GetBuildCase, "exec"> = { exec: async (): Promise<never> => { throw new Error("not needed"); } };
 
   const provider: AzureProvider = new AzureProvider(config, triggerBuild, getBuild, clients);
   return { provider, calls };

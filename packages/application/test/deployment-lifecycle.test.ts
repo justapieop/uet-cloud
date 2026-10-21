@@ -6,6 +6,7 @@ import { DeploymentNotFoundError } from "../dist/ports/deployment.js";
 import { InvalidDeploymentStatusError } from "../dist/use-cases/exceptions/InvalidDeploymentStatus.exception.js";
 import { StartDeploymentCase } from "../dist/use-cases/deployment/StartDeployment.case.js";
 import { StopDeploymentCase } from "../dist/use-cases/deployment/StopDeployment.case.js";
+import { emptyRepositories } from "./support/repositories.ts";
 
 function createDeployment(status: "RUNNING" | "STOPPED" | "PENDING" | "FAILED"): Deployment {
   const details: DeploymentDetails = {
@@ -22,12 +23,13 @@ test("StartDeploymentCase starts a stopped deployment and updates status to RUNN
   const lifecycleCalls: { start: string[]; stop: string[] } = { start: [], stop: [] };
 
   const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
     findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
       stored && stored.id === id && stored.userId === userId ? stored : null,
     update: async (deployment: Deployment): Promise<void> => {
       stored = deployment;
     },
-  } as DeploymentRepository;
+  };
 
   const lifecycle: ContainerLifecycleManager = {
     startApp: async (userId: string, appName: string): Promise<void> => {
@@ -49,8 +51,9 @@ test("StartDeploymentCase starts a stopped deployment and updates status to RUNN
 
 test("StartDeploymentCase throws DeploymentNotFoundError when deployment does not exist", async (): Promise<void> => {
   const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
     findByIdAndUserId: async (): Promise<Deployment | null> => null,
-  } as DeploymentRepository;
+  };
 
   const lifecycle: ContainerLifecycleManager = {
     startApp: async (): Promise<void> => {},
@@ -67,8 +70,9 @@ test("StartDeploymentCase throws DeploymentNotFoundError when deployment does no
 test("StartDeploymentCase throws InvalidDeploymentStatusError when deployment is not STOPPED", async (): Promise<void> => {
   const stored: Deployment = createDeployment("RUNNING");
   const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
     findByIdAndUserId: async (): Promise<Deployment | null> => stored,
-  } as DeploymentRepository;
+  };
 
   const lifecycle: ContainerLifecycleManager = {
     startApp: async (): Promise<void> => {},
@@ -87,12 +91,13 @@ test("StopDeploymentCase stops a running deployment and updates status to STOPPE
   const lifecycleCalls: { start: string[]; stop: string[] } = { start: [], stop: [] };
 
   const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
     findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
       stored && stored.id === id && stored.userId === userId ? stored : null,
     update: async (deployment: Deployment): Promise<void> => {
       stored = deployment;
     },
-  } as DeploymentRepository;
+  };
 
   const lifecycle: ContainerLifecycleManager = {
     startApp: async (userId: string, appName: string): Promise<void> => {
@@ -115,8 +120,9 @@ test("StopDeploymentCase stops a running deployment and updates status to STOPPE
 test("StopDeploymentCase throws InvalidDeploymentStatusError when deployment is not RUNNING", async (): Promise<void> => {
   const stored: Deployment = createDeployment("STOPPED");
   const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
     findByIdAndUserId: async (): Promise<Deployment | null> => stored,
-  } as DeploymentRepository;
+  };
 
   const lifecycle: ContainerLifecycleManager = {
     startApp: async (): Promise<void> => {},
