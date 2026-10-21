@@ -9,3 +9,5 @@ export * from "./logger.js";
 export * from "./repositories/build.js";
 export * from "./migrations.js";
 export * from "./repositories/stripe-customer-link.js";
+export * from "./seed.js";
+export * from "./add-admin.js";

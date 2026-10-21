@@ -6,7 +6,7 @@ import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
 import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
 import { Deployment, Role, User, type DeploymentSpec } from "@kumo/domain";
-import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, InfraUserRole, SqlServerIdempotencyStore, TypeOrmUnitOfWork } from "../dist/db/index.js";
+import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, InfraUserRole, SqlServerIdempotencyStore, TypeOrmUnitOfWork, addGithubAdmin, seedDatabase, type DatabaseSeedInput } from "../dist/db/index.js";
 
 const ENABLED: boolean = process.env.RUN_SQLSERVER_TESTS === "true";
 const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
@@ -129,6 +129,59 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     await source.getRepository(InfraDeployment).update({ id: accepted.id }, { updatedAt: new Date("2000-01-01") });
     await repository.failStaleProvisioning(new Date("2001-01-01"));
     assert.equal((await repository.findById(accepted.id))?.status, "FAILED");
+  });
+
+  await context.test("seeding preserves customized rows, serializes reruns, and rolls back invalid assignments", async (): Promise<void> => {
+    const input: DatabaseSeedInput = {
+      plans: [{ id: "seed-plan", name: "Seed plan", price: 5, vcpu: 0.5, memory: 1, deployments: 1, disk: 10, active: false }],
+      assignments: [{ userId: "456", roleId: "developer" }],
+    };
+    assert.deepEqual(await seedDatabase(source, input), { rolesCreated: 3, plansCreated: 1, assignmentsCreated: 1, adminSuperAdded: false });
+    await source.getRepository(InfraRole).update({ id: "admin" }, { permission: 4n, active: false });
+    assert.equal((await seedDatabase(source, input)).adminSuperAdded, true);
+    const repairedAdmin: InfraRole = await source.getRepository(InfraRole).findOneByOrFail({ id: "admin" });
+    assert.equal(repairedAdmin.permission, 5n);
+    assert.equal(repairedAdmin.active, false);
+    await source.getRepository(InfraRole).update({ id: "developer" }, { name: "Customized", active: false, permission: 2n });
+    await source.getRepository(InfraPlan).update({ id: "seed-plan" }, { price: 9 });
+    const results: Awaited<ReturnType<typeof seedDatabase>>[] = await Promise.all([seedDatabase(source, input), seedDatabase(source, input)]);
+    for (const result of results) assert.deepEqual(result, { rolesCreated: 0, plansCreated: 0, assignmentsCreated: 0, adminSuperAdded: false });
+    assert.equal((await source.getRepository(InfraRole).findOneByOrFail({ id: "developer" })).active, false);
+    assert.equal((await source.getRepository(InfraRole).findOneByOrFail({ id: "developer" })).permission, 2n);
+    assert.equal((await source.getRepository(InfraPlan).findOneByOrFail({ id: "seed-plan" })).price, 9);
+    assert.equal(await source.getRepository(InfraUserRole).countBy({ roleId: "admin" }), 0);
+    await assert.rejects(seedDatabase(source, { plans: [{ ...input.plans![0]!, id: "rolled-back-plan" }], assignments: [{ userId: "missing", roleId: "admin" }] }));
+    assert.equal(await source.getRepository(InfraPlan).countBy({ id: "rolled-back-plan" }), 0);
+    await source.getRepository(InfraPlan).delete({ id: "seed-plan" });
+    await source.getRepository(InfraRole).delete(["viewer", "developer", "admin"]);
+  });
+
+  await context.test("admin bootstrap creates or promotes GitHub users atomically and rejects disabled identities", async (): Promise<void> => {
+    assert.deepEqual(await addGithubAdmin(source, "99901"), { userCreated: true, roleCreated: true, assignmentCreated: true });
+    const users: Repository<InfraUser> = source.getRepository(InfraUser);
+    const roles: Repository<InfraRole> = source.getRepository(InfraRole);
+    const links: Repository<InfraUserRole> = source.getRepository(InfraUserRole);
+    assert.equal((await users.findOneByOrFail({ id: "99901" })).stripeCustomerId, null);
+    assert.equal((await users.findOneByOrFail({ id: "99901" })).displayName, "99901");
+    await users.update({ id: "99901" }, { displayName: "Existing admin", stripeCustomerId: "cus_admin" });
+    await roles.update({ id: "admin" }, { permission: 4n });
+    assert.deepEqual(await addGithubAdmin(source, "99901"), { userCreated: false, roleCreated: false, assignmentCreated: false });
+    assert.equal((await roles.findOneByOrFail({ id: "admin" })).permission, 5n);
+    assert.equal((await users.findOneByOrFail({ id: "99901" })).stripeCustomerId, "cus_admin");
+    assert.equal((await users.findOneByOrFail({ id: "99901" })).displayName, "Existing admin");
+    const concurrent: Awaited<ReturnType<typeof addGithubAdmin>>[] = await Promise.all([addGithubAdmin(source, "99902"), addGithubAdmin(source, "99902")]);
+    assert.equal(concurrent.filter((result): boolean => result.userCreated).length, 1);
+    assert.equal(await links.countBy({ userId: "99902", roleId: "admin" }), 1);
+    await roles.update({ id: "admin" }, { active: false });
+    await assert.rejects(addGithubAdmin(source, "99903"), /admin role is disabled/);
+    assert.equal(await users.countBy({ id: "99903" }), 0);
+    await roles.update({ id: "admin" }, { active: true });
+    await users.update({ id: "99902" }, { active: false });
+    await assert.rejects(addGithubAdmin(source, "99902"), /inactive or suspended/);
+    await users.update({ id: "99901" }, { suspended: true });
+    await assert.rejects(addGithubAdmin(source, "99901"), /inactive or suspended/);
+    await users.delete(["99901", "99902"]);
+    await roles.delete({ id: "admin" });
   });
 
   const contract: IdempotencyStoreContractCase[] = idempotencyStoreContract((): SqlServerIdempotencyStore => new SqlServerIdempotencyStore(source), { concurrent: true });
