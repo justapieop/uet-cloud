@@ -3,11 +3,10 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { Controller, Get, Module, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { BuildNotFound, CheckPermissionsCase, CreateDeploymentCase, DeploymentNotFoundError, GetBuildCase, GetDeploymentCase, GetDeploymentMetricsCase } from "@kumo/application";
+import { BuildNotFound, CheckPermissionsCase, CreateDeploymentCase, DeploymentNotFoundError, GetBuildCase, GetDeploymentCase, GetDeploymentMetricsCase, StartDeploymentCase, StopDeploymentCase } from "@kumo/application";
 import { Permission, Role, User, type Deployment, type PermissionDefinition } from "@kumo/domain";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
-import { DeploymentController } from "../dist/controllers/Deployment.controller.js";
 import { DeploymentMetricsController } from "../dist/controllers/DeploymentMetrics.controller.js";
 import { RouteReadCache } from "../dist/common/ReadCache.js";
 import type { Request, Response, NextFunction } from "express";
@@ -24,10 +23,12 @@ test("resource routes check specific grants before lookups and cached responses"
   };
   class ResourceModule {}
   Module({
-    controllers: [DeploymentsController, DeploymentController, DeploymentMetricsController],
+    controllers: [DeploymentsController, DeploymentMetricsController],
     providers: [
       { provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => roles }) },
       { provide: CreateDeploymentCase, useValue: {} },
+      { provide: StartDeploymentCase, useValue: {} },
+      { provide: StopDeploymentCase, useValue: {} },
       { provide: GetDeploymentCase, useValue: { exec: missing,
         list: async (userId: string): Promise<Deployment[]> => { calls++; assert.equal(userId, "123"); return []; },
       } },

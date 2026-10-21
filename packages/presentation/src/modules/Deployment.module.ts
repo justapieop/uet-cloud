@@ -22,14 +22,12 @@ import { ExternalClientsModule } from "./ExternalClients.module.js";
 import { DatabaseModule } from "./Database.module.js";
 import { BuildModule } from "./Build.module.js";
 import { StripeModule } from "./Stripe.module.js";
-import { DeploymentController } from "../controllers/Deployment.controller.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 
 @Module({
   imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule],
   controllers: [
-    DeploymentController,
     BuildSourceController,
     DeploymentsController,
   ],

@@ -5,7 +5,7 @@ import { ClassSerializerInterceptor, Module, type INestApplication } from "@nest
 import { NestFactory, Reflector } from "@nestjs/core";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { IdempotencyModule } from "@nestjs/idempotency";
-import { CheckPermissionsCase, CreateDeploymentCase, GetDeploymentCase } from "@kumo/application";
+import { CheckPermissionsCase, CreateDeploymentCase, GetBuildCase, GetDeploymentCase, StartDeploymentCase, StopDeploymentCase } from "@kumo/application";
 import { Permission, Plan, Role, User } from "@kumo/domain";
 import type { NextFunction, Request, Response } from "express";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
@@ -28,6 +28,9 @@ test("deployment HTTP contract enforces guards, validation, quotas, serializatio
       { provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => roles }) },
       { provide: CreateDeploymentCase, useValue: fixture.useCase },
       { provide: GetDeploymentCase, useValue: {} },
+      { provide: GetBuildCase, useValue: {} },
+      { provide: StartDeploymentCase, useValue: {} },
+      { provide: StopDeploymentCase, useValue: {} },
       RouteReadCache,
       { provide: CACHE_MANAGER, useValue: { get: async (): Promise<undefined> => undefined, set: async (): Promise<void> => {} } },
     ],

@@ -9,6 +9,9 @@ import {
   BuildProviderError,
   type StartDeploymentCase,
   type StopDeploymentCase,
+  type CreateDeploymentCase,
+  type GetDeploymentCase,
+  type GetBuildCase,
 } from "@kumo/application";
 import type { Request } from "express";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
@@ -68,8 +71,8 @@ function createFixture(overrides: {
     },
   } as unknown as RouteReadCache;
 
-  const createCase: any = {};
-  const getCase: any = {};
+  const createCase: CreateDeploymentCase = {} as CreateDeploymentCase;
+  const getCase: GetDeploymentCase = {} as GetDeploymentCase;
 
   const controller: DeploymentsController = new DeploymentsController(
     createCase,
@@ -77,6 +80,7 @@ function createFixture(overrides: {
     startCase,
     stopCase,
     readCache,
+    {} as GetBuildCase,
   );
 
   return { controller, invalidatedUsers };
