@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import type { IdempotencyAcquireResult, IdempotencyStore, IdempotencyStoredPayload } from "@nestjs/idempotency";
-import { DataSource, type EntityManager } from "typeorm";
+import { DataSource, type EntityManager, type QueryResult, type QueryRunner } from "typeorm";
 
 interface StoredRow { readonly fingerprint: string; readonly owner: string | null; readonly response_json: string | null; readonly expires_at: string | number; }
 interface ClockRow { readonly now: string | number; }
@@ -70,8 +70,13 @@ export class SqlServerIdempotencyStore implements IdempotencyStore, OnModuleInit
   }
 
   private async change(sql: string, parameters: unknown[]): Promise<boolean> {
-    const rows: ChangedRow[] = await this.dataSource.query<ChangedRow[]>(sql, parameters);
-    return rows.length === 1;
+    const runner: QueryRunner = this.dataSource.createQueryRunner();
+    try {
+      // SQL Server's raw DELETE result is [recordset, affectedRows], unlike UPDATE.
+      // The structured result exposes OUTPUT records consistently for both.
+      const result: QueryResult<ChangedRow> = await runner.query(sql, parameters, true);
+      return result.records.length === 1;
+    } finally { await runner.release(); }
   }
 
   private hash(key: string): string { return createHash("sha256").update(key).digest("hex"); }
