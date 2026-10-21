@@ -8,6 +8,8 @@ import {
   GetBuildCase,
   GetDeploymentCase,
   ProcessDeploymentCase,
+  StartDeploymentCase,
+  StopDeploymentCase,
   TriggerBuildCase,
   UNIT_OF_WORK,
   UpdateDeploymentCase,
@@ -49,6 +51,16 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
       provide: GetDeploymentCase,
       useFactory: (repository: InfraDeploymentRepository): GetDeploymentCase => new GetDeploymentCase(repository),
       inject: [InfraDeploymentRepository],
+    },
+    {
+      provide: StartDeploymentCase,
+      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): StartDeploymentCase => new StartDeploymentCase(repository, provider),
+      inject: [InfraDeploymentRepository, AzureProvider],
+    },
+    {
+      provide: StopDeploymentCase,
+      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): StopDeploymentCase => new StopDeploymentCase(repository, provider),
+      inject: [InfraDeploymentRepository, AzureProvider],
     },
     {
       provide: ProcessDeploymentCase,
