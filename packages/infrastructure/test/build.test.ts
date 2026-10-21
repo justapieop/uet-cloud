@@ -1,7 +1,10 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { c, t, type ReadEntry } from "tar";
@@ -30,6 +33,23 @@ async function sourceArchive(): Promise<Buffer> {
     await rm(folder, { recursive: true, force: true });
   }
 }
+
+test("build context accepts a temporary directory reached through a junction or symlink", async (): Promise<void> => {
+  const folder: string = await mkdtemp(join(tmpdir(), "kumo-junction-fixture-"));
+  try {
+    const realTemporary: string = join(folder, "real-temp");
+    const linkedTemporary: string = join(folder, "linked-temp");
+    await mkdir(realTemporary);
+    await symlink(realTemporary, linkedTemporary, process.platform === "win32" ? "junction" : "dir");
+    const archiveFile: string = join(folder, "source.tar.gz");
+    await writeFile(archiveFile, await sourceArchive());
+    const modulePath: string = fileURLToPath(new URL("../dist/azure/build-context.js", import.meta.url));
+    const script: string = "import { readFile } from 'node:fs/promises'; import { pathToFileURL } from 'node:url'; const { prepareBuildContext } = await import(pathToFileURL(process.argv[1]).href); await prepareBuildContext(await readFile(process.argv[2]), 'Dockerfile');";
+    await promisify(execFile)(process.execPath, ["--input-type=module", "-e", script, modulePath, archiveFile], {
+      env: { ...process.env, TEMP: linkedTemporary, TMP: linkedTemporary, TMPDIR: linkedTemporary },
+    });
+  } finally { await rm(folder, { recursive: true, force: true }); }
+});
 
 test("build context removes GitHub's archive prefix and rejects a missing Dockerfile", async (): Promise<void> => {
   const source: Buffer = await sourceArchive();
