@@ -5,3 +5,4 @@ export * from "./build.js";
 export * from "./deployment.js";
 export * from "./deployment-request.js";
 export * from "./monitoring.js";
+export * from "./stripe.js";

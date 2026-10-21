@@ -181,6 +181,25 @@ This is a fragment of the creation request; the other required fields still appl
 
 Additional target ports must be distinct from each other and from the primary target. Additional exposed ports must be distinct within the app. Port numbers must be integers from 1 to 65535; Azure reserves 36985. External mappings also cannot expose 80 or 443. Azure requires external exposed ports to be unique across the environment and requires VNet integration for external additional ports. Kumo rejects external mappings before building when the environment lacks an infrastructure subnet. The current environment creation flow does not provision a VNet, so newly created environments support internal additional ports. Additional ports use TCP; built-in HTTP ingress features apply to the primary ingress. See [Azure additional TCP port requirements](https://learn.microsoft.com/en-us/azure/container-apps/ingress?tabs=bash#additional-tcp-ports).
 
-## Historical billing schema
+## Stripe settings
 
-The retired `UserStripeCustomer1792368000000` migration remains in the migration history for compatibility with existing databases. Its `users.stripe_customer_id` column and `stripe_customer_links` table are no longer mapped or used by the application. Removing the integration does not delete those records or change any external billing account. User creation and login no longer require a billing secret or call a billing provider.
+`STRIPE_SECRET_KEY` is required by `StripeModule` when the API starts. Set it in the selected configuration source: the repository-root `.env` for local configuration, or an App Configuration Key Vault reference for Azure configuration. Keep the secret on the server.
+
+The presentation module constructs the Stripe SDK client and injects it into the infrastructure `StripeProvider`, which is exported by the module.
+
+The provider supports customer creation linked through `metadata.kumoId` without an email, active product queries, recurring price queries for a product, customer subscription queries (all statuses by default), and direct subscription creation. List methods return a Stripe page with `has_more` and accept pagination parameters such as `starting_after`.
+
+`createCustomer(userId, idempotencyKey)` and `subscribeTo(customerId, priceId, idempotencyKey)` require a caller-persisted Stripe idempotency key. Reuse that key with identical parameters when retrying the same operation; use a new key for a new operation. Subscription creation requires a recurring Price ID (`price_...`), not a Product ID (`prod_...`). It uses `default_incomplete`, saves the successful payment method on the subscription, and expands `latest_invoice.confirmation_secret` for initial payment confirmation. Creating the subscription does not establish that payment succeeded.
+
+Application use cases must resolve customer ownership, reserve one subscription slot per user through the UoW, and synchronize billing through verified webhooks. The provider performs Stripe operations and does not enforce that application-level invariant or grant deployment entitlements.
+
+### Stripe customer linking on login
+
+New users and existing users without a Stripe Customer ID are linked by `CreateUserCase` before the GitHub login callback establishes its session. Suspended users and users already linked do not create Customers. Stripe receives only `metadata.kumoId`, with no user email. `users.stripe_customer_id` persists the association; a filtered unique index prevents assigning one Customer to two users. Ordinary user saves preserve this column.
+
+The appended `UserStripeCustomer1792368000000` migration adds that nullable user column and the `stripe_customer_links` operation table. Existing users are linked on their next successful OAuth login; session deserialization does not make billing calls. The migration is registered for the existing startup migration mechanism; compilation does not apply it.
+
+Local user creation is serialized inside the UoW. Linking claims a durable per-user operation in a short SQL transaction with a two-minute lease, calls Stripe outside the transaction, and conditionally saves the returned Customer ID in another transaction. Concurrent logins wait up to 30 seconds for the same link. Failed calls and failed completion writes keep the original operation and Stripe idempotency key. Process interruption permits another replica to reclaim the expired lease, reusing the same key. A stale lease owner cannot overwrite another operation's result.
+
+After 23 hours, an unresolved creation operation refuses automatic customer creation and requires reconciliation, because Stripe may discard idempotency results after 24 hours. No new key is generated for an uncertain result. Stripe or persistence failures prevent that login from completing, while preserving the local user for a later retry. Rolling back the migration removes customer associations and retry records, so reconcile existing Stripe Customers before enabling linking again after such a rollback.
+

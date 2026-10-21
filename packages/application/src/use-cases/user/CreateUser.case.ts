@@ -1,12 +1,19 @@
 import { User } from "@kumo/domain";
+import type { LinkStripeCustomerCase } from "./LinkStripeCustomer.case.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 
 export class CreateUserCase {
-  public constructor(private readonly unitOfWork: UnitOfWork) {}
+  public constructor(
+    private readonly unitOfWork: UnitOfWork,
+    private readonly linkStripeCustomer: Pick<LinkStripeCustomerCase, "exec">,
+  ) {}
 
-  public exec(id: string, displayName: string): Promise<User> {
-    return this.unitOfWork.run((repositories: UnitOfWorkRepositories): Promise<User> =>
+  public async exec(id: string, displayName: string): Promise<User> {
+    const user: User = await this.unitOfWork.run((repositories: UnitOfWorkRepositories): Promise<User> =>
       this.createIfNotExists(repositories, id, displayName));
+    if (user.suspended || user.stripeCustomerId) return user;
+    // Commit local user creation before any network request.
+    return this.linkStripeCustomer.exec(user.id);
   }
 
   private async createIfNotExists(

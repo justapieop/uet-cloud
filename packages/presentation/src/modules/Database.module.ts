@@ -15,6 +15,7 @@ import {
   InfraRoleRepository,
   InfraUser,
   InfraUserRepository,
+  InfraStripeCustomerLinkRepository,
   TypeOrmLoggerAdapter,
   TypeOrmUnitOfWork,
 } from "@kumo/infrastructure";
@@ -68,6 +69,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
     InfraRoleRepository,
     InfraDeploymentRepository,
     TypeOrmUnitOfWork,
+    InfraStripeCustomerLinkRepository,
     {
       provide: UNIT_OF_WORK,
       useExisting: TypeOrmUnitOfWork,
@@ -75,6 +77,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
   ],
   exports: [
     UNIT_OF_WORK,
+    InfraStripeCustomerLinkRepository,
     InfraDeploymentRepository,
     InfraUserRepository,
     InfraRoleRepository,
