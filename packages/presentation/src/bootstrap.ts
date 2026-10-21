@@ -28,11 +28,12 @@ export async function bootstrap(): Promise<void> {
 
   app.use(session({
     saveUninitialized: false,
-    resave: true,
+    resave: false,
     secret: sessionSecret,
     cookie: createSessionCookieOptions(config.get<string>("NODE_ENV", "production")),
     store: MongoStore.create({
       mongoUrl,
+      touchAfter: 300,
     }),
   }));
   app.enableCsrfProtection();

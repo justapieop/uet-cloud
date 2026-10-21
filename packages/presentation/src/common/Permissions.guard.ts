@@ -1,4 +1,4 @@
-import { CheckPermissionsCase } from "@kumo/application";
+import { CheckPermissionsCase, SESSION_PERMISSION_BITS, type SessionUser } from "@kumo/application";
 import type { PermissionDefinition, User } from "@kumo/domain";
 import { ForbiddenException, Injectable, type CanActivate, type ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
@@ -15,7 +15,9 @@ export class PermissionsGuard implements CanActivate {
     if (!request.isAuthenticated?.() || !user || user.suspended || !user.active) throw new ForbiddenException();
     // Controller and route requirements are additive; routes cannot weaken controller policy.
     const required: PermissionDefinition[] = this.reflector.getAllAndMerge<PermissionDefinition[]>(REQUIRED_PERMISSIONS, [context.getClass(), context.getHandler()]);
-    if (!await this.permissions.exec(user.id, required)) throw new ForbiddenException("Required permissions are missing");
+    const bits: bigint | undefined = (user as SessionUser)[SESSION_PERMISSION_BITS];
+    const allowed: boolean = bits !== undefined ? this.permissions.checkBits(bits, required) : await this.permissions.exec(user.id, required);
+    if (!allowed) throw new ForbiddenException("Required permissions are missing");
     return true;
   }
 }

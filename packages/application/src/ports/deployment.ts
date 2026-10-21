@@ -11,7 +11,10 @@ export interface DeploymentRepository {
   findByIdAndUserId(id: string, userId: string): Promise<Deployment | null>;
   findByUserId(userId: string, filters?: DeploymentListFilters): Promise<Deployment[]>;
   save(deployment: Deployment): Promise<void>;
+  insert(deployment: Deployment): Promise<void>;
+  countReservedByUserId(userId: string): Promise<number>;
   update(deployment: Deployment): Promise<void>;
+  updateProgress(deployment: Deployment): Promise<void>;
   delete(deploymentId: string, userId: string): Promise<void>;
 }
 

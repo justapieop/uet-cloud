@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplica
 import { ProcessBuildCase, type BuildQueueRepository } from "@kumo/application";
 import type { Build } from "@kumo/domain";
 import { InfraBuildRepository } from "../db/repositories/build.js";
+import { QueuePollingPolicy } from "./queue-polling.js";
 
 @Injectable()
 export class BuildWorker implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -9,6 +10,7 @@ export class BuildWorker implements OnApplicationBootstrap, OnApplicationShutdow
   private timer: ReturnType<typeof setInterval> | undefined;
   private active: Promise<void> | undefined;
   private stopping: boolean = false;
+  private readonly polling: QueuePollingPolicy = new QueuePollingPolicy();
 
   public constructor(
     @Inject(InfraBuildRepository) private readonly repository: BuildQueueRepository,
@@ -35,12 +37,19 @@ export class BuildWorker implements OnApplicationBootstrap, OnApplicationShutdow
   }
 
   private async drain(): Promise<void> {
-    await this.repository.failStalePreparations(new Date(Date.now() - 10 * 60 * 1000));
+    if (this.polling.shouldSweep(Date.now())) {
+      await this.repository.failStalePreparations(new Date(Date.now() - 10 * 60 * 1000));
+      this.polling.swept(Date.now());
+    }
+    if (!this.polling.shouldPoll(Date.now())) return;
+    let processed: boolean = false;
     // Bound each batch and process one preparation at a time per API instance.
     for (let index: number = 0; index < 10 && !this.stopping; index++) {
       const build: Build | null = await this.repository.claimNextPending();
-      if (!build) return;
+      if (!build) { this.polling.polled(processed, Date.now()); return; }
+      processed = true;
       await this.processBuild.exec(build);
     }
+    this.polling.polled(processed, Date.now());
   }
 }

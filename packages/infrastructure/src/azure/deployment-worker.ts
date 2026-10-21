@@ -3,6 +3,7 @@ import type { Deployment } from "@kumo/domain";
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InfraDeploymentRepository } from "../db/repositories/deployment.js";
+import { QueuePollingPolicy } from "./queue-polling.js";
 
 @Injectable()
 export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -11,6 +12,7 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
   private timer: ReturnType<typeof setInterval> | undefined;
   private active: Promise<void> | undefined;
   private stopping: boolean = false;
+  private readonly polling: QueuePollingPolicy = new QueuePollingPolicy();
 
   public constructor(
     @Inject(InfraDeploymentRepository) private readonly repository: DeploymentQueueRepository,
@@ -40,9 +42,14 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async drain(): Promise<void> {
-    await this.repository.failStaleProvisioning(new Date(Date.now() - this.staleAfterMs));
+    if (this.polling.shouldSweep(Date.now())) {
+      await this.repository.failStaleProvisioning(new Date(Date.now() - this.staleAfterMs));
+      this.polling.swept(Date.now());
+    }
     if (this.stopping) return;
+    if (!this.polling.shouldPoll(Date.now())) return;
     const deployment: Deployment | null = await this.repository.claimNextPending();
     if (deployment) await this.processDeployment.exec(deployment);
+    this.polling.polled(deployment !== null, Date.now());
   }
 }

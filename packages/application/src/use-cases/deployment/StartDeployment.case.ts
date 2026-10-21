@@ -32,7 +32,7 @@ export class StartDeploymentCase {
       updatedAt: new Date(),
     });
 
-    await this.repository.update(updated);
+    await this.repository.updateProgress(updated);
     return updated;
   }
 }

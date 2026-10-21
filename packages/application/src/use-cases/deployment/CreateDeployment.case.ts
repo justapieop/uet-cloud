@@ -57,17 +57,14 @@ export class CreateDeploymentCase {
       if (replayed) return replayed;
       const plans: Plan[] = await repo.plans.findActiveByStripeProductIds(productIds);
       if (plans.length === 0) throw new DeploymentSubscriptionRequired("An active subscription linked to an active Kumo plan is required");
-      const existing: Deployment[] = await repo.deployment.findByUserId(input.userId);
-      const reservedCount: number = existing.filter((item: Deployment): boolean =>
-        item.status === "PENDING" || item.status === "PROVISIONING" || item.status === "RUNNING" ||
-        (item.status === "FAILED" && item.resourceId !== null)).length;
+      const reservedCount: number = await repo.deployment.countReservedByUserId(input.userId);
       // Each plan must independently cover the request; multiple subscriptions do not stack quotas.
       const eligible: boolean = plans.some((plan: Plan): boolean =>
         reservedCount + 1 <= plan.deployments && input.spec.maxVcpu <= plan.vcpu &&
         input.spec.maxMemory <= plan.memory && input.spec.maxScaling <= plan.maxReplicas);
       if (!eligible) throw new DeploymentQuotaExceeded("The request exceeds the plan's deployment-count, per-deployment CPU, RAM, or replica limit");
 
-      await repo.deployment.save(deployment);
+      await repo.deployment.insert(deployment);
       if (keyHash && fingerprint) {
         await repo.deploymentRequests.save(keyHash, {
           fingerprint, deployment: { ...deployment.getDetails(), spec: { ...input.spec, envVars: undefined } },

@@ -13,13 +13,13 @@ export class ProcessDeploymentCase {
         id: deployment.id, userId: deployment.userId, name: deployment.name, spec: deployment.spec,
       }, async (buildId: string, image: string): Promise<void> => {
         details = { ...details, buildId, image, updatedAt: new Date() };
-        await this.repository.save(new Deployment(details));
+        await this.repository.updateProgress(new Deployment(details));
       });
-      await this.repository.save(new Deployment({ ...details, ...result, status: "RUNNING", error: null, updatedAt: new Date() }));
+      await this.repository.updateProgress(new Deployment({ ...details, ...result, status: "RUNNING", error: null, updatedAt: new Date() }));
     } catch (error: unknown) {
       const message: string = error instanceof BuildProviderError || error instanceof BuildAccessDenied || error instanceof InvalidBuildInput
         ? error.message.slice(0, 1000) : "Deployment provisioning failed";
-      await this.repository.save(new Deployment({ ...details, status: "FAILED", error: message, updatedAt: new Date() }));
+      await this.repository.updateProgress(new Deployment({ ...details, status: "FAILED", error: message, updatedAt: new Date() }));
     }
   }
 }

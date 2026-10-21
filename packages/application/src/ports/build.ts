@@ -62,7 +62,13 @@ export interface BuildRepository {
   save(build: Build): Promise<void>;
 }
 
-export interface BuildQueueRepository extends BuildRepository {
+export interface BuildWriteRepository extends BuildRepository {
+  insert(build: Build): Promise<void>;
+  update(build: Build): Promise<void>;
+  updateRun(id: string, userId: string, expectedStatus: BuildStatus, run: PipelineRun): Promise<void>;
+}
+
+export interface BuildQueueRepository extends BuildWriteRepository {
   claimNextPending(): Promise<Build | null>;
   failStalePreparations(before: Date): Promise<void>;
 }

@@ -6,7 +6,7 @@ import type { Cache } from "cache-manager";
 import { instanceToPlain } from "class-transformer";
 import type { Request, Response } from "express";
 import { createHash, randomUUID } from "node:crypto";
-import { from, mergeMap, of, type Observable } from "rxjs";
+import { defer, finalize, from, mergeMap, of, shareReplay, type Observable } from "rxjs";
 
 type ReadCacheGroup = "deployments" | "builds" | "monitoring";
 interface ReadCachePolicy { readonly group: ReadCacheGroup; readonly ttlMs: number; }
@@ -19,6 +19,7 @@ export function CacheRead(group: ReadCacheGroup, ttlMs: number): MethodDecorator
 
 @Injectable()
 export class RouteReadCache {
+  private readonly pending: Map<string, Observable<unknown>> = new Map();
   public constructor(@Inject(CACHE_MANAGER) private readonly cache: Pick<Cache, "get" | "set">) {}
 
   public async key(userId: string, group: ReadCacheGroup, url: string): Promise<string | undefined> {
@@ -45,10 +46,21 @@ export class RouteReadCache {
     }
   }
 
+  public coalesce(key: string, work: () => Observable<unknown>): Observable<unknown> {
+    const existing: Observable<unknown> | undefined = this.pending.get(key);
+    if (existing) return existing;
+    const pending: Observable<unknown> = defer(work).pipe(
+      finalize((): void => { this.pending.delete(key); }),
+      shareReplay({ bufferSize: 1, refCount: false }),
+    );
+    this.pending.set(key, pending);
+    return pending;
+  }
+
   public async invalidateDeployments(userId: string): Promise<void> {
     try {
       // Keep the generation stable until the next write, including for slow in-flight reads.
-      // Cached responses from old generations still expire after their two-second TTL.
+      // Responses from old generations remain unreachable and expire at their bounded TTL.
       await this.cache.set(this.generationKey(userId, "deployments"), randomUUID(), 0);
     } catch { /* Reads remain bounded by their TTL when invalidation is unavailable. */ }
   }
@@ -86,9 +98,17 @@ export class UserReadCacheInterceptor implements NestInterceptor<unknown, unknow
       return of(cached.payload);
     }
     response.setHeader("X-Cache", "MISS");
-    return next.handle().pipe(mergeMap((value: unknown): Observable<unknown> => from((async (): Promise<unknown> => {
-      if (response.statusCode === 200) await this.cache.set(key, value, policy.ttlMs);
+    return this.cache.coalesce(key, (): Observable<unknown> => next.handle().pipe(mergeMap((value: unknown): Observable<unknown> => from((async (): Promise<unknown> => {
+      if (response.statusCode === 200) await this.cache.set(key, value, this.ttl(policy, value));
       return value;
-    })())));
+    })()))));
+  }
+
+  private ttl(policy: ReadCachePolicy, value: unknown): number {
+    const values: unknown[] = Array.isArray(value) ? value : [value];
+    const statuses: unknown[] = values.map((item: unknown): unknown => item && typeof item === "object" && "status" in item ? item.status : undefined);
+    if (policy.group === "deployments" && statuses.length > 0 && statuses.every((status: unknown): boolean => status === "RUNNING" || status === "STOPPED")) return 10_000;
+    if (policy.group === "builds" && statuses.length > 0 && statuses.every((status: unknown): boolean => status === "SUCCEEDED" || status === "FAILED" || status === "CANCELED")) return 30_000;
+    return policy.ttlMs;
   }
 }

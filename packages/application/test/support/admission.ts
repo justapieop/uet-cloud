@@ -62,11 +62,17 @@ export class AdmissionFixture implements UnitOfWork, StripeSubscriptionGateway {
         },
       },
       deployment: {
+        countReservedByUserId: async (): Promise<number> => {
+          assert.equal(this.locked, true);
+          return this.deployments.filter((item: Deployment): boolean => item.status === "PENDING" || item.status === "PROVISIONING" || item.status === "RUNNING" || (item.status === "FAILED" && item.resourceId !== null)).length;
+        },
+        insert: async (deployment: Deployment): Promise<void> => { assert.equal(this.locked, true); this.deployments.push(deployment); },
         findById: async (): Promise<null> => null,
         findByIdAndUserId: async (): Promise<null> => null,
         findByUserId: async (): Promise<Deployment[]> => { assert.equal(this.locked, true); return this.deployments; },
         save: async (deployment: Deployment): Promise<void> => { assert.equal(this.locked, true); this.deployments.push(deployment); },
         update: async (): Promise<void> => {},
+        updateProgress: async (): Promise<void> => {},
         delete: async (): Promise<void> => {},
       },
     };

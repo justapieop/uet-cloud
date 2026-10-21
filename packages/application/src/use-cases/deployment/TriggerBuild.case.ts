@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Build, type BuildDetails } from "@kumo/domain";
-import { InvalidBuildInput, type BuildRepository, type BuildSourceInput, type PipelineBuildPort, type TriggerBuildResult } from "../../ports/build.js";
+import { InvalidBuildInput, type BuildWriteRepository, type BuildSourceInput, type PipelineBuildPort, type TriggerBuildResult } from "../../ports/build.js";
 
 export interface TriggerBuildInput extends BuildSourceInput {
   readonly imageName: string;
@@ -11,7 +11,7 @@ export interface TriggerBuildInput extends BuildSourceInput {
 export class TriggerBuildCase {
   public constructor(
     private readonly pipeline: PipelineBuildPort,
-    private readonly repository: BuildRepository,
+    private readonly repository: Pick<BuildWriteRepository, "insert">,
   ) {}
 
   public async exec(input: TriggerBuildInput): Promise<TriggerBuildResult> {
@@ -37,7 +37,7 @@ export class TriggerBuildCase {
       sourceExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
       runId: null, runUrl: null, createdAt: now, updatedAt: now,
     };
-    await this.repository.save(new Build(details));
+    await this.repository.insert(new Build(details));
     return { buildId: id, runId: null, runUrl: null, status: "PENDING", image: details.image, commitSha: null, error: null };
   }
 }

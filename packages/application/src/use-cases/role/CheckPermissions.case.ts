@@ -13,6 +13,12 @@ export class CheckPermissionsCase {
       const role: Role = roles[index]!;
       if (role.active) granted |= role.getPermissionBits();
     }
+    return this.checkBits(granted, required);
+  }
+
+  public checkBits(granted: bigint, required: readonly PermissionDefinition[]): boolean {
+    if (granted < 0n) return false;
+    if (required.some((permission: PermissionDefinition): boolean => !Number.isSafeInteger(permission.offset) || permission.offset < 0)) return false;
     const superMask: bigint = 1n << BigInt(Permission.Super.offset);
     if ((granted & superMask) === superMask) return true;
     let requiredMask: bigint = 0n;

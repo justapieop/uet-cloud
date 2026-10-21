@@ -652,6 +652,18 @@ export class RoleActive1792540800004 implements MigrationInterface {
   }
 }
 
+export class DatabaseLoadIndexes1792627200000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createIndex("deployments", new TableIndex({
+      name: "IDX_deployments_pending_order", columnNames: ["status", "created_at", "id"], where: "creation_request IS NOT NULL",
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropIndex("deployments", "IDX_deployments_pending_order");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -669,5 +681,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   UserRoles1792540800002,
   UserActive1792540800003,
   RoleActive1792540800004,
+  DatabaseLoadIndexes1792627200000,
 ];
 
