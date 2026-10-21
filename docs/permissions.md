@@ -32,7 +32,7 @@ Prerequisites are metadata, so explicitly list both definitions when protecting 
 
 The decorator installs its guard automatically. `PermissionsModule` is registered globally by the API root module; standalone Nest modules using the decorator must import that module or supply its guard's dependencies in tests.
 
-For each permission check, the guard verifies the session user is active and not suspended, then queries active roles linked to that user. The application use case ORs the role bitsets and checks `(granted & required) === required`. The Super bit grants all valid requested permissions. Missing grants return HTTP 403; repository failures propagate rather than granting access. An empty permission list still requires an eligible authenticated user.
+Session deserialization reloads the current user and active assigned roles in one joined SQL read per request. It attaches a non-enumerable request-local permission mask; the guard verifies user eligibility and checks that mask. If no deserialized mask is present, `CheckPermissionsCase` queries active roles directly. Both paths OR role bits and check `(granted & required) === required`. Super grants all valid requested permissions. Grants are not cached across requests or persisted in session data. Missing grants return HTTP 403; database failures fail closed. An empty list still requires an eligible authenticated user.
 
 The API enforces these policies before use cases, idempotency replay, and response caching:
 

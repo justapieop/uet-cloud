@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Database load reduction retains SQL-backed durable queues and transactional quota/idempotency guarantees. Idle queue polling backs off to ten seconds, stale sweeps run once per minute, and unchanged build states are not persisted repeatedly. Authentication reloads user eligibility and active role grants per request; running/stopped read caching is bounded to ten seconds and terminal build caching to thirty seconds. See [database load](../database-load.md).
+
 - Deployment detail and list reads obtain applied CPU/RAM, replica limits, ports, region, image, and FQDN from Azure for provisioned resources. Saved creation inputs remain durable for queued work and quota reservations; workflow records retain identity, ownership, status, and errors. See [applied configuration](../deployment-configuration.md).
 
 - Users and roles have an `active` boolean in the domain and database, defaulting to true for new and existing records. Permission-protected routes require an active, unsuspended user and combine only active assigned roles. A permission decorator requires all listed permission bits, with the established Super override.
