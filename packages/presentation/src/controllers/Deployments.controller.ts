@@ -1,9 +1,10 @@
 import { Idempotent } from "@nestjs/idempotency";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, SubscriptionCheckUnavailable, DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
-import { InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
+import { Permission, InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException, ServiceUnavailableException } from "@nestjs/common";
 import { ApiServiceUnavailableResponse, ApiHeader, ApiUnprocessableEntityResponse, ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
+import { RequirePermissions } from "../common/RequirePermissions.decorator.js";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
 import { ListDeploymentsQueryDto } from "../dto/ListDeploymentsQuery.dto.js";
@@ -12,11 +13,12 @@ import { CacheRead, RouteReadCache, UserReadCacheInterceptor } from "../common/R
 @ApiTags("deployments")
 @Controller("deployments")
 @UseGuards(LoggedInGuard)
-@ApiForbiddenResponse({ description: "No authenticated session or suspended user" })
+@ApiForbiddenResponse({ description: "No authenticated session, inactive or suspended user, or required permission missing" })
 export class DeploymentsController {
   public constructor(private readonly createDeployment: CreateDeploymentCase, private readonly getDeployment: GetDeploymentCase, private readonly readCache: RouteReadCache) {}
 
   @Post()
+  @RequirePermissions(Permission.DeploymentCreate)
   @Idempotent({ required: true })
   @ApiHeader({ name: "Idempotency-Key", required: true, description: "Unique key per deployment request; reuse it for retries (1–255 printable ASCII characters)" })
   @ApiUnprocessableEntityResponse({ description: "Idempotency-Key reused with a different request" })
@@ -26,7 +28,7 @@ export class DeploymentsController {
   @ApiAcceptedResponse({ type: DeploymentResponseDto })
   @ApiBadRequestResponse({ description: "Invalid deployment input; memory must equal twice vCPU" })
   @ApiConflictResponse({ description: "Deployment name already exists or plan quota exceeded" })
-  @ApiForbiddenResponse({ description: "An active Stripe subscription linked to an active Kumo plan is required" })
+  @ApiForbiddenResponse({ description: "DeploymentCreate permission and an active Stripe subscription linked to an active Kumo plan are required" })
   @ApiServiceUnavailableResponse({ description: "Stripe subscription verification is temporarily unavailable" })
   public async create(@Req() request: Request, @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) input: CreateDeploymentDto): Promise<DeploymentResponseDto> {
     const user: User = this.owner(request);
@@ -58,6 +60,7 @@ export class DeploymentsController {
   }
 
   @Get(":id")
+  @RequirePermissions(Permission.DeploymentRead)
   @Header("Cache-Control", "private, no-store")
   @CacheRead("deployments", 2000)
   @UseInterceptors(UserReadCacheInterceptor)
@@ -75,6 +78,7 @@ export class DeploymentsController {
   }
 
   @Get()
+  @RequirePermissions(Permission.DeploymentRead)
   @Header("Cache-Control", "private, no-store")
   @CacheRead("deployments", 2000)
   @UseInterceptors(UserReadCacheInterceptor)

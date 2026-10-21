@@ -3,7 +3,8 @@ import { BuildNotFound, BuildProviderError, GetBuildCase } from "@kumo/applicati
 import { BadGatewayException, Controller, ForbiddenException, Get, Header, NotFoundException, Param, ParseUUIDPipe, Req, UseGuards, UseInterceptors } from "@nestjs/common";
 import { ApiBadGatewayResponse, ApiBadRequestResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
-import type { BuildDetails, User } from "@kumo/domain";
+import { Permission, type BuildDetails, type User } from "@kumo/domain";
+import { RequirePermissions } from "../common/RequirePermissions.decorator.js";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { BuildResponseDto } from "../dto/BuildResponse.dto.js";
 import { CacheRead, UserReadCacheInterceptor } from "../common/ReadCache.js";
@@ -16,13 +17,14 @@ export class DeploymentController {
   ) { }
 
   @Get("build/:id")
+  @RequirePermissions(Permission.BuildRead)
   @Header("Cache-Control", "private, no-store")
   @CacheRead("builds", 2000)
   @UseInterceptors(UserReadCacheInterceptor)
   @UseGuards(LoggedInGuard)
   @ApiOperation({ summary: "Get an owned build and refresh its pipeline status" })
   @ApiOkResponse({ type: BuildResponseDto })
-  @ApiForbiddenResponse({ description: "No authenticated session or suspended user" })
+  @ApiForbiddenResponse({ description: "No authenticated session, inactive or suspended user, or BuildRead permission missing" })
   @ApiNotFoundResponse({ description: "Build not found for this user" })
   @ApiBadRequestResponse({ description: "Invalid build ID" })
   @ApiBadGatewayResponse({ description: "Azure Pipeline status request failed" })

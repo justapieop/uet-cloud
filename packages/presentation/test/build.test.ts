@@ -4,8 +4,8 @@ import { test, type TestContext } from "node:test";
 import { Module, ClassSerializerInterceptor, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { SwaggerModule, DocumentBuilder, type OpenAPIObject } from "@nestjs/swagger";
-import { GetBuildCase, GetBuildSourceCase } from "@kumo/application";
-import { Build, type BuildDetails } from "@kumo/domain";
+import { CheckPermissionsCase, GetBuildCase, GetBuildSourceCase } from "@kumo/application";
+import { Build, type BuildDetails, type Role } from "@kumo/domain";
 import { createHash } from "node:crypto";
 import { DeploymentController } from "../dist/controllers/Deployment.controller.js";
 import { BuildSourceController } from "../dist/controllers/BuildSource.controller.js";
@@ -16,7 +16,8 @@ test("removed build trigger returns 404 and is absent from OpenAPI", async (cont
   class TestModule {}
   Module({
     controllers: [DeploymentController],
-    providers: [RouteReadCache, { provide: CACHE_MANAGER, useValue: { get: async (): Promise<undefined> => undefined, set: async (): Promise<void> => {} } }, { provide: GetBuildCase, useValue: { exec: async (): Promise<never> => { throw new Error("Build lookup must not run for the removed trigger"); } } }],
+    // No grants are needed to verify that the removed route is absent.
+    providers: [{ provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => [] }) }, RouteReadCache, { provide: CACHE_MANAGER, useValue: { get: async (): Promise<undefined> => undefined, set: async (): Promise<void> => {} } }, { provide: GetBuildCase, useValue: { exec: async (): Promise<never> => { throw new Error("Build lookup must not run for the removed trigger"); } } }],
   })(TestModule);
   const app: INestApplication = await NestFactory.create(TestModule, { logger: false, abortOnError: false });
   context.after(async (): Promise<void> => { await app.close(); });

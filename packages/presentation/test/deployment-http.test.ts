@@ -5,8 +5,8 @@ import { ClassSerializerInterceptor, Module, type INestApplication } from "@nest
 import { NestFactory, Reflector } from "@nestjs/core";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { IdempotencyModule } from "@nestjs/idempotency";
-import { CreateDeploymentCase, GetDeploymentCase } from "@kumo/application";
-import { Plan, User } from "@kumo/domain";
+import { CheckPermissionsCase, CreateDeploymentCase, GetDeploymentCase } from "@kumo/application";
+import { Permission, Plan, Role, User } from "@kumo/domain";
 import type { NextFunction, Request, Response } from "express";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
 import { RouteReadCache } from "../dist/common/ReadCache.js";
@@ -15,6 +15,7 @@ import { AdmissionFixture, PLAN } from "../../application/test/support/admission
 test("deployment HTTP contract enforces guards, validation, quotas, serialization and idempotent replay", async (context: TestContext): Promise<void> => {
   const fixture: AdmissionFixture = new AdmissionFixture();
   fixture.plans = [new Plan({ ...PLAN, deployments: 1 })];
+  let roles: Role[] = [];
   class FixtureModule {}
   Module({
     imports: [IdempotencyModule.forRoot({
@@ -24,6 +25,7 @@ test("deployment HTTP contract enforces guards, validation, quotas, serializatio
     })],
     controllers: [DeploymentsController],
     providers: [
+      { provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => roles }) },
       { provide: CreateDeploymentCase, useValue: fixture.useCase },
       { provide: GetDeploymentCase, useValue: {} },
       RouteReadCache,
@@ -47,6 +49,10 @@ test("deployment HTTP contract enforces guards, validation, quotas, serializatio
       method: "POST", headers: { "content-type": "application/json", ...(key ? { "Idempotency-Key": key } : {}), ...(identity ? { "x-test-user": identity } : {}) }, body: JSON.stringify({ ...body, ...patch }),
     });
   assert.equal((await post("accept", {}, "")).status, 403);
+  assert.equal((await post("accept")).status, 403);
+  assert.equal(fixture.stripeCalls, 0);
+  assert.equal(fixture.deployments.length, 0);
+  roles = [new Role({ id: "creator", name: "Creator", permission: 1n << BigInt(Permission.DeploymentCreate.offset) })];
   assert.equal((await post(undefined)).status, 400);
   assert.equal((await post("invalid", { unexpected: true })).status, 400);
   assert.equal((await post("invalid-port", { target_port: 0 })).status, 400);
@@ -64,6 +70,10 @@ test("deployment HTTP contract enforces guards, validation, quotas, serializatio
   assert.equal(replay.headers.get("Idempotent-Replayed"), "true");
   assert.deepEqual(await replay.json(), snapshot);
   assert.equal(fixture.stripeCalls, 1);
+  roles = [];
+  assert.equal((await post("accept")).status, 403);
+  assert.equal(fixture.stripeCalls, 1);
+  roles = [new Role({ id: "creator", name: "Creator", permission: 1n << BigInt(Permission.DeploymentCreate.offset) })];
   assert.equal((await post("accept", {}, "suspended")).status, 403);
   assert.equal((await post("accept", { name: "changed-app" })).status, 422);
   assert.equal((await post("quota", { name: "another-app" })).status, 409);
