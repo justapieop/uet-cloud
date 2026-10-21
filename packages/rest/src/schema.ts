@@ -571,15 +571,22 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description No authenticated session or suspended user */
+            /** @description No authenticated session, suspended user, or no active subscription linked to an active Kumo plan */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Deployment name already exists for this user */
+            /** @description Deployment name already exists or plan quota exceeded */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription verification is temporarily unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

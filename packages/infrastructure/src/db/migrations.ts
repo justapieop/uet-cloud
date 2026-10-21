@@ -570,6 +570,40 @@ export class UserStripeCustomer1792368000000 implements MigrationInterface {
   }
 }
 
+export class UniqueDeploymentName1792540800000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createIndex("deployments", new TableIndex({
+      name: "UQ_deployments_name", columnNames: ["name"], isUnique: true,
+    }));
+    await queryRunner.dropIndex("deployments", "UQ_deployments_user_name");
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createIndex("deployments", new TableIndex({
+      name: "UQ_deployments_user_name", columnNames: ["user_id", "name"], isUnique: true,
+    }));
+    await queryRunner.dropIndex("deployments", "UQ_deployments_name");
+  }
+}
+
+export class PlanStripeProduct1792540800001 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("plans", new TableColumn({
+      name: "stripe_product_id", type: "varchar", length: "255", isNullable: true, collation: "Latin1_General_100_BIN2",
+    }));
+    await queryRunner.query("CREATE UNIQUE INDEX UQ_plans_stripe_product_id ON plans (stripe_product_id) WHERE stripe_product_id IS NOT NULL");
+    await queryRunner.addColumn("plans", new TableColumn({ name: "max_replicas", type: "int", isNullable: false, default: 1 }));
+    await queryRunner.createCheckConstraint("plans", new TableCheck({ name: "CK_plans_max_replicas", expression: "max_replicas >= 1" }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropCheckConstraint("plans", "CK_plans_max_replicas");
+    await queryRunner.dropColumn("plans", "max_replicas");
+    await queryRunner.query("DROP INDEX UQ_plans_stripe_product_id ON plans");
+    await queryRunner.dropColumn("plans", "stripe_product_id");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -582,5 +616,7 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   PlanActive1792108800003,
   Reliability1792272000001,
   UserStripeCustomer1792368000000,
+  UniqueDeploymentName1792540800000,
+  PlanStripeProduct1792540800001,
 ];
 

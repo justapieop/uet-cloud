@@ -10,6 +10,8 @@ export class Plan extends Domain<PlanDetails> {
   public readonly deployments!: number;
   public readonly disk!: number;
   public readonly active: boolean;
+  public readonly stripeProductId: string | null;
+  public readonly maxReplicas: number;
 
   public constructor(
     details: PlanDetails,
@@ -24,9 +26,18 @@ export class Plan extends Domain<PlanDetails> {
     this.deployments = details.deployments;
     this.disk = details.disk;
     this.active = details.active ?? true;
+    this.stripeProductId = details.stripeProductId ?? null;
+    this.maxReplicas = details.maxReplicas ?? 1;
   }
 
   public validate(): InvalidDomainParams | null {
+    if (this.details.maxReplicas !== undefined && (!Number.isSafeInteger(this.details.maxReplicas) || this.details.maxReplicas < 1)) {
+      return new InvalidDomainParams("Plan.maxReplicas must be a positive integer");
+    }
+    if (this.details.stripeProductId != null &&
+      (typeof this.details.stripeProductId !== "string" || !/^prod_[A-Za-z0-9]+$/.test(this.details.stripeProductId) || this.details.stripeProductId.length > 255)) {
+      return new InvalidDomainParams("Plan.stripeProductId must be a Stripe Product ID or null");
+    }
     if (this.details.active !== undefined && typeof this.details.active !== "boolean") {
       return new InvalidDomainParams("Plan.active must be a boolean");
     }
@@ -71,4 +82,6 @@ export interface PlanDetails {
   deployments: number;
   disk: number;
   active?: boolean;
+  stripeProductId?: string | null;
+  maxReplicas?: number;
 }

@@ -38,6 +38,12 @@ For Azure Container Apps and ARM SDK interactions in `@kumo/infrastructure`:
 
 Do not write anything into README.md until told to do so.
 
+Deployment names are globally unique across users, enforced by the database's unique index on `deployments.name`. Let the database arbitrate concurrent name claims and translate duplicate-name errors into a conflict; do not rely on per-user checks for uniqueness.
+
+Before accepting a new deployment, query Stripe for the linked customer's subscriptions with status `active`, including all subscription and item pages. Match product IDs to active local plans. Perform Stripe calls outside the UnitOfWork. Then serialize acceptance for the user with `users.findByIdForUpdate()` inside the acceptance UoW, recheck eligibility of the user and customer association, read current deployments, check quotas, and persist the deployment and idempotency receipt together. CPU/RAM are per-deployment per-replica limits; `max_scaling` must not exceed the plan's `max_replicas`. Count PENDING, PROVISIONING, RUNNING, and FAILED deployments retaining an Azure resource ID against deployment slots. Accepted idempotent retries replay the original receipt without querying Stripe or consuming another slot, after authentication/suspension checks. Subscription verification failures fail closed with HTTP 503; missing eligible subscriptions use 403 and quota failures use 409. Do not implement subscription registration as part of this admission gate.
+
+Each plan may have one unique nullable `stripe_product_id`; unmapped or inactive plans grant no deployment access. Existing rows start unmapped and default to one maximum replica, so configure both fields before enabling them for subscribers. If several subscribed products map to plans, one plan must cover every quota dimension independently; do not stack subscriptions or mix plan limits. Storage enforcement belongs to the future storage-allocation flow.
+
 ## Source of truth
 
 - Treat [`project-brief.md`](project-brief.md) as the concise, current product brief.

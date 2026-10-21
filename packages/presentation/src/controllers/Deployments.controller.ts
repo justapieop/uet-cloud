@@ -1,8 +1,8 @@
 import { Idempotent } from "@nestjs/idempotency";
-import { DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
+import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, SubscriptionCheckUnavailable, DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
 import { InvalidDomainParams, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException } from "@nestjs/common";
-import { ApiHeader, ApiUnprocessableEntityResponse, ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException, ServiceUnavailableException } from "@nestjs/common";
+import { ApiServiceUnavailableResponse, ApiHeader, ApiUnprocessableEntityResponse, ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
@@ -25,7 +25,9 @@ export class DeploymentsController {
   @ApiOperation({ summary: "Queue a repository build and deploy its successful image" })
   @ApiAcceptedResponse({ type: DeploymentResponseDto })
   @ApiBadRequestResponse({ description: "Invalid deployment input; memory must equal twice vCPU" })
-  @ApiConflictResponse({ description: "Deployment name already exists for this user" })
+  @ApiConflictResponse({ description: "Deployment name already exists or plan quota exceeded" })
+  @ApiForbiddenResponse({ description: "An active Stripe subscription linked to an active Kumo plan is required" })
+  @ApiServiceUnavailableResponse({ description: "Stripe subscription verification is temporarily unavailable" })
   public async create(@Req() request: Request, @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) input: CreateDeploymentDto): Promise<DeploymentResponseDto> {
     const user: User = this.owner(request);
     try {
@@ -44,6 +46,9 @@ export class DeploymentsController {
       await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
     } catch (error: unknown) {
+      if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
+      if (error instanceof DeploymentQuotaExceeded) throw new ConflictException({ code: "DEPLOYMENT_QUOTA_EXCEEDED", message: error.message });
+      if (error instanceof SubscriptionCheckUnavailable) throw new ServiceUnavailableException(error.message);
       if (error instanceof DeploymentRequestKeyReused) throw new UnprocessableEntityException({ code: "IDEMPOTENCY_KEY_REUSED", message: error.message });
       if (error instanceof DeploymentRequestInProgress) throw new ConflictException({ code: "IDEMPOTENCY_KEY_IN_USE", message: error.message });
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);

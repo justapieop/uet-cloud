@@ -2,9 +2,10 @@ import { DeploymentAlreadyExists, type DeploymentListFilters, type DeploymentQue
 import { Deployment, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Column, Entity, PrimaryColumn, Repository, type SelectQueryBuilder, type UpdateResult } from "typeorm";
+import { Column, Entity, Index, PrimaryColumn, Repository, type SelectQueryBuilder, type UpdateResult } from "typeorm";
 
 @Entity({ name: "deployments" })
+@Index("UQ_deployments_name", ["name"], { unique: true })
 export class InfraDeployment {
   @PrimaryColumn({ type: "nvarchar", length: 255 }) public readonly id!: string;
   @Column({ type: "nvarchar", length: 255, name: "user_id" }) public readonly userId!: string;
@@ -103,7 +104,7 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
   private translateError(error: unknown): unknown {
     const driver: unknown = typeof error === "object" && error !== null && "driverError" in error ? error.driverError : error;
     if (typeof driver === "object" && driver !== null && "number" in driver && (driver.number === 2601 || driver.number === 2627)) {
-      return new DeploymentAlreadyExists("A deployment with this name already exists for the user");
+      return new DeploymentAlreadyExists("A deployment with this name already exists");
     }
     return error;
   }

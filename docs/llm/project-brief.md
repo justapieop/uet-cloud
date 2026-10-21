@@ -13,6 +13,10 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Deployment names are globally unique across all users, enforced in the database.
+- New deployment requests require an active subscription verified directly with Stripe using the user's linked Stripe Customer. Subscription product IDs map to active local plans through `plans.stripe_product_id`. Subscription registration is outside the current implementation scope.
+- Plan CPU and RAM quotas apply per deployment (per-replica allocation), with a separate per-deployment maximum replica limit (`plans.max_replicas`). The plan's deployment-count quota includes queued and provisioning deployments as well as running apps. Storage is capped when it is added to an instance later; deployment creation does not allocate storage.
+
 - Azure Container Apps is the deployment platform for applications deployed through the PaaS.
 - New user managed environments use the standard Workload Profiles environment type with its Consumption profile. Existing Express environments require separate replacement or migration; the provider rejects them before building.
 - Users can choose a deployment `region`. The first managed environment establishes that user's shared workload region; subsequent requests selecting a different region fail before building. Omitting the field reuses an existing environment or follows the default provisioning location. Azure still determines whether the subscription can deploy in the selected region.
@@ -37,10 +41,18 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - Per-user ACA Managed Environment: Each user has `user-aca-env-<userId>` inside `user-rg-<userId>`, shared by all of that user's Container Apps. Existing groups and environments are reused. Deployment creation rejects an existing app associated with a different deployment ID. Missing resources are created in Resource Group → Managed Environment → Container App order. For a new app, the GitHub Dockerfile build starts after environment readiness and must succeed before app creation. Failed or canceled builds never create an app.
 - All ACR images are private. ARM provisioning uses `DefaultAzureCredential`. Container Apps pull images using an existing user-assigned managed identity with ACR pull permission; that identity is unavailable to tenant application code. The provider refuses new builds when the registry permits anonymous pulls.
 
+## Pricing model
+
+- Packages include a monetary usage allowance. In the user's example, a $5 package includes $5 worth of usage with no additional usage charge within that allowance. Usage exceeding the allowance is charged at the applicable resource rates.
+- An illustrative CPU rate is $0.0001 per vCPU per instance per hour. At that rate, CPU usage value is allocated vCPU per instance multiplied by instance-hours multiplied by $0.0001, summed across instances. This is an example rate, not a finalized price catalog.
+- Working interpretation: the package price is the base charge, and the total charge is package price plus `max(0, rated usage - included allowance)`. Confirm this interpretation before implementing billing.
+
 ## Source-of-truth note
 
 The README provides a setup guide and links to this brief. Use this brief and the LLM guidance in [`project-instructions.md`](project-instructions.md) for current project context and technical conventions.
 
 ## Open questions
+
+Pricing details still to confirm include the package billing period, allowance reset and rollover behavior, final resource rates, whether CPU metering uses allocated or consumed CPU, billing time granularity and rounding, and whether included usage and overages use the same rates.
 
 The remaining product scope, deployment inputs beyond GitHub repositories with Dockerfiles, user journey, additional Azure service choices, frontend framework, communication between applications, and operational requirements remain open. Treat these as open until decided.
