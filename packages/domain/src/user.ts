@@ -6,7 +6,6 @@ export class User extends Domain<UserDetails> {
   public readonly displayName: string;
   public readonly createdAt: Date;
   public readonly suspended: boolean;
-  public readonly stripeCustomerId: string | null;
 
   public constructor(details: UserDetails) {
     super(details);
@@ -15,7 +14,6 @@ export class User extends Domain<UserDetails> {
     this.displayName = details.displayName;
     this.createdAt = details.createdAt ?? new Date();
     this.suspended = details.suspended;
-    this.stripeCustomerId = details.stripeCustomerId ?? null;
   }
 
   public validate(): InvalidDomainParams | null {
@@ -27,11 +25,6 @@ export class User extends Domain<UserDetails> {
       return new InvalidDomainParams(`User.displayName must not be blank`);
     }
 
-    if (this.details.stripeCustomerId != null &&
-      (typeof this.details.stripeCustomerId !== "string" || !/^cus_[A-Za-z0-9]+$/.test(this.details.stripeCustomerId) || this.details.stripeCustomerId.length > 255)) {
-      return new InvalidDomainParams("User.stripeCustomerId must be a Stripe Customer ID or null");
-    }
-
     return null;
   }
 }
@@ -41,5 +34,4 @@ export interface UserDetails {
   displayName: string;
   createdAt?: Date;
   suspended: boolean;
-  stripeCustomerId?: string | null;
 }

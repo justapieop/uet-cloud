@@ -1,4 +1,3 @@
-import { StripeModule } from "./Stripe.module.js";
 import { AppIdempotencyModule } from "./AppIdempotency.module.js";
 import { AppResilienceModule } from "./AppResilience.module.js";
 import { Module } from "@nestjs/common";
@@ -40,7 +39,6 @@ import { MonitoringModule } from "./Monitoring.module.js";
     DeploymentModule,
     MonitoringModule,
     AppCacheModule,
-    StripeModule,
   ],
 })
 export class RootModule { }

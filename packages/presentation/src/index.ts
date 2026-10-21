@@ -5,4 +5,3 @@ export * from "./modules/Build.module.js";
 export * from "./controllers/Deployment.controller.js";
 export * from "./dto/BuildResponse.dto.js";
 export * from "./controllers/BuildSource.controller.js";
-export * from "./modules/Stripe.module.js";
