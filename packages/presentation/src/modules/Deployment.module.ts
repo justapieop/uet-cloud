@@ -15,7 +15,7 @@ import {
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { ExternalClientsModule } from "./ExternalClients.module.js";
@@ -47,8 +47,13 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
     },
     {
       provide: GetDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository): GetDeploymentCase => new GetDeploymentCase(repository),
-      inject: [InfraDeploymentRepository],
+      useFactory: (repository: InfraDeploymentRepository, reader: AzureDeploymentConfigurationReader): GetDeploymentCase => new GetDeploymentCase(repository, reader),
+      inject: [InfraDeploymentRepository, AzureDeploymentConfigurationReader],
+    },
+    {
+      provide: AzureDeploymentConfigurationReader,
+      useFactory: (config: ConfigService, apps: ContainerAppsAPIClient): AzureDeploymentConfigurationReader => new AzureDeploymentConfigurationReader(config, apps.containerApps),
+      inject: [ConfigService, ContainerAppsAPIClient],
     },
     {
       provide: StartDeploymentCase,

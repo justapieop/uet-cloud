@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Deployment detail and list reads obtain applied CPU/RAM, replica limits, ports, region, image, and FQDN from Azure for provisioned resources. Saved creation inputs remain durable for queued work and quota reservations; workflow records retain identity, ownership, status, and errors. See [applied configuration](../deployment-configuration.md).
+
 - Users and roles have an `active` boolean in the domain and database, defaulting to true for new and existing records. Permission-protected routes require an active, unsuspended user and combine only active assigned roles. A permission decorator requires all listed permission bits, with the established Super override.
 
 - User-to-role assignments use a many-to-many `user_roles` link table. Each user/role pair is unique, and deleting either parent removes its links.

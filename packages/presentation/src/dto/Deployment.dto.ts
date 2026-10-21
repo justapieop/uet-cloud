@@ -1,4 +1,5 @@
 import type { Deployment, DeploymentPortMapping, DeploymentStatus } from "@kumo/domain";
+import type { DeploymentConfiguration } from "@kumo/application";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Exclude, Expose, Type } from "class-transformer";
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsNumber, IsObject, ValidateIf, ValidateNested, IsString, Matches, Max, MaxLength, Min } from "class-validator";
@@ -129,22 +130,22 @@ export class DeploymentResponseDto {
   @Expose({ name: "created_at" }) @ApiProperty({ name: "created_at", type: Date }) public readonly createdAt: Date;
   @Expose({ name: "updated_at" }) @ApiProperty({ name: "updated_at", type: Date }) public readonly updatedAt: Date;
 
-  public constructor(deployment: Deployment) {
-    this.region = deployment.spec?.region ?? null;
+  public constructor(deployment: Deployment, configuration?: DeploymentConfiguration | null) {
+    this.region = configuration ? configuration.region : deployment.spec?.region ?? null;
     this.id = deployment.id;
     this.name = deployment.name;
-    this.targetPort = deployment.spec?.targetPort ?? null;
-    this.additionalPorts = (deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
+    this.targetPort = configuration ? configuration.targetPort : deployment.spec?.targetPort ?? null;
+    this.additionalPorts = (configuration ? configuration.additionalPorts : deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
     this.status = deployment.status;
-    this.image = deployment.image;
+    this.image = configuration ? configuration.image : deployment.image;
     this.buildId = deployment.buildId;
     this.resourceId = deployment.resourceId;
-    this.fqdn = deployment.fqdn;
+    this.fqdn = configuration ? configuration.fqdn : deployment.fqdn;
     this.error = deployment.error;
-    this.maxVcpu = deployment.spec?.maxVcpu ?? null;
-    this.maxMemory = deployment.spec?.maxMemory ?? null;
-    this.minScaling = deployment.spec?.minScaling ?? null;
-    this.maxScaling = deployment.spec?.maxScaling ?? null;
+    this.maxVcpu = configuration ? configuration.maxVcpu : deployment.spec?.maxVcpu ?? null;
+    this.maxMemory = configuration ? configuration.maxMemory : deployment.spec?.maxMemory ?? null;
+    this.minScaling = configuration ? configuration.minScaling : deployment.spec?.minScaling ?? null;
+    this.maxScaling = configuration ? configuration.maxScaling : deployment.spec?.maxScaling ?? null;
     this.createdAt = deployment.createdAt;
     this.updatedAt = deployment.updatedAt;
   }

@@ -7,6 +7,8 @@ import {
   BuildProviderError,
   BuildNotFound,
   GetBuildCase,
+  DeploymentConfigurationReadError,
+  type DeploymentReadResult,
 } from "@kumo/application";
 import {
   BadGatewayException,
@@ -132,12 +134,19 @@ export class DeploymentsController {
   @ApiOperation({ summary: "Get an owned deployment's provisioning status" })
   @ApiOkResponse({ type: DeploymentResponseDto })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
+  @ApiBadGatewayResponse({ description: "Azure resource is missing, invalid, or inaccessible" })
+  @ApiServiceUnavailableResponse({ description: "Azure configuration is temporarily unavailable" })
   public async get(@Req() request: Request, @Param("id", new ParseUUIDPipe()) id: string): Promise<DeploymentResponseDto> {
     const user: User = this.owner(request);
     try {
-      return new DeploymentResponseDto(await this.getDeployment.exec(id, user.id));
+      const result: DeploymentReadResult = await this.getDeployment.exec(id, user.id);
+      return new DeploymentResponseDto(result.deployment, result.configuration);
     } catch (error: unknown) {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
+      if (error instanceof DeploymentConfigurationReadError) {
+        if (error.reason === "unavailable") throw new ServiceUnavailableException(error.message);
+        throw new BadGatewayException(error.message);
+      }
       throw error;
     }
   }
@@ -150,12 +159,22 @@ export class DeploymentsController {
   @ApiOperation({ summary: "List owned deployments with optional status, name, and region filters" })
   @ApiOkResponse({ type: DeploymentResponseDto, isArray: true })
   @ApiBadRequestResponse({ description: "Invalid or unknown query parameters" })
+  @ApiBadGatewayResponse({ description: "An Azure resource is missing, invalid, or inaccessible" })
+  @ApiServiceUnavailableResponse({ description: "Azure configuration is temporarily unavailable" })
   public async list(
     @Req() request: Request,
     @Query(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) filters: ListDeploymentsQueryDto,
   ): Promise<DeploymentResponseDto[]> {
     const user: User = this.owner(request);
-    return (await this.getDeployment.list(user.id, filters)).map((deployment: Deployment): DeploymentResponseDto => new DeploymentResponseDto(deployment));
+    try {
+      return (await this.getDeployment.list(user.id, filters)).map((result: DeploymentReadResult): DeploymentResponseDto => new DeploymentResponseDto(result.deployment, result.configuration));
+    } catch (error: unknown) {
+      if (error instanceof DeploymentConfigurationReadError) {
+        if (error.reason === "unavailable") throw new ServiceUnavailableException(error.message);
+        throw new BadGatewayException(error.message);
+      }
+      throw error;
+    }
   }
 
   @Get("deployment/build/:id")
