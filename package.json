@@ -8,7 +8,9 @@
   ],
   "scripts": {
     "build:api": "tsc -b packages/domain packages/contracts packages/application packages/infrastructure packages/presentation apps/api",
-    "test:api": "npm run build:api && node --test",
+    "test:api": "npm run build:api && npm run typecheck:tests && node scripts/test-backend.mjs",
+    "typecheck:tests": "tsc -p tsconfig.test.json",
+    "test:db": "npm run build:api && npm run typecheck:tests && node scripts/test-backend.mjs db",
     "start:api": "node apps/api/dist/main.js",
     "dev:api": "npm run build:api && node apps/api/dist/main.js | pino-pretty",
     "generate:api": "npm run generate -w packages/rest",

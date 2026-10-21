@@ -12,7 +12,7 @@ import { createSessionCookieOptions } from "../dist/common/Session.options.js";
 
 test("HTTP login sets a cookie that authenticates the next request despite an unavailable frontend", async (context: TestContext): Promise<void> => {
   const app: ExpressApplication = express();
-  const passport: Passport = new Passport();
+  const passport: InstanceType<typeof Passport> = new Passport();
   const guard: LoggedInGuard = new LoggedInGuard();
   const user: User = new User({ id: "123", displayName: "Alice", suspended: false });
   const restoredIds: string[] = [];

@@ -79,7 +79,8 @@ function fixture(options: FixtureOptions = {}): Fixture {
       createOrUpdate: (rg: string, name: string, envelope: ManagedEnvironment): ReturnType<AzureProviderClients["managedEnvironments"]["createOrUpdate"]> => {
         assert.equal(rg, "user-rg-123");
         assert.equal(name, "user-aca-env-123");
-        assert.deepEqual(envelope.workloadProfiles, []);
+        assert.equal(envelope.environmentMode, "WorkloadProfiles");
+        assert.deepEqual(envelope.workloadProfiles, [{ name: "Consumption", workloadProfileType: "Consumption" }]);
         events.push("env-create");
         return {
           pollUntilDone: async (): Promise<ManagedEnvironment> => {
@@ -191,10 +192,10 @@ FAILED_STATUSES.forEach((status: BuildStatus): void => {
 test("permission errors propagate without creating or rebuilding resources", async (): Promise<void> => {
   const failure: Error & { statusCode: number } = Object.assign(new Error("Forbidden"), { statusCode: 403 });
   const setup: Fixture = fixture({ existingResources: true, environmentError: failure });
-  await assert.rejects(setup.provider.createDeployment(INPUT), failure);
+  await assert.rejects(setup.provider.createDeployment(INPUT), (error: unknown): boolean => error instanceof Error && error.cause === failure);
   assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get"]);
   const deniedApp: Fixture = fixture({ existingResources: true, appError: failure });
-  await assert.rejects(deniedApp.provider.createDeployment(INPUT), failure);
+  await assert.rejects(deniedApp.provider.createDeployment(INPUT), (error: unknown): boolean => error instanceof Error && error.cause === failure);
   assert.equal(deniedApp.events.includes("build-trigger"), false);
 });
 
@@ -215,13 +216,13 @@ test("an unhealthy environment prevents building or creating an app", async (): 
 test("canceling while waiting for a build prevents Container App creation", async (): Promise<void> => {
   const cancellation: AbortController = new AbortController();
   const setup: Fixture = fixture({ statuses: ["RUNNING"], onBuildRead: (): void => cancellation.abort() });
-  await assert.rejects(setup.provider.createDeployment({ ...INPUT, abortSignal: cancellation.signal }), { name: "AbortError" });
+  await assert.rejects(setup.provider.createDeployment({ ...INPUT, abortSignal: cancellation.signal }), /Build completion wait failed/);
   assert.equal(setup.events.includes("app-create"), false);
 });
 
 test("build waiting is bounded and timeout prevents Container App creation", async (): Promise<void> => {
   const setup: Fixture = fixture({ statuses: ["RUNNING"], timeoutMs: 30 });
-  await assert.rejects(setup.provider.createDeployment(INPUT), { name: "AbortError" });
+  await assert.rejects(setup.provider.createDeployment(INPUT), /Build completion wait failed/);
   assert.equal(setup.events.includes("app-create"), false);
 });
 

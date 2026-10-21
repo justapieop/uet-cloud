@@ -7,7 +7,10 @@ import { plainToInstance, instanceToPlain } from "class-transformer";
 import { validate } from "class-validator";
 import type { Request } from "express";
 import { DeploymentMetricsReadError, DeploymentMetricsUnavailableError, DeploymentNotFoundError, GetDeploymentMetricsCase } from "@kumo/application";
-import { AzureMonitoringModule, AzureMonitorMetricsReader, InfraDeploymentRepository } from "@kumo/infrastructure";
+import { AzureMonitorMetricsReader, InfraDeploymentRepository } from "@kumo/infrastructure";
+import { MonitorClient } from "@azure/arm-monitor";
+import { ConfigService } from "@nestjs/config";
+import type { FactoryProvider } from "@nestjs/common";
 import { DeploymentMetricsController } from "../dist/controllers/DeploymentMetrics.controller.js";
 import { DeploymentMetricsQueryDto, DeploymentMetricsResponseDto } from "../dist/dto/DeploymentMetrics.dto.js";
 import { MonitoringModule } from "../dist/modules/Monitoring.module.js";
@@ -68,20 +71,21 @@ test("monitoring module wires the existing repository and Infrastructure adapter
   const imports: unknown[] = Reflect.getMetadata("imports", MonitoringModule) as unknown[];
   const providers: { provide?: unknown; inject?: unknown[] }[] = Reflect.getMetadata("providers", MonitoringModule) as { provide?: unknown; inject?: unknown[] }[];
   assert.ok(imports.includes(DatabaseModule));
-  assert.ok(imports.includes(AzureMonitoringModule));
   assert.deepEqual(providers.find((provider) => provider.provide === GetDeploymentMetricsCase)?.inject, [InfraDeploymentRepository, AzureMonitorMetricsReader]);
-  assert.ok((Reflect.getMetadata("exports", AzureMonitoringModule) as unknown[]).includes(AzureMonitorMetricsReader));
+  assert.deepEqual(providers.find((provider) => provider.provide === AzureMonitorMetricsReader)?.inject, [ConfigService, MonitorClient]);
 });
 
 test("Nest resolves the monitoring use case factory with repository and reader providers", async () => {
-  const providers: Provider[] = Reflect.getMetadata("providers", MonitoringModule) as Provider[];
+  const factories: FactoryProvider[] = Reflect.getMetadata("providers", MonitoringModule) as FactoryProvider[];
+  const providers: Provider[] = factories.filter((provider: FactoryProvider): boolean => provider.provide !== MonitorClient);
   class FixtureModule {}
   Module({ providers: [
     { provide: InfraDeploymentRepository, useValue: {} },
-    { provide: AzureMonitorMetricsReader, useValue: {} },
+    { provide: ConfigService, useValue: new ConfigService({ AZURE_SUBSCRIPTION_ID: "sub", AZURE_PLATFORM_RESOURCE_GROUP: "platform" }) },
+    { provide: MonitorClient, useValue: { metrics: { list: async (): Promise<never> => { throw new Error("Must not call Azure"); } } } },
     ...providers,
   ] })(FixtureModule);
-  const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false });
+  const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false, abortOnError: false });
   try {
     assert.ok(context.get(GetDeploymentMetricsCase) instanceof GetDeploymentMetricsCase);
   } finally {

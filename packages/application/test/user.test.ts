@@ -3,9 +3,11 @@ import { test } from "node:test";
 import { Role, User } from "@kumo/domain";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../dist/ports/uow.js";
 import { CreateUserCase } from "../dist/use-cases/user/CreateUser.case.js";
+import { emptyRepositories } from "./support/repositories.ts";
 
 function createRepositories(savedUsers: User[]): UnitOfWorkRepositories {
   return {
+    ...emptyRepositories(),
     users: {
       findById: async (id: string): Promise<User | null> =>
         savedUsers.find((user: User): boolean => user.id === id) ?? null,

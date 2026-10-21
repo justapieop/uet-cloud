@@ -6,7 +6,6 @@ import { NestFactory } from "@nestjs/core";
 import type { Response } from "@azure/arm-monitor";
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics } from "@kumo/application";
 import { AzureMonitorMetricsReader, type MetricsClient, type MetricsReadInput } from "../dist/azure/monitoring.js";
-import { AzureMonitoringModule } from "../dist/azure/Monitoring.module.js";
 
 const RESOURCE_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
 const INPUT: MetricsReadInput = {
@@ -61,9 +60,14 @@ test("Nest creates the Azure monitoring reader with ConfigService", async () => 
         AZURE_PLATFORM_RESOURCE_GROUP: "platform",
       })],
     }),
-    AzureMonitoringModule,
-  ] })(FixtureModule);
-  const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false });
+  ], providers: [{
+    provide: AzureMonitorMetricsReader,
+    useFactory: (config: ConfigService): AzureMonitorMetricsReader => new AzureMonitorMetricsReader(config, {
+      list: async (): Promise<never> => { throw new Error("Resolving providers must not call Azure"); },
+    }),
+    inject: [ConfigService],
+  }] })(FixtureModule);
+  const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false, abortOnError: false });
   try {
     assert.ok(context.get(AzureMonitorMetricsReader) instanceof AzureMonitorMetricsReader);
   } finally {

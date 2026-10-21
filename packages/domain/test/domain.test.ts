@@ -35,7 +35,7 @@ test("user preserves identity and display name", (): void => {
 
 test("Super grants copied permissions and permissions outside the catalog", (): void => {
   const role: Role = new Role({ id: "admin", name: "Admin", permission: 1n });
-  const requested: Permission = { offset: 10, name: "Example", description: "Example permission" };
+  const requested: Permission = { offset: 10, name: "Example", description: "Example permission", requires: [] };
 
   assert.equal(role.hasPermission({ ...Permission.Super }), true);
   assert.equal(role.hasPermission(requested), true);
@@ -44,7 +44,7 @@ test("Super grants copied permissions and permissions outside the catalog", (): 
 
 test("ordinary roles check the offset independently of metadata", (): void => {
   const role: Role = new Role({ id: "role-1", name: "Role", permission: 1n << 10n });
-  const requested: Permission = { offset: 10, name: "Example", description: "Example permission" };
+  const requested: Permission = { offset: 10, name: "Example", description: "Example permission", requires: [] };
 
   assert.equal(role.hasPermission(requested), true);
   assert.equal(role.hasPermission({ ...requested, name: "Renamed", description: "Changed" }), true);

@@ -1,5 +1,5 @@
-import { Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
-import { ProcessBuildCase } from "@kumo/application";
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
+import { ProcessBuildCase, type BuildQueueRepository } from "@kumo/application";
 import type { Build } from "@kumo/domain";
 import { InfraBuildRepository } from "../db/repositories/build.js";
 
@@ -10,7 +10,10 @@ export class BuildWorker implements OnApplicationBootstrap, OnApplicationShutdow
   private active: Promise<void> | undefined;
   private stopping: boolean = false;
 
-  public constructor(private readonly repository: InfraBuildRepository, private readonly processBuild: ProcessBuildCase) {}
+  public constructor(
+    @Inject(InfraBuildRepository) private readonly repository: BuildQueueRepository,
+    @Inject(ProcessBuildCase) private readonly processBuild: Pick<ProcessBuildCase, "exec">,
+  ) {}
 
   public onApplicationBootstrap(): void {
     this.timer = setInterval(() => this.tick(), 1000);

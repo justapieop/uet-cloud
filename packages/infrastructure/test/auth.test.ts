@@ -5,11 +5,13 @@ import { CreateUserCase, type UnitOfWork, type UnitOfWorkRepositories } from "@k
 import { Role, User } from "@kumo/domain";
 import type { Profile } from "passport-github2";
 import { PassportProvider } from "../dist/auth/provider.js";
+import { emptyRepositories } from "../../application/test/support/repositories.ts";
 
 test("GitHub strategy returns the user created in one unit of work", async (): Promise<void> => {
   const savedUsers: User[] = [];
   let transactionCalls: number = 0;
   const repositories: UnitOfWorkRepositories = {
+    ...emptyRepositories(),
     users: {
       findById: async (): Promise<User | null> => null,
       findByIdForUpdate: async (): Promise<User | null> => null,
