@@ -1,6 +1,6 @@
 import type { ContainerAppsAPIClient, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, WorkloadProfile } from "@azure/arm-appcontainers";
 import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
-import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
+import { BuildProviderError, type ContainerLifecycleManager, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
 import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
@@ -40,11 +40,11 @@ export interface AzureProviderClients {
   resources: Pick<ResourceManagementClient["resources"], "getById">;
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get" | "createOrUpdate">;
-  containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate">;
+  containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate" | "start" | "stop">;
 }
 
 @Injectable()
-export class AzureProvider implements DeploymentProvisioner {
+export class AzureProvider implements DeploymentProvisioner, ContainerLifecycleManager {
   private readonly platformResourceGroup: string;
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
@@ -126,6 +126,22 @@ export class AzureProvider implements DeploymentProvisioner {
       throw new BuildProviderError("Azure did not return a successfully provisioned app with build metadata");
     }
     return { buildId, image, resourceId: app.id, fqdn: app.configuration?.ingress?.fqdn ?? null };
+  }
+
+  public async startApp(userId: string, appName: string, signal?: AbortSignal): Promise<void> {
+    const rgName: string = this.userResourceGroup(userId);
+    const opSignal: AbortSignal = this.operationSignal(signal);
+    await runBuildStep("Container App start", (): Promise<ContainerApp> =>
+      this.clients.containerApps.start(rgName, appName, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
+    );
+  }
+
+  public async stopApp(userId: string, appName: string, signal?: AbortSignal): Promise<void> {
+    const rgName: string = this.userResourceGroup(userId);
+    const opSignal: AbortSignal = this.operationSignal(signal);
+    await runBuildStep("Container App stop", (): Promise<ContainerApp> =>
+      this.clients.containerApps.stop(rgName, appName, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
+    );
   }
 
   public async createDeployment(input: AzureDeploymentCreateInput): Promise<ContainerApp> {
