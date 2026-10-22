@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Plan, User } from "@kumo/domain";
-import { InvalidPlanSubscription, PlanSubscriptionForbidden, SubscribeToPlanCase, SubscriptionPlanNotFound, type PlanCheckoutRedirects, type PlanSubscriptionGateway, type PlanSubscriptionResult } from "../dist/index.js";
+import { InvalidPlanSubscription, PlanSubscriptionForbidden, SubscribeToPlanCase, SubscriptionPlanNotFound, type PlanCheckoutRedirects, type PlanSubscriptionGateway, type PlanSubscriptionPrice, type PlanSubscriptionResult } from "../dist/index.js";
 
 const REDIRECTS: PlanCheckoutRedirects = { successUrl: "https://kumo.example/dashboard", cancelUrl: "https://kumo.example/dashboard" };
+const PRICES: readonly PlanSubscriptionPrice[] = [{ id: "price_monthly", usageType: "licensed" }, { id: "price_cpu", usageType: "metered" }];
 const PLAN: Plan = new Plan({ id: "starter", name: "Starter", price: 5, vcpu: 1, memory: 2, deployments: 2, disk: 10, stripeProductId: "prod_starter" });
 const INPUT: { userId: string; planId: string; idempotencyKey: string } = { userId: "123", planId: PLAN.id, idempotencyKey: "request-1" };
 
@@ -14,9 +15,9 @@ test("subscription uses the persisted customer's identity and stable owner-scope
     ["456", new User({ id: "456", displayName: "Bob", suspended: false, stripeCustomerId: "cus_bob" })],
   ]);
   const gateway: PlanSubscriptionGateway = {
-    getPlanDefaultPriceId: async (productId: string): Promise<string> => { assert.equal(productId, "prod_starter"); return "price_monthly"; },
+    getPlanPrices: async (productId: string): Promise<readonly PlanSubscriptionPrice[]> => { assert.equal(productId, "prod_starter"); return PRICES; },
     createPlanCheckoutSession: async (input): Promise<PlanSubscriptionResult> => {
-      assert.ok(["cus_alice", "cus_bob"].includes(input.customerId)); assert.equal(input.priceId, "price_monthly"); keys.push(input.idempotencyKey);
+      assert.ok(["cus_alice", "cus_bob"].includes(input.customerId)); assert.deepEqual(input.prices, PRICES); keys.push(input.idempotencyKey);
       assert.equal(input.successUrl, REDIRECTS.successUrl); assert.equal(input.cancelUrl, REDIRECTS.cancelUrl);
       return { checkoutSessionId: "cs_1", checkoutUrl: "https://checkout.stripe.com/c/pay/cs_1" };
     },
@@ -34,7 +35,7 @@ test("ineligible users and unmapped/inactive plans never reach Stripe", async ()
   let plan: Plan | null = PLAN;
   const useCase: SubscribeToPlanCase = new SubscribeToPlanCase(
     { findById: async (): Promise<User | null> => user }, { findById: async (): Promise<Plan | null> => plan },
-    { getPlanDefaultPriceId: async (): Promise<never> => { throw new Error("Unexpected Stripe access"); }, createPlanCheckoutSession: async (): Promise<never> => { throw new Error("Unexpected checkout"); } }, REDIRECTS,
+    { getPlanPrices: async (): Promise<never> => { throw new Error("Unexpected Stripe access"); }, createPlanCheckoutSession: async (): Promise<never> => { throw new Error("Unexpected checkout"); } }, REDIRECTS,
   );
   await assert.rejects(useCase.exec(INPUT), PlanSubscriptionForbidden);
   const userVariants: User[] = [new User({ id: "123", displayName: "Alice", suspended: false, active: false }), new User({ id: "123", displayName: "Alice", suspended: true }), new User({ id: "123", displayName: "Alice", suspended: false })];
@@ -54,7 +55,7 @@ test("invalid idempotency input cannot create a checkout", async (): Promise<voi
   const useCase: SubscribeToPlanCase = new SubscribeToPlanCase(
     { findById: async (): Promise<User> => new User({ id: "123", displayName: "Alice", suspended: false, stripeCustomerId: "cus_alice" }) },
     { findById: async (): Promise<Plan> => PLAN },
-    { getPlanDefaultPriceId: async (): Promise<never> => { throw new Error("Invalid input must not reach Stripe"); }, createPlanCheckoutSession: async (): Promise<never> => { throw new Error("Unexpected checkout"); } }, REDIRECTS,
+    { getPlanPrices: async (): Promise<never> => { throw new Error("Invalid input must not reach Stripe"); }, createPlanCheckoutSession: async (): Promise<never> => { throw new Error("Unexpected checkout"); } }, REDIRECTS,
   );
   await assert.rejects(useCase.exec({ ...INPUT, idempotencyKey: undefined }), InvalidPlanSubscription);
   await assert.rejects(useCase.exec({ ...INPUT, idempotencyKey: "bad\nkey" }), InvalidPlanSubscription);

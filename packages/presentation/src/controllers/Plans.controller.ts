@@ -11,7 +11,7 @@ export class PlansController {
 
   @Get()
   @Header("Cache-Control", "no-store")
-  @ApiOperation({ summary: "List active Stripe-linked plans", description: "Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout validates the linked product's default price before creating a session." })
+  @ApiOperation({ summary: "List active Stripe-linked plans", description: "Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout includes all active prices of the linked product." })
   @ApiOkResponse({ type: PlanResponseDto, isArray: true })
   public async list(): Promise<PlanResponseDto[]> {
     const plans: Plan[] = await this.getPlans.exec();

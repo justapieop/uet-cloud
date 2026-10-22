@@ -14,10 +14,11 @@ import { DeploymentMetricsController } from "../dist/controllers/DeploymentMetri
 import { BuildSourceController } from "../dist/controllers/BuildSource.controller.js";
 import { PlanSubscriptionsController } from "../dist/controllers/PlanSubscriptions.controller.js";
 import { PlansController } from "../dist/controllers/Plans.controller.js";
+import { UserPlansController } from "../dist/controllers/UserPlans.controller.js";
 import { createOpenApiConfig } from "../dist/common/OpenApi.js";
 
 test("OpenAPI covers controller operations, session authentication, and generated client paths", async (context: TestContext): Promise<void> => {
-  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, PlanSubscriptionsController];
+  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController];
   // Resolve controllers without starting SQL, sessions, workers, or cloud clients.
   const tokens: Set<Type<object> | string | symbol> = new Set([
     CheckPermissionsCase, CACHE_MANAGER,
@@ -48,7 +49,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 15);
+  assert.equal(count, 16);
   const checkoutBody: RequestBodyObject = document.paths["/plans/{id}/subscriptions"]!.post!.requestBody as RequestBodyObject;
   assert.equal(checkoutBody.required, false);
   assert.deepEqual(checkoutBody.content["application/json"]?.schema, { type: "object", additionalProperties: false, maxProperties: 0 });

@@ -187,7 +187,7 @@ Additional target ports must be distinct from each other and from the primary ta
 
 The plan subscription Checkout endpoint also requires `FRONTEND_URL`. Configure the frontend's HTTP(S) base URL without embedded credentials. Stripe Checkout success and cancellation both return to its `/dashboard` path; browser requests cannot override these destinations. See [plan subscriptions](plan-subscriptions.md).
 
-For each active local plan, set the linked Stripe product's default price to the approved active licensed recurring price. Checkout resolves only that default; clients cannot select a Price ID, and invalid/missing defaults fail with 503 without falling back to other prices.
+For each active local plan, configure all billable components as active prices on its linked Stripe product. Checkout paginates and includes every active price, including metered recurring prices and one-time initial charges. Clients cannot select individual Price IDs. At least one recurring price is required; Stripe Checkout limits and price compatibility must be respected. Archive unused/alternative prices to keep them out of the combined purchase; the default price does not limit selection.
 
 The presentation module constructs the Stripe SDK client and injects it into the infrastructure `StripeProvider`, which is exported by the module.
 

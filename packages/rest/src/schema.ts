@@ -218,9 +218,29 @@ export interface paths {
         };
         /**
          * List active Stripe-linked plans
-         * @description Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout validates the linked product's default price before creating a session.
+         * @description Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout includes all active prices of the linked product.
          */
         get: operations["PlansController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check whether the signed-in user has an active plan
+         * @description Verifies active Stripe subscriptions and matches active local plans. No linked customer or no matching active subscription returns has_plan=false. Stripe verification failures return 503, not false. Does not reserve quota or grant deployment access.
+         */
+        get: operations["UserPlansController_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -240,7 +260,7 @@ export interface paths {
         put?: never;
         /**
          * Create a Stripe-hosted subscription checkout for the signed-in user
-         * @description Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
+         * @description Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
          */
         post: operations["PlanSubscriptionsController_create"];
         delete?: never;
@@ -414,6 +434,12 @@ export interface components {
             disk: number;
             /** @description Maximum replicas per deployment */
             max_replicas: number;
+        };
+        UserPlansResponseDto: {
+            /** @description True when an active Stripe subscription maps to at least one active local plan; does not indicate remaining quota */
+            has_plan: boolean;
+            /** @description Active local plans matching the user's active Stripe subscriptions */
+            plans: components["schemas"]["PlanResponseDto"][];
         };
         PlanSubscriptionResponseDto: {
             checkout_session_id: string;
@@ -1021,6 +1047,39 @@ export interface operations {
             };
         };
     };
+    UserPlansController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPlansResponseDto"];
+                };
+            };
+            /** @description Authenticated, active, unsuspended user required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     PlanSubscriptionsController_create: {
         parameters: {
             query?: never;
@@ -1078,7 +1137,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Stripe unavailable or plan has no valid recurring default price */
+            /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
             503: {
                 headers: {
                     [name: string]: unknown;

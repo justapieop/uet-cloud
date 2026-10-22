@@ -1,48 +1,111 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
+import { Logger } from "@nestjs/common";
 import type Stripe from "stripe";
-import { PlanSubscriptionConflict, PlanSubscriptionUnavailable } from "@kumo/application";
+import { PlanSubscriptionConflict, PlanSubscriptionUnavailable, type PlanSubscriptionGateway, type PlanSubscriptionPrice } from "@kumo/application";
 import { StripeProvider } from "../dist/stripe/provider.js";
 
-test("Stripe checkout uses only the product default price and fails closed on invalid configuration and returns a hosted Checkout URL", async (): Promise<void> => {
-  const price: object = { id: "price_monthly", active: true, type: "recurring", recurring: { usage_type: "licensed" }, product: "prod_starter" };
-  let product: object = { id: "prod_starter", active: true, default_price: price };
+function price(id: string, usageType: PlanSubscriptionPrice["usageType"], overrides: object = {}): Stripe.Price {
+  return { id, active: true, product: "prod_starter", type: usageType === "one_time" ? "one_time" : "recurring",
+    recurring: usageType === "one_time" ? null : { usage_type: usageType }, ...overrides } as Stripe.Price;
+}
+
+test("Checkout includes every active price across pages, with no quantity on metered items", async (): Promise<void> => {
+  let pages: number = 0;
   let failure: unknown;
-  let checkoutUrl: string | null = "https://checkout.stripe.com/c/pay/cs_123";
-  const input: { customerId: string; priceId: string; idempotencyKey: string; successUrl: string; cancelUrl: string } = { customerId: "cus_alice", priceId: "price_monthly", idempotencyKey: "stable-key", successUrl: "https://kumo.example/dashboard", cancelUrl: "https://kumo.example/dashboard" };
+  let url: string | null = "https://checkout.stripe.com/c/pay/cs_123";
   const client: Stripe = {
-    products: { retrieve: async (id: string, params: { expand: string[] }): Promise<object> => {
-      assert.equal(id, "prod_starter"); assert.deepEqual(params.expand, ["default_price"]); return product;
+    products: { retrieve: async (id: string): Promise<object> => { assert.equal(id, "prod_starter"); return { id, active: true }; } },
+    prices: { list: async (params: Stripe.PriceListParams): Promise<object> => {
+      pages++;
+      assert.deepEqual(params, { product: "prod_starter", active: true, limit: 100, ...(pages === 2 ? { starting_after: "price_setup" } : {}) });
+      return pages === 1
+        ? { data: [price("price_base", "licensed"), price("price_archived", "licensed", { active: false }), price("price_setup", "one_time")], has_more: true }
+        : { data: [price("price_storage", "metered"), price("price_ram", "metered"), price("price_cpu", "metered")], has_more: false };
     } },
     checkout: { sessions: { create: async (params: Stripe.Checkout.SessionCreateParams, options: Stripe.RequestOptions): Promise<object> => {
-      assert.deepEqual(params, { mode: "subscription", ui_mode: "hosted", customer: "cus_alice", line_items: [{ price: "price_monthly", quantity: 1 }], success_url: input.successUrl, cancel_url: input.cancelUrl });
+      assert.deepEqual(params, { mode: "subscription", ui_mode: "hosted_page", customer: "cus_alice", line_items: [
+        { price: "price_base", quantity: 1 }, { price: "price_cpu" }, { price: "price_ram" }, { price: "price_setup", quantity: 1 }, { price: "price_storage" },
+      ], success_url: "https://kumo.example/dashboard", cancel_url: "https://kumo.example/dashboard" });
       assert.equal(options.idempotencyKey, "stable-key");
       if (failure) throw failure;
-      return { id: "cs_123", url: checkoutUrl, metadata: { internal: "private" } };
+      return { id: "cs_123", url };
     } } },
   } as unknown as Stripe;
   const provider: StripeProvider = new StripeProvider(client);
-  assert.equal(await provider.getPlanDefaultPriceId("prod_starter"), "price_monthly");
-  assert.deepEqual(await provider.createPlanCheckoutSession(input), { checkoutSessionId: "cs_123", checkoutUrl: "https://checkout.stripe.com/c/pay/cs_123" });
-  const invalidProducts: object[] = [
-    { id: "prod_starter", active: false, default_price: price },
-    { id: "prod_starter", deleted: true },
-    { id: "prod_other", active: true, default_price: price },
-    { id: "prod_starter", active: true, default_price: null },
-    { id: "prod_starter", active: true, default_price: "price_unexpanded" },
-    ...[
-      { active: false }, { type: "one_time" }, { recurring: { usage_type: "metered" } }, { product: "prod_other" },
-    ].map((patch: object): object => ({ id: "prod_starter", active: true, default_price: { ...price, ...patch } })),
-  ];
-  for (let index: number = 0; index < invalidProducts.length; index++) {
-    product = invalidProducts[index]!;
-    await assert.rejects(provider.getPlanDefaultPriceId("prod_starter"), PlanSubscriptionUnavailable);
-  }
-  checkoutUrl = null;
+  const prices: readonly PlanSubscriptionPrice[] = await provider.getPlanPrices("prod_starter");
+  assert.equal(pages, 2);
+  assert.deepEqual(prices.map((item: PlanSubscriptionPrice): string => item.id), ["price_base", "price_cpu", "price_ram", "price_setup", "price_storage"]);
+  const input: Parameters<PlanSubscriptionGateway["createPlanCheckoutSession"]>[0] = {
+    customerId: "cus_alice", prices, idempotencyKey: "stable-key", successUrl: "https://kumo.example/dashboard", cancelUrl: "https://kumo.example/dashboard",
+  };
+  assert.deepEqual(await provider.createPlanCheckoutSession(input), { checkoutSessionId: "cs_123", checkoutUrl: url });
+  url = null;
   await assert.rejects(provider.createPlanCheckoutSession(input), PlanSubscriptionUnavailable);
   failure = { type: "StripeIdempotencyError", message: "secret upstream body" };
   await assert.rejects(provider.createPlanCheckoutSession(input), PlanSubscriptionConflict);
   failure = new Error("secret upstream body");
   await assert.rejects(provider.createPlanCheckoutSession(input), (error: unknown): boolean => error instanceof PlanSubscriptionUnavailable && !error.message.includes("secret upstream"));
+});
+
+test("price lookup fails closed for unavailable products, invalid pagination, foreign prices, and Checkout limits", async (): Promise<void> => {
+  let product: object = { id: "prod_starter", active: true };
+  let data: Stripe.Price[] = [];
+  let more: boolean = false;
+  let unavailable: boolean = false;
+  const client: Stripe = {
+    products: { retrieve: async (): Promise<object> => product },
+    prices: { list: async (): Promise<object> => {
+      if (unavailable) throw new Error("secret Stripe response");
+      return { data, has_more: more };
+    } },
+  } as unknown as Stripe;
+  const provider: StripeProvider = new StripeProvider(client);
+  const invalid: Stripe.Price[][] = [[], [price("price_setup", "one_time")], [price("price_foreign", "licensed", { product: "prod_other" })],
+    [price("price_bad", "licensed", { recurring: null })],
+    Array.from({ length: 21 }, (_item: unknown, index: number): Stripe.Price => price(`price_r${index}`, "licensed")),
+    [price("price_base", "licensed"), ...Array.from({ length: 21 }, (_item: unknown, index: number): Stripe.Price => price(`price_o${index}`, "one_time"))],
+  ];
+  for (let index: number = 0; index < invalid.length; index++) {
+    data = invalid[index]!;
+    await assert.rejects(provider.getPlanPrices("prod_starter"), PlanSubscriptionUnavailable);
+  }
+  data = [price("price_cpu", "metered")];
+  assert.deepEqual(await provider.getPlanPrices("prod_starter"), [{ id: "price_cpu", usageType: "metered" }]);
+  more = true;
+  await assert.rejects(provider.getPlanPrices("prod_starter"), PlanSubscriptionUnavailable);
+  data = [];
+  await assert.rejects(provider.getPlanPrices("prod_starter"), PlanSubscriptionUnavailable);
+  more = false;
+  product = { id: "prod_starter", active: false };
+  await assert.rejects(provider.getPlanPrices("prod_starter"), PlanSubscriptionUnavailable);
+  product = { id: "prod_starter", deleted: true };
+  await assert.rejects(provider.getPlanPrices("prod_starter"), PlanSubscriptionUnavailable);
+  product = { id: "prod_starter", active: true };
+  unavailable = true;
+  await assert.rejects(provider.getPlanPrices("prod_starter"), (error: unknown): boolean => error instanceof PlanSubscriptionUnavailable && !error.message.includes("secret Stripe"));
+});
+
+
+test("Checkout diagnostics retain Stripe error details without request data or credentials", async (context: TestContext): Promise<void> => {
+  const logs: unknown[] = [];
+  context.mock.method(Logger.prototype, "error", (message: unknown): void => { logs.push(message); });
+  const failure: Error = Object.assign(new Error("Invalid price sk_test_privatekey\nBearer tokenvalue cs_test_session_secret_private"), {
+    type: "StripeInvalidRequestError", code: "resource_missing", param: "line_items[0][price]",
+    requestId: "req_checkout", statusCode: 400,
+    headers: { authorization: "sk_live_hidden" }, raw: { message: "private raw response" },
+  });
+  const client: Stripe = {
+    checkout: { sessions: { create: async (): Promise<never> => { throw failure; } } },
+  } as unknown as Stripe;
+  const provider: StripeProvider = new StripeProvider(client);
+  await assert.rejects(provider.createPlanCheckoutSession({
+    customerId: "cus_private", prices: [{ id: "price_test", usageType: "licensed" }],
+    idempotencyKey: "private-key", successUrl: "https://kumo.example/dashboard", cancelUrl: "https://kumo.example/plans",
+  }), (error: unknown): boolean => error instanceof PlanSubscriptionUnavailable && error.message === "Unable to create the Checkout Session; retry with the same Idempotency-Key");
+  assert.deepEqual(logs, [{
+    event: "stripe.checkout.failed", message: "Invalid price [redacted] [redacted] [redacted]",
+    type: "StripeInvalidRequestError", code: "resource_missing", param: "line_items[0][price]", requestId: "req_checkout", statusCode: 400,
+  }]);
 });

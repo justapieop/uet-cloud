@@ -16,7 +16,7 @@ export class PlanSubscriptionsController {
   @Post(":id/subscriptions")
   @HttpCode(HttpStatus.CREATED)
   @Header("Cache-Control", "private, no-store")
-  @ApiOperation({ summary: "Create a Stripe-hosted subscription checkout for the signed-in user", description: "Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies." })
+  @ApiOperation({ summary: "Create a Stripe-hosted subscription checkout for the signed-in user", description: "Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies." })
   @ApiParam({ name: "id", description: "Local Kumo plan ID", schema: { type: "string", minLength: 1, maxLength: 255 } })
   @ApiBody({ required: false, description: "No body is needed. Only an empty object is accepted; pricing is selected by the server.", schema: { type: "object", additionalProperties: false, maxProperties: 0 } })
   @ApiHeader({ name: "Idempotency-Key", required: true, description: "Unique printable ASCII key per subscription request (1–255 characters); reuse for retries" })
@@ -25,7 +25,7 @@ export class PlanSubscriptionsController {
   @ApiForbiddenResponse({ description: "An active, unsuspended user with a linked Stripe customer is required" })
   @ApiNotFoundResponse({ description: "Plan is missing, inactive, or not linked to Stripe" })
   @ApiConflictResponse({ description: "Stripe idempotency key conflict" })
-  @ApiServiceUnavailableResponse({ description: "Stripe unavailable or plan has no valid recurring default price" })
+  @ApiServiceUnavailableResponse({ description: "Stripe unavailable or product's active prices cannot form a subscription Checkout Session" })
   public async create(
     @Req() request: Request, @Param("id") planId: string,
     @Body() body: unknown,

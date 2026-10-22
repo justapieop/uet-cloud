@@ -9,11 +9,16 @@ export interface PlanCheckoutRedirects {
 }
 
 export interface PlanSubscriptionGateway {
-  /** Resolve only the product's configured default price; never select another active price. */
-  getPlanDefaultPriceId(productId: string): Promise<string>;
+  /** Resolve all active prices for the linked product, across all pages. */
+  getPlanPrices(productId: string): Promise<readonly PlanSubscriptionPrice[]>;
   createPlanCheckoutSession(input: PlanCheckoutRedirects & {
-    customerId: string; priceId: string; idempotencyKey: string;
+    customerId: string; prices: readonly PlanSubscriptionPrice[]; idempotencyKey: string;
   }): Promise<PlanSubscriptionResult>;
+}
+
+export interface PlanSubscriptionPrice {
+  readonly id: string;
+  readonly usageType: "licensed" | "metered" | "one_time";
 }
 
 export class InvalidPlanSubscription extends Error {}

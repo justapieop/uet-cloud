@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { ClassSerializerInterceptor, Module, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
-import { SubscribeToPlanCase, type PlanSubscriptionResult } from "@kumo/application";
+import { SubscribeToPlanCase, type PlanSubscriptionPrice, type PlanSubscriptionResult } from "@kumo/application";
 import { Plan, User } from "@kumo/domain";
 import type { NextFunction, Request, Response } from "express";
 import { PlanSubscriptionsController } from "../dist/controllers/PlanSubscriptions.controller.js";
@@ -25,9 +25,9 @@ test("plan subscription HTTP validates session/input, uses owner billing identit
     } },
     { findById: async (id: string): Promise<Plan | null> => id === "starter" ? new Plan({ id, name: "Starter", price: 5, vcpu: 1, memory: 2, deployments: 2, disk: 10, stripeProductId: "prod_starter" }) : null },
     {
-      getPlanDefaultPriceId: async (productId: string): Promise<string> => { assert.equal(productId, "prod_starter"); return "price_monthly"; },
+      getPlanPrices: async (productId: string): Promise<readonly PlanSubscriptionPrice[]> => { assert.equal(productId, "prod_starter"); return [{ id: "price_monthly", usageType: "licensed" }, { id: "price_cpu", usageType: "metered" }]; },
       createPlanCheckoutSession: async (input): Promise<PlanSubscriptionResult> => {
-        assert.equal(input.customerId, "cus_alice"); assert.equal(input.priceId, "price_monthly"); calls++;
+        assert.equal(input.customerId, "cus_alice"); assert.deepEqual(input.prices, [{ id: "price_monthly", usageType: "licensed" }, { id: "price_cpu", usageType: "metered" }]); calls++;
         return { checkoutSessionId: "cs_123", checkoutUrl: "https://checkout.stripe.com/c/pay/cs_123" };
       },
     },

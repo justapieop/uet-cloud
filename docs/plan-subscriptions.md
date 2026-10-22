@@ -4,7 +4,15 @@
 
 `GET /plans` requires no session and returns active local plans with a non-null Stripe product mapping, ordered by local `price` and then `id`. It returns an array containing `id`, `name`, `price`, `vcpu`, `memory`, `deployments`, `disk`, and `max_replicas`; no available plans returns `[]`. Stripe IDs and internal activity fields are omitted.
 
-The listing uses one SQL read and does not call Stripe. Its `price` is the local catalog value, not a Stripe price quote: Checkout bills the linked product's configured default price. Keep local display pricing aligned with Stripe administratively. A mapped plan can still fail Checkout if its Stripe product/default price is inactive or invalid. Storage quota describes the configured plan; storage allocation enforcement remains future work.
+The listing uses one SQL read and does not call Stripe. Its `price` is the local catalog value, not a Stripe price quote: Checkout includes all active prices of the linked product. Keep local display pricing aligned with Stripe administratively. A mapped plan can still fail Checkout if its Stripe product or active price configuration is invalid. Storage quota describes the configured plan; storage allocation enforcement remains future work.
+
+## Current user's plans
+
+`GET /plans/me` requires the GitHub session cookie and an active, unsuspended user. It returns `{ "has_plan": false, "plans": [] }` when the user has no linked Stripe customer, no active subscriptions, or no active local plans matching the subscribed products. Otherwise it returns `has_plan: true` and the matching plans using the same public fields as `GET /plans`.
+
+The endpoint reads the persisted user, checks that user's linked customer's active subscriptions directly with Stripe, and matches products through the active-plan repository used by deployment admission. Multiple subscribed plans are returned separately; their quotas are not combined. A pending Checkout Session, incomplete subscription, or browser redirect does not establish an active plan. No billing/customer/subscription IDs are exposed, and client-supplied user IDs do not select another account.
+
+Responses use `private, no-store`. Stripe verification failures return 503 rather than `has_plan: false`; the frontend should show a retryable error instead of prompting another purchase. This endpoint reports plan membership only: it does not indicate remaining quotas, reserve resources, or replace deployment admission checks. An unlinked user is not automatically linked by this GET; normal GitHub login handles customer linking. No deployment permission grant is required to inspect one's own billing eligibility.
 
 ## Start Checkout
 
@@ -12,7 +20,12 @@ The listing uses one SQL read and does not call Stripe. Its `price` is the local
 
 Send the GitHub session cookie and an `Idempotency-Key`. The plan is selected only through the URL, for example `POST /plans/starter/subscriptions`. No request body is needed; `{}` is also accepted. All nonempty bodies are rejected, including `price_id`, customer IDs, amounts, and redirect URLs.
 
-The backend retrieves the plan's linked Stripe product with its expanded `default_price`. Configure the approved price as that product's default in the Stripe Dashboard. The product and default price must both be active, the default price must belong to that product, and it must use licensed recurring billing. Missing, inactive, one-time, metered, or mismatched default prices fail closed with 503. The API never lists other prices or picks a fallback. Stripe's configured default price determines the billed amount, currency, and interval; the API does not construct a price from `plans.price`. See [Stripe default prices](https://docs.stripe.com/api/products/object#product_object-default_price).
+The backend verifies the linked Stripe product is active and lists **all active prices** for that product, following every result page. The product default is not used to select a subset. Recurring licensed and metered prices are included, and active one-time prices are included on the initial invoice. Archived prices are excluded. Prices are deduplicated and sorted by ID before submission so retries have stable line-item ordering.
+
+Licensed recurring and one-time prices use quantity one. Metered recurring prices omit quantity, as required by Stripe. A subscription requires at least one recurring price. Checkout supports at most 20 recurring and 20 one-time prices; an empty/unsupported configuration returns 503 rather than silently dropping items. Stripe also validates that the combined prices are compatible (for example, currencies and billing intervals); incompatible configurations fail without creating a partial subscription. See [Stripe Checkout Session parameters](https://docs.stripe.com/api/checkout/sessions/create).
+
+**Every active price is a component billed together, not a choice for the customer.** Archive unused legacy prices and keep monthly/yearly alternatives on separate products if they should not both be purchased. Stripe's prices determine billed amounts; `plans.price` is local catalog metadata. Clients cannot choose or omit individual prices.
+
 
 The 201 response contains:
 
@@ -39,6 +52,6 @@ This endpoint relies on Stripe's idempotency retention, not a permanent SQL acce
 - **403:** missing session, inactive/suspended user, or missing customer association; normal GitHub login establishes the customer link.
 - **404:** missing, inactive, or unmapped local plan.
 - **409:** conflicting or concurrently used Stripe idempotency key.
-- **503:** Stripe lookup/session creation unavailable or the product/default price is misconfigured. Retry transient failures with the same key; correct invalid Stripe configuration before trying again.
+- **503:** Stripe lookup/session creation unavailable or the product or active prices are misconfigured. Retry transient failures with the same key; correct invalid Stripe configuration before trying again.
 
-The API supplies the linked customer, the validated product default price at quantity one, `mode: subscription`, and `ui_mode: hosted`. It does not directly create an incomplete subscription or return payment confirmation secrets. Webhooks, usage meters, monetary allowances, overage billing, and automatic subscription changes remain separate work.
+The API supplies the linked customer, all validated active product prices with quantity one for licensed/one-time items and no quantity for metered items, `mode: subscription`, and `ui_mode: hosted_page`. It does not directly create an incomplete subscription or return payment confirmation secrets. Metered prices are registered on the subscription, but publishing usage/meter events is not implemented by this endpoint. Webhooks, monetary allowances, usage reporting/overage calculation, and automatic subscription changes remain separate work.
