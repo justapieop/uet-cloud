@@ -12,8 +12,6 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
     const url: URL = new URL(repo);
     if (url.protocol !== "https:" || url.username || url.password || repo.length > 2048) throw new Error();
   } catch { return { error: "Enter an HTTPS repository URL without embedded credentials." }; }
-  const tag: string = text("tag");
-  if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(tag)) return { error: "Enter a valid image tag using letters, numbers, underscores, dots, or hyphens." };
   const targetPort: number = Number(text("target_port"));
   const cpu: number = Number(text("max_vcpu"));
   const min: number = Number(text("min_scaling"));
@@ -23,7 +21,7 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
   if (!text("min_scaling") || !text("max_scaling") || !Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < 1 || min > max) return { error: "Minimum replicas must be zero or more and cannot exceed maximum replicas. Maximum must be at least one." };
   const region: string = text("region");
   if (region && !/^[a-z][a-z0-9]{0,63}$/.test(region)) return { error: "Use an Azure region name without spaces, such as southeastasia." };
-  const data: DeploymentInput = { name, repo, tag, target_port: targetPort, max_vcpu: cpu, max_memory: cpu * 2, min_scaling: min, max_scaling: max };
+  const data: DeploymentInput = { name, repo, target_port: targetPort, max_vcpu: cpu, max_memory: cpu * 2, min_scaling: min, max_scaling: max };
   if (region) data.region = region;
   for (const [field, limit] of [["ref", 255], ["dockerfile_path", 1024], ["image_name", 128]] as const) {
     const value: string = text(field);

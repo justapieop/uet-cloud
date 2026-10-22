@@ -53,10 +53,9 @@ export function CreateDeploymentForm(): JSX.Element {
       <fieldset disabled={pending} className="space-y-5">
         <section className={SECTION_CLASS} aria-labelledby="source-heading">
           <h2 id="source-heading" className="text-base font-medium">Application source</h2>
-          <p className="mt-1 text-sm leading-6 text-muted-text">Connect your repository and choose the image tag for this build.</p>
+          <p className="mt-1 text-sm leading-6 text-muted-text">Connect your repository. The resolved Git commit SHA automatically tags the image.</p>
           <div className="mt-6 grid gap-5 sm:grid-cols-2">
             <label className={LABEL_CLASS}>Deployment name<input className={INPUT_CLASS} name="name" required minLength={2} maxLength={32} pattern="[a-z][a-z0-9\-]{0,30}[a-z0-9]" placeholder="my-app" autoComplete="off" /><span className="mt-2 block font-normal leading-5 text-muted-text">Lowercase letters, numbers, and hyphens. Unique to your account.</span></label>
-            <label className={LABEL_CLASS}>Image tag<input className={INPUT_CLASS} name="tag" required maxLength={128} pattern="[A-Za-z0-9_][A-Za-z0-9_.\-]{0,127}" defaultValue="latest" /><span className="mt-2 block font-normal leading-5 text-muted-text">A label for the built image, such as v1 or latest.</span></label>
             <label className={`${LABEL_CLASS} sm:col-span-2`}>Repository URL<input className={INPUT_CLASS} name="repo" type="url" required maxLength={2048} placeholder="https://github.com/your-team/your-app" autoComplete="url" /><span className="mt-2 block font-normal leading-5 text-muted-text">An HTTPS Git repository containing your application and Dockerfile.</span></label>
             <label className={LABEL_CLASS}>Git reference <span className="font-normal text-muted-dark">(optional)</span><input className={INPUT_CLASS} name="ref" maxLength={255} placeholder="Default branch" /><span className="mt-2 block font-normal leading-5 text-muted-text">Branch, tag, or commit to build.</span></label>
             <label className={LABEL_CLASS}>Dockerfile path<input className={INPUT_CLASS} name="dockerfile_path" maxLength={1024} defaultValue="Dockerfile" /></label>
