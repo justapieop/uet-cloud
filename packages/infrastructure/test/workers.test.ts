@@ -9,7 +9,7 @@ import { DeploymentWorker } from "../dist/azure/deployment-worker.js";
 import { BuildWorker } from "../dist/azure/build-worker.js";
 import { emptyRepositories } from "../../application/test/support/repositories.ts";
 
-const CLAIMED: Deployment = new Deployment({ id: "deployment", userId: "123", name: "my-app", status: "PROVISIONING", spec: { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 } });
+const CLAIMED: Deployment = new Deployment({ id: "deployment", userId: "123", name: "my-app", status: "PROVISIONING", spec: { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 } });
 const BUILD: BuildDetails = { id: "build", userId: "123", repo: "https://github.com/owner/repo", ref: null, error: null, dockerFilePath: "Dockerfile", commitSha: null, image: "registry/app:v1", status: "PREPARING", runId: null, runUrl: null, sourceTokenHash: "a".repeat(64), sourceExpiresAt: new Date("2030-01-01"), createdAt: new Date(), updatedAt: new Date() };
 
 async function flush(): Promise<void> { await new Promise<void>((resolve: () => void): void => { setImmediate(resolve); }); }

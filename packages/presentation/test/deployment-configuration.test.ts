@@ -15,7 +15,7 @@ import { RouteReadCache } from "../dist/common/ReadCache.js";
 test("GET detail and list serialize applied Azure values; failures never return saved configuration as live", async (context: TestContext): Promise<void> => {
   const id: string = "00000000-0000-4000-8000-000000000001";
   let saved: Deployment = new Deployment({ id, userId: "123", name: "my-app", status: "RUNNING", resourceId: "resource",
-    image: "old-image", fqdn: "old.example.com", spec: { repo: "https://github.com/owner/repo", tag: "v1", region: "eastus",
+    image: "old-image", fqdn: "old.example.com", spec: { repo: "https://github.com/owner/repo", region: "eastus",
       targetPort: 80, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 1, envVars: { SECRET: "hidden" } },
   });
   let applied: DeploymentConfiguration = { region: "japaneast", maxVcpu: 2, maxMemory: 4, minScaling: 1, maxScaling: 5,

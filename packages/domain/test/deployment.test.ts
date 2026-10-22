@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Deployment, InvalidDomainParams, type DeploymentDetails, type DeploymentSpec } from "../dist/index.js";
 
-const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
+const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
 const DETAILS: DeploymentDetails = { id: "deployment", userId: "123", name: "sample-app", spec: SPEC };
 
 test("deployment stores the creation specification and defaults progress fields", (): void => {
@@ -45,7 +45,6 @@ test("each invalid specification fails for its intended validation rule", (): vo
     { patch: { minScaling: 3 }, message: /Scaling/ },
     { patch: { maxScaling: 1.5 }, message: /Scaling/ },
     { patch: { repo: " " }, message: /repository/ },
-    { patch: { tag: "bad tag" }, message: /image tag/ },
     { patch: { targetPort: 65536 }, message: /Target port/ },
     { patch: { region: "Japan East" }, message: /Region/ },
     { patch: { dockerFilePath: "../Dockerfile" }, message: /inside the repository/ },

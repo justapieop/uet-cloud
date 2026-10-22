@@ -12,7 +12,7 @@ import { InfraPlanRepository } from "../dist/db/repositories/plan.js";
 import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, InfraUserRole, SqlServerIdempotencyStore, TypeOrmUnitOfWork, addGithubAdmin, seedDatabase, type DatabaseSeedInput } from "../dist/db/index.js";
 
 const ENABLED: boolean = process.env.RUN_SQLSERVER_TESTS === "true";
-const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
+const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
 
 test("SQL Server migrations, constraints, acceptance transactions and worker claims", { skip: !ENABLED, timeout: 180_000 }, async (context: TestContext): Promise<void> => {
   const password: string | undefined = process.env.TEST_SQLSERVER_PASSWORD;
@@ -179,6 +179,10 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     const buildClaims: (Build | null)[] = await Promise.all([builds.claimNextPending(), builds.claimNextPending()]);
     assert.equal(new Set(buildClaims.map((item: Build | null): string | undefined => item?.getDetails().id)).size, 2);
     assert.ok(buildClaims.every((item: Build | null): boolean => item?.getDetails().status === "PREPARING"));
+    const prepared: Build = buildClaims[0]!;
+    const preparedImage: string = `registry/app:${"a".repeat(40)}`;
+    await builds.update(new Build({ ...prepared.getDetails(), commitSha: "a".repeat(40), image: preparedImage }));
+    assert.equal((await builds.findById(prepared.getDetails().id))?.getDetails().image, preparedImage);
     await source.getRepository(InfraBuild).update({ id: ids[0]! }, { status: "SUCCEEDED", runId: "42", commitSha: "a".repeat(40) });
     await builds.updateRun(ids[0]!, "456", "PREPARING", { runId: "42", runUrl: "https://example.com/42", status: "RUNNING" });
     assert.equal((await builds.findById(ids[0]!))?.getDetails().status, "SUCCEEDED");

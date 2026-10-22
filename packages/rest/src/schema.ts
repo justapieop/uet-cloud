@@ -116,7 +116,10 @@ export interface paths {
         /** List owned deployments with optional status, name, and region filters */
         get: operations["DeploymentsController_list"];
         put?: never;
-        /** Queue a repository build and deploy its successful image */
+        /**
+         * Queue a repository build and deploy its successful image
+         * @description The resolved Git commit SHA automatically determines the image tag. Do not supply a tag; ref selects the branch, Git tag, or commit to build.
+         */
         post: operations["DeploymentsController_create"];
         delete?: never;
         options?: never;
@@ -392,7 +395,6 @@ export interface components {
             region?: string;
             name: string;
             repo: string;
-            tag: string;
             target_port: number;
             /** @description Up to five additional TCP port mappings */
             additional_ports?: components["schemas"]["AdditionalDeploymentPortDto"][];
@@ -457,7 +459,10 @@ export interface components {
              * @enum {string}
              */
             status: "PENDING" | "PREPARING" | "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELED";
-            /** @example registry.azurecr.io/my-app:v1.2.3 */
+            /**
+             * @description Repository address until source resolution; then includes the full Git commit SHA as the image tag
+             * @example registry.azurecr.io/my-app:0123456789abcdef0123456789abcdef01234567
+             */
             image: string;
             commit_sha: string | null;
             /** @description Preparation or scheduling failure; null when none has been recorded */

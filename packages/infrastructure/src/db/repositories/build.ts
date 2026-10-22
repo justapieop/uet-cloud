@@ -40,7 +40,7 @@ export class InfraBuildRepository implements BuildQueueRepository {
   public async update(build: Build): Promise<void> {
     const details: BuildDetails = build.getDetails();
     await this.repository.update({ id: details.id, userId: details.userId }, {
-      commitSha: details.commitSha, sourceTokenHash: details.sourceTokenHash, sourceExpiresAt: details.sourceExpiresAt,
+      commitSha: details.commitSha, image: details.image, sourceTokenHash: details.sourceTokenHash, sourceExpiresAt: details.sourceExpiresAt,
       status: details.status, error: details.error, runId: details.runId, runUrl: details.runUrl, updatedAt: details.updatedAt,
     });
   }

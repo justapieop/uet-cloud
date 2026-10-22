@@ -9,7 +9,7 @@ import { AzureProvider, type AzureDeploymentCreateInput, type AzureProviderClien
 
 const ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/managedEnvironments/user-aca-env-123";
 const PULL_IDENTITY: string = "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.ManagedIdentity/userAssignedIdentities/acr-pull";
-const INPUT: AzureDeploymentCreateInput = { name: "my-app", userId: "123", repo: "https://github.com/owner/repo", targetPort: 8080, tag: "v1.2.3" };
+const INPUT: AzureDeploymentCreateInput = { name: "my-app", userId: "123", repo: "https://github.com/owner/repo", targetPort: 8080 };
 
 interface FixtureOptions {
   existingResources?: boolean;
@@ -118,8 +118,8 @@ function fixture(options: FixtureOptions = {}): Fixture {
       events.push("build-trigger");
       assert.equal(input.userId, "123");
       assert.equal(input.repo, INPUT.repo);
-      assert.equal(input.tag, INPUT.tag);
-      return { buildId: "build-id", image: "registry.azurecr.io/my-app:v1.2.3", status: "PENDING", commitSha: null, runId: null, runUrl: null };
+      assert.equal("tag" in input, false);
+      return { buildId: "build-id", image: "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", status: "PENDING", commitSha: null, runId: null, runUrl: null };
     },
   };
   const getBuild: Pick<GetBuildCase, "exec"> = {
@@ -132,7 +132,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
       options.onBuildRead?.();
       return {
         id, userId, repo: INPUT.repo, commitSha: "a".repeat(40), ref: null, error: status === "FAILED" ? "Docker build failed" : null,
-        dockerFilePath: "Dockerfile", image: "registry.azurecr.io/my-app:v1.2.3", status,
+        dockerFilePath: "Dockerfile", image: "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", status,
         sourceTokenHash: "a".repeat(64), sourceExpiresAt: new Date(Date.now() + 60_000),
         runId: "42", runUrl: "https://dev.azure.com/run/42", createdAt: new Date(), updatedAt: new Date(),
       };
@@ -158,7 +158,7 @@ test("missing resources are created in order and the app waits for build success
     "build-PENDING", "build-PREPARING", "build-RUNNING", "build-SUCCEEDED", "app-create", "app-ready",
   ]);
   assert.equal(app.environmentId, ENVIRONMENT_ID);
-  assert.equal(app.template?.containers?.[0]?.image, "registry.azurecr.io/my-app:v1.2.3");
+  assert.equal(app.template?.containers?.[0]?.image, "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   assert.deepEqual(app.template?.containers?.[0]?.env, [{ name: "NODE_ENV", value: "production" }]);
   assert.deepEqual(app.configuration?.registries, [{ server: "registry.azurecr.io", identity: PULL_IDENTITY }]);
   assert.deepEqual(app.configuration?.identitySettings, [{ identity: PULL_IDENTITY, lifecycle: "None" }]);
@@ -229,7 +229,6 @@ test("build waiting is bounded and timeout prevents Container App creation", asy
 test("invalid app names and attempts to target the platform RG fail before Azure calls", async (): Promise<void> => {
   const setup: Fixture = fixture();
   await assert.rejects(setup.provider.createDeployment({ ...INPUT, name: "INVALID" }), /Container App name/);
-  await assert.rejects(setup.provider.createDeployment({ ...INPUT, tag: "invalid tag" }), /Image tag/);
   assert.deepEqual(setup.events, []);
   const forbidden: Fixture = fixture({ platformResourceGroup: "USER-RG-123" });
   await assert.rejects(forbidden.provider.createDeployment(INPUT), /platform resource group/);

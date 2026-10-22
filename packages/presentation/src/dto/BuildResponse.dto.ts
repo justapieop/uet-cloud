@@ -20,7 +20,7 @@ export class BuildResponseDto {
   public readonly status: string;
 
   @Expose()
-  @ApiProperty({ example: "registry.azurecr.io/my-app:v1.2.3" })
+  @ApiProperty({ example: "registry.azurecr.io/my-app:0123456789abcdef0123456789abcdef01234567", description: "Repository address until source resolution; then includes the full Git commit SHA as the image tag" })
   public readonly image: string;
 
   @Expose({ name: "commit_sha" })

@@ -89,7 +89,7 @@ test("quick build uploads source then schedules a push without creating a task",
         assert.equal(request.type, "DockerBuildRequest");
         assert.equal(request.sourceLocation, "context/source.tar.gz");
         assert.equal(request.isPushEnabled, true);
-        assert.deepEqual(request.imageNames, ["registry.azurecr.io/app:unique-tag"]);
+        assert.deepEqual(request.imageNames, ["registry.azurecr.io/app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
         assert.ok(!("contextAccessToken" in request));
         assert.deepEqual((request as unknown as { credentials: unknown }).credentials, {
           sourceRegistry: { identity: "[caller]", loginMode: "Default" },
@@ -107,14 +107,14 @@ test("quick build uploads source then schedules a push without creating a task",
   });
   const provider: AcrProvider = new AcrProvider(config, client, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   const result: unknown = await provider.triggerBuild({
-    archive: await sourceArchive(), dockerFilePath: "Dockerfile", imageName: "app", userId: "123", tag: "unique-tag",
+    archive: await sourceArchive(), dockerFilePath: "Dockerfile", imageName: "app", userId: "123", commitSha: "a".repeat(40),
   });
-  assert.deepEqual(result, { runId: "ca1", status: "Queued", image: "registry.azurecr.io/app:unique-tag" });
+  assert.deepEqual(result, { runId: "ca1", status: "Queued", image: "registry.azurecr.io/app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
   assert.deepEqual(calls, ["upload-location", "upload", "schedule"]);
 });
 
-test("use case preserves the requested tag and gives each build a unique tracking ID", async (): Promise<void> => {
-  const tags: string[] = [];
+test("queued builds defer the image tag until source resolution and have unique tracking IDs", async (): Promise<void> => {
+  const names: string[] = [];
   const records: Map<string, Build> = new Map<string, Build>();
   const repository: BuildRepository & { insert(build: Build): Promise<void> } = {
     findById: async (id: string): Promise<Build | null> => records.get(id) ?? null,
@@ -122,20 +122,17 @@ test("use case preserves the requested tag and gives each build a unique trackin
     insert: async (build: Build): Promise<void> => { records.set(build.getDetails().id, build); },
   };
   const builder: PipelineBuildPort = {
-    getImageAddress: (_imageName: string, tag: string): string => { tags.push(tag); return `registry/app:${tag}`; },
+    getImageAddress: (imageName: string): string => { names.push(imageName); return `registry/${imageName}`; },
     startBuild: async (): Promise<never> => { assert.fail("Pending builds are scheduled by the worker"); },
     getRun: async () => ({ runId: "123", status: "QUEUED" as const, runUrl: "https://dev.azure.com/run/123" }),
   };
   const useCase: TriggerBuildCase = new TriggerBuildCase(builder, repository);
-  const input: { userId: string; repo: string; imageName: string; tag: string } = { userId: "123", repo: "https://github.com/owner/repo", imageName: "app", tag: "Release_1.2.3" };
-  assert.equal((await useCase.exec(input)).image, "registry/app:Release_1.2.3");
+  const input: { userId: string; repo: string; imageName: string } = { userId: "123", repo: "https://github.com/owner/repo", imageName: "app" };
+  assert.equal((await useCase.exec(input)).image, "registry/app");
   await useCase.exec(input);
-  assert.deepEqual(tags, [input.tag, input.tag]);
+  assert.deepEqual(names, [input.imageName, input.imageName]);
   assert.equal(records.size, 2);
   assert.ok(Array.from(records.values()).every((build: Build): boolean => build.getDetails().commitSha === null && build.getDetails().status === "PENDING"));
-  await Promise.all(["", "bad tag", "bad/tag", ":bad", "a".repeat(129)].map(
-    (tag: string): Promise<void> => assert.rejects(useCase.exec({ ...input, tag }), InvalidBuildInput),
-  ));
   await assert.rejects(useCase.exec({ ...input, dockerFilePath: "../Dockerfile" }), InvalidBuildInput);
 });
 

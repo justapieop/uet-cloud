@@ -23,7 +23,6 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
   name: string;
   repo: string;
   imageName?: string;
-  tag: string;
   dockerFilePath?: string;
   ref?: string;
   targetPort: number;
@@ -135,9 +134,7 @@ export class AzureProvider implements DeploymentProvisioner {
     if (!/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(input.name)) {
       throw new BuildProviderError("Container App name must be 2-32 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit");
     }
-    if (typeof input.tag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(input.tag)) {
-      throw new BuildProviderError("Image tag must be 1-128 letters, digits, underscores, periods, or hyphens, starting with a letter, digit, or underscore");
-    }
+
     const minReplicas: number = input.minReplicas ?? 0;
     const maxReplicas: number = input.maxReplicas ?? 2;
     const resources: ContainerResources = input.resources ?? { cpu: 0.25, memory: "0.5Gi" };
@@ -193,7 +190,7 @@ export class AzureProvider implements DeploymentProvisioner {
     }
 
     const buildInput: TriggerBuildInput = {
-      userId: input.userId, repo: input.repo, imageName: input.imageName ?? input.name, tag: input.tag,
+      userId: input.userId, repo: input.repo, imageName: input.imageName ?? input.name,
       dockerFilePath: input.dockerFilePath, ref: input.ref,
     };
     signal.throwIfAborted();

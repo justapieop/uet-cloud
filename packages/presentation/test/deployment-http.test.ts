@@ -46,7 +46,7 @@ test("deployment HTTP contract enforces guards, validation, quotas, serializatio
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   await app.listen(0, "127.0.0.1");
   const url: string = `${await app.getUrl()}/deployments`;
-  const body: Record<string, unknown> = { name: "my-app", repo: "https://github.com/owner/repo", tag: "v1", target_port: 8080, max_vcpu: 0.5, max_memory: 1, min_scaling: 0, max_scaling: 2, env_vars: { SECRET: "never-serialize-this" } };
+  const body: Record<string, unknown> = { name: "my-app", repo: "https://github.com/owner/repo", target_port: 8080, max_vcpu: 0.5, max_memory: 1, min_scaling: 0, max_scaling: 2, env_vars: { SECRET: "never-serialize-this" } };
   const post: (key: string | undefined, patch?: Record<string, unknown>, identity?: string) => Promise<globalThis.Response> =
     (key: string | undefined, patch: Record<string, unknown> = {}, identity: string = "alice"): Promise<globalThis.Response> => fetch(url, {
       method: "POST", headers: { "content-type": "application/json", ...(key ? { "Idempotency-Key": key } : {}), ...(identity ? { "x-test-user": identity } : {}) }, body: JSON.stringify({ ...body, ...patch }),
@@ -58,6 +58,7 @@ test("deployment HTTP contract enforces guards, validation, quotas, serializatio
   roles = [new Role({ id: "creator", name: "Creator", permission: 1n << BigInt(Permission.DeploymentCreate.offset) })];
   assert.equal((await post(undefined)).status, 400);
   assert.equal((await post("invalid", { unexpected: true })).status, 400);
+  assert.equal((await post("caller-tag", { tag: "v1" })).status, 400);
   assert.equal((await post("invalid-port", { target_port: 0 })).status, 400);
   assert.equal(fixture.stripeCalls, 0);
   const accepted: globalThis.Response = await post("accept");

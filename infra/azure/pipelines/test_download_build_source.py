@@ -15,11 +15,12 @@ class ManifestValidationTests(unittest.TestCase):
         self.build_id = "00000000-0000-4000-8000-000000000001"
         self.manifest = {
             "build_id": self.build_id,
-            "image": "registry.azurecr.io/my-app:Release_1.2.3",
+            "image": "registry.azurecr.io/my-app:" + "a" * 40,
+            "commit_sha": "a" * 40,
             "dockerfile_path": "docker/Dockerfile",
         }
 
-    def test_accepts_requested_tag_independently_of_tracking_id(self):
+    def test_accepts_commit_tag_independently_of_tracking_id(self):
         source.validate_manifest(self.manifest, self.build_id)
 
     def test_rejects_a_manifest_for_a_different_build(self):
@@ -41,6 +42,11 @@ class ManifestValidationTests(unittest.TestCase):
         ):
             with self.subTest(image=image), self.assertRaisesRegex(source.DownloadError, "Invalid build image"):
                 source.validate_manifest({**self.manifest, "image": image}, self.build_id)
+
+    def test_rejects_missing_invalid_or_mismatched_commit(self):
+        for commit in (None, "main", "b" * 40):
+            with self.subTest(commit=commit), self.assertRaisesRegex(source.DownloadError, "commit SHA"):
+                source.validate_manifest({**self.manifest, "commit_sha": commit}, self.build_id)
 
     def test_rejects_escaping_dockerfile_paths(self):
         with self.assertRaisesRegex(source.DownloadError, "Invalid Dockerfile path"):

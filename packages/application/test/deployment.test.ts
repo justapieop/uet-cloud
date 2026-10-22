@@ -9,7 +9,7 @@ import { DeleteDeploymentCase } from "../dist/use-cases/deployment/DeleteDeploym
 import type { UnitOfWork, UnitOfWorkRepositories } from "../dist/ports/uow.js";
 import { emptyRepositories } from "./support/repositories.ts";
 
-const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
+const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
 const CLAIMED: Deployment = new Deployment({ id: "deployment", userId: "123", name: "sample-app", status: "PROVISIONING", spec: SPEC });
 const RESULT: DeploymentProvisionResult = { buildId: "build", image: "registry/app:v1", resourceId: "/azure/app", fqdn: "app.example.com" };
 
@@ -69,7 +69,7 @@ test("update and delete use transaction-bound repositories and preserve ownershi
   const uow: UnitOfWork = { run: async <T>(work: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => work({ ...emptyRepositories(), deployment: deployments }) };
   await new UpdateDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "123", name: "renamed-app" });
   assert.equal(writes[0]?.name, "renamed-app");
-  assert.equal(writes[0]?.spec?.tag, "v1");
+  assert.equal(writes[0]?.spec?.repo, SPEC.repo);
   await assert.rejects(new UpdateDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "456", name: "other-app" }), /not found/);
   await new DeleteDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "123" });
   assert.deepEqual(deleted, ["123/deployment"]);

@@ -18,7 +18,7 @@ export interface BuildTriggerInput {
   readonly dockerFilePath: string;
   readonly imageName: string;
   readonly userId: string;
-  readonly tag: string;
+  readonly commitSha: string;
 }
 
 export interface BuildRun {
@@ -52,7 +52,7 @@ export interface PipelineRun {
 }
 
 export interface PipelineBuildPort {
-  getImageAddress(imageName: string, tag: string): string;
+  getImageAddress(imageName: string): string;
   startBuild(buildId: string, sourceToken: string): Promise<PipelineRun>;
   getRun(runId: string): Promise<PipelineRun>;
 }

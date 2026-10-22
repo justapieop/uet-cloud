@@ -21,7 +21,7 @@ test("deployment admission failures map to 403, 409 and 503 without invalidating
     const cache: RouteReadCache = { invalidateDeployments: async (): Promise<never> => { throw new Error("Unexpected invalidation"); } } as unknown as RouteReadCache;
     const controller: DeploymentsController = new DeploymentsController(create, {} as GetDeploymentCase, {} as StartDeploymentCase, {} as StopDeploymentCase, cache, {} as GetBuildCase);
     const request: Request = { user: new User({ id: "123", displayName: "Alice", suspended: false }), get: (): string => "request-key" } as unknown as Request;
-    const input: CreateDeploymentDto = { name: "my-app", repo: "https://github.com/owner/repo", tag: "v1", target_port: 8080, max_vcpu: 0.5, max_memory: 1, min_scaling: 0, max_scaling: 2 };
+    const input: CreateDeploymentDto = { name: "my-app", repo: "https://github.com/owner/repo", target_port: 8080, max_vcpu: 0.5, max_memory: 1, min_scaling: 0, max_scaling: 2 };
     await assert.rejects(controller.create(request, input), (error: unknown): boolean =>
       (error instanceof ForbiddenException || error instanceof ConflictException || error instanceof ServiceUnavailableException) && error.getStatus() === item.status);
   }

@@ -24,7 +24,7 @@ test("pipeline scheduling passes only build ID and a secret scoped source token"
     AZURE_DEVOPS_ORGANIZATION: "kumo", AZURE_DEVOPS_PROJECT: "Build Platform", AZURE_DEVOPS_PIPELINE_ID: "7",
     AZURE_DEVOPS_PAT: "devops-credential", AZURE_CONTAINER_REGISTRY_SERVER: "registry.azurecr.io",
   }), { getToken: async (): Promise<never> => { throw new Error("PAT authentication must not request a token"); } }, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
-  assert.equal(provider.getImageAddress("my-app", "v1.2.3"), "registry.azurecr.io/my-app:v1.2.3");
+  assert.equal(provider.getImageAddress("my-app"), "registry.azurecr.io/my-app");
   context.mock.method(globalThis, "fetch", async (url: string, options: RequestInit): Promise<Response> => {
     assert.equal(url, "https://dev.azure.com/kumo/Build%20Platform/_apis/pipelines/7/runs?api-version=7.1");
     assert.equal(options.method, "POST");

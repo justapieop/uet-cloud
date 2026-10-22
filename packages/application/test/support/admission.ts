@@ -7,7 +7,7 @@ import { DeploymentRequestKeyReused, type DeploymentRequestReceipt } from "../..
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../dist/ports/uow.js";
 import { CreateDeploymentCase, type CreateDeploymentInput } from "../../dist/use-cases/deployment/CreateDeployment.case.js";
 
-export const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", tag: "v1", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
+export const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 };
 export const PLAN: Plan = new Plan({ id: "starter", name: "Starter", price: 5, vcpu: 0.5, memory: 1, deployments: 2, disk: 10, maxReplicas: 2, stripeProductId: "prod_starter" });
 
 export class AdmissionFixture implements UnitOfWork, StripeSubscriptionGateway {

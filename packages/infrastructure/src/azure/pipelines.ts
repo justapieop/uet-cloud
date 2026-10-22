@@ -43,8 +43,8 @@ export class AzurePipelinesProvider implements PipelineBuildPort {
     this.pat = config.get<string>("AZURE_DEVOPS_PAT") || undefined;
   }
 
-  public getImageAddress(imageName: string, tag: string): string {
-    return `${this.registry}/${imageName}:${tag}`;
+  public getImageAddress(imageName: string): string {
+    return `${this.registry}/${imageName}`;
   }
 
   public startBuild(buildId: string, sourceToken: string): Promise<PipelineRun> {

@@ -29,6 +29,7 @@ export class AcrProvider implements ContainerBuildPort {
   }
 
   public async triggerBuild(input: BuildTriggerInput): Promise<BuildRun> {
+    if (!/^[a-f0-9]{40}$/i.test(input.commitSha)) throw new BuildProviderError("Invalid resolved Git commit SHA");
     const context: Buffer = await runBuildStep("Source archive preparation", () => prepareBuildContext(input.archive, input.dockerFilePath));
     const upload: SourceUploadDefinition = await runBuildStep("ACR build source upload URL request", () =>
       this.acrManager.registries.getBuildSourceUploadUrl(this.rgName, this.registryName),
@@ -47,7 +48,7 @@ export class AcrProvider implements ContainerBuildPort {
     if (!uploaded.ok) {
       throw new BuildProviderError(`ACR source upload failed: HTTP ${uploaded.status}`);
     }
-    const image: string = `${this.registryServer}/${input.imageName}:${input.tag}`;
+    const image: string = `${this.registryServer}/${input.imageName}:${input.commitSha.toLowerCase()}`;
     const request: DockerBuildRequest = {
       type: "DockerBuildRequest",
       sourceLocation: upload.relativePath,

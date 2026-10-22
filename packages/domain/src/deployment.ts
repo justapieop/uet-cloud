@@ -35,7 +35,6 @@ export function validateDeploymentPorts(targetPort: number, ports?: readonly Dep
 export interface DeploymentSpec {
   readonly region?: string;
   readonly repo: string;
-  readonly tag: string;
   readonly imageName?: string;
   readonly dockerFilePath?: string;
   readonly ref?: string;
@@ -111,8 +110,8 @@ export class Deployment extends Domain<DeploymentDetails> {
       }
       const portError: InvalidDomainParams | null = validateDeploymentPorts(spec.targetPort, spec.additionalPorts);
       if (portError) return portError;
-      if (typeof spec.repo !== "string" || isBlankStr(spec.repo) || spec.repo.length > 2048 || typeof spec.tag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(spec.tag)) {
-        return new InvalidDomainParams("A repository and a valid image tag are required");
+      if (typeof spec.repo !== "string" || isBlankStr(spec.repo) || spec.repo.length > 2048) {
+        return new InvalidDomainParams("A repository is required");
       }
       if (spec.imageName !== undefined && (typeof spec.imageName !== "string" || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(spec.imageName) || spec.imageName.length > 128)) {
         return new InvalidDomainParams("Invalid image name");

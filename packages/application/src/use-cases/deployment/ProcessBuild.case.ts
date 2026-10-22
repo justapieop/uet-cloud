@@ -16,10 +16,14 @@ export class ProcessBuildCase {
       const source: { commitSha: string } = await this.source.resolveBuildSource({
         userId: details.userId, repo: details.repo, ref: details.ref ?? undefined,
       });
+      if (!/^[a-f0-9]{40}$/i.test(source.commitSha)) throw new InvalidBuildInput("Invalid resolved Git commit SHA");
+      const commitSha: string = source.commitSha.toLowerCase();
+      // Strip legacy queued tags too: only the resolved source commit selects the image tag.
+      const image: string = `${details.image.replace(/:[^/]*$/, "")}:${commitSha}`;
       const token: string = randomBytes(32).toString("base64url");
       const now: Date = new Date();
       details = {
-        ...details, commitSha: source.commitSha,
+        ...details, commitSha, image,
         sourceTokenHash: createHash("sha256").update(token).digest("hex"),
         sourceExpiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), updatedAt: now,
       };

@@ -51,11 +51,6 @@ export class CreateDeploymentDto {
   public repo!: string;
 
   @ApiProperty()
-  @IsString()
-  @Matches(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/)
-  public tag!: string;
-
-  @ApiProperty()
   @IsInt()
   @Min(1)
   @Max(65535)

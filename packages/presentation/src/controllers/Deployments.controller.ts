@@ -51,7 +51,7 @@ export class DeploymentsController {
   @ApiUnprocessableEntityResponse({ description: "Idempotency-Key reused with a different request" })
   @Header("Cache-Control", "private, no-store")
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: "Queue a repository build and deploy its successful image" })
+  @ApiOperation({ summary: "Queue a repository build and deploy its successful image", description: "The resolved Git commit SHA automatically determines the image tag. Do not supply a tag; ref selects the branch, Git tag, or commit to build." })
   @ApiAcceptedResponse({ type: DeploymentResponseDto })
   @ApiBadRequestResponse({ description: "Invalid deployment input; memory must equal twice vCPU" })
   @ApiConflictResponse({ description: "Deployment name already exists or plan quota exceeded" })
@@ -64,7 +64,7 @@ export class DeploymentsController {
         userId: user.id, name: input.name, idempotencyKey: request.get("Idempotency-Key"),
         spec: {
           region: input.region,
-          repo: input.repo, tag: input.tag, imageName: input.image_name, dockerFilePath: input.dockerfile_path,
+          repo: input.repo, imageName: input.image_name, dockerFilePath: input.dockerfile_path,
           ref: input.ref, targetPort: input.target_port, maxVcpu: input.max_vcpu, maxMemory: input.max_memory,
           additionalPorts: input.additional_ports?.map((port: AdditionalDeploymentPortDto): DeploymentPortMapping => ({
             targetPort: port.target_port, exposedPort: port.exposed_port, external: port.external,
