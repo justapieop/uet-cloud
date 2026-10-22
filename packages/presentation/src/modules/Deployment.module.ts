@@ -15,7 +15,7 @@ import {
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { ExternalClientsModule } from "./ExternalClients.module.js";
@@ -56,14 +56,20 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
       inject: [ConfigService, ContainerAppsAPIClient],
     },
     {
+      provide: AzureContainerLifecycleManager,
+      useFactory: (config: ConfigService, apps: ContainerAppsAPIClient): AzureContainerLifecycleManager =>
+        new AzureContainerLifecycleManager(config, apps.containerApps),
+      inject: [ConfigService, ContainerAppsAPIClient],
+    },
+    {
       provide: StartDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): StartDeploymentCase => new StartDeploymentCase(repository, provider),
-      inject: [InfraDeploymentRepository, AzureProvider],
+      useFactory: (repository: InfraDeploymentRepository, lifecycle: AzureContainerLifecycleManager): StartDeploymentCase => new StartDeploymentCase(repository, lifecycle),
+      inject: [InfraDeploymentRepository, AzureContainerLifecycleManager],
     },
     {
       provide: StopDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): StopDeploymentCase => new StopDeploymentCase(repository, provider),
-      inject: [InfraDeploymentRepository, AzureProvider],
+      useFactory: (repository: InfraDeploymentRepository, lifecycle: AzureContainerLifecycleManager): StopDeploymentCase => new StopDeploymentCase(repository, lifecycle),
+      inject: [InfraDeploymentRepository, AzureContainerLifecycleManager],
     },
     {
       provide: ProcessDeploymentCase,

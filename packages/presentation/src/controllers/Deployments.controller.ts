@@ -85,6 +85,7 @@ export class DeploymentsController {
   }
 
   @Post("deployments/:id/start")
+  @RequirePermissions(Permission.DeploymentUpdate)
   @Header("Cache-Control", "private, no-store")
   @ApiOperation({ summary: "Start an owned stopped container deployment" })
   @ApiOkResponse({ type: DeploymentResponseDto })
@@ -106,6 +107,7 @@ export class DeploymentsController {
   }
 
   @Post("deployments/:id/stop")
+  @RequirePermissions(Permission.DeploymentUpdate)
   @Header("Cache-Control", "private, no-store")
   @ApiOperation({ summary: "Stop an owned running container deployment" })
   @ApiOkResponse({ type: DeploymentResponseDto })

@@ -92,8 +92,6 @@ function fixture(options: FixtureOptions = {}): Fixture {
       },
     },
     containerApps: {
-      start: (): never => { throw new Error("Unexpected start during deployment provisioning"); },
-      stop: (): never => { throw new Error("Unexpected stop during deployment provisioning"); },
       get: async (rg: string, name: string): Promise<ContainerApp> => {
         assert.equal(rg, "user-rg-123");
         events.push("app-get");

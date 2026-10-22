@@ -3,6 +3,7 @@ import type { Metric, MetricValue, Response, TimeSeriesElement } from "@azure/ar
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics, type DeploymentMetricsReader, type MetricPoint, type MetricSeries } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
+import { ownedContainerAppResource } from "./workload-scope.js";
 
 const SERIES_LIMIT: number = 1000;
 
@@ -33,7 +34,9 @@ export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
   }
 
   public async read(input: MetricsReadInput): Promise<DeploymentMetrics> {
-    this.validateResourceId(input);
+    if (!ownedContainerAppResource(input, this.subscriptionId, this.platformResourceGroup)) {
+      throw new InvalidDeploymentResourceError("Deployment resource ID is outside the user's Kumo Container App");
+    }
     const timespan: string = `${input.start.toISOString()}/${input.end.toISOString()}`;
     const fetchMetric: (name: string, filter: string) => Promise<Response> = (name: string, filter: string): Promise<Response> =>
       this.client.list(input.resourceId, {
@@ -60,19 +63,6 @@ export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
       memory: this.normalize(memory, "WorkingSetBytes", 1_048_576, true),
       replicas: this.normalize(replicas, "Replicas", 1, false),
     };
-  }
-
-  private validateResourceId(input: MetricsReadInput): void {
-    const segments: string[] = input.resourceId.split("/");
-    const expectedGroup: string = `user-rg-${input.userId}`;
-    if (!/^[0-9]{1,32}$/.test(input.userId) || expectedGroup.toLowerCase() === this.platformResourceGroup.toLowerCase() ||
-      segments.length !== 9 || segments[0] !== "" || segments[1]?.toLowerCase() !== "subscriptions" ||
-      segments[2]?.toLowerCase() !== this.subscriptionId.toLowerCase() || segments[3]?.toLowerCase() !== "resourcegroups" ||
-      segments[4]?.toLowerCase() !== expectedGroup.toLowerCase() || segments[5]?.toLowerCase() !== "providers" ||
-      segments[6]?.toLowerCase() !== "microsoft.app" || segments[7]?.toLowerCase() !== "containerapps" ||
-      segments[8]?.toLowerCase() !== input.appName.toLowerCase()) {
-      throw new InvalidDeploymentResourceError("Deployment resource ID is outside the user's Kumo Container App");
-    }
   }
 
   private normalize(response: Response, name: string, divisor: number, requireReplica: boolean): MetricSeries[] {

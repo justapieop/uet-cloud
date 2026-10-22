@@ -9,3 +9,4 @@ export * from "./pipelines.js";
 export * from "./deployment-worker.js";
 export * from "./monitoring.js";
 export * from "./deployment-configuration.js";
+export * from "./container-lifecycle.js";

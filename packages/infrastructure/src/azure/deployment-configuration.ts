@@ -4,6 +4,7 @@ import type { DeploymentPortMapping } from "@kumo/domain";
 import { ResilienceError } from "@nestjs/resilience";
 import type { ConfigService } from "@nestjs/config";
 import { normalizeAzureRegion } from "./region.js";
+import { ownedContainerAppResource } from "./workload-scope.js";
 
 export class AzureDeploymentConfigurationReader implements DeploymentConfigurationReader {
   private readonly subscriptionId: string;
@@ -15,21 +16,17 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
   }
 
   public async read(input: Parameters<DeploymentConfigurationReader["read"]>[0]): Promise<DeploymentConfiguration> {
-    const group: string = `user-rg-${input.userId}`;
-    const expected: string = `/subscriptions/${this.subscriptionId}/resourceGroups/${group}/providers/Microsoft.App/containerApps/${input.appName}`;
-    if (!/^[0-9]{1,32}$/.test(input.userId) || !/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(input.appName) ||
-      group.toLowerCase() === this.platformResourceGroup.toLowerCase() || input.resourceId.toLowerCase() !== expected.toLowerCase()) {
-      throw new DeploymentConfigurationReadError("invalid");
-    }
+    const resource: ReturnType<typeof ownedContainerAppResource> = ownedContainerAppResource(input, this.subscriptionId, this.platformResourceGroup);
+    if (!resource) throw new DeploymentConfigurationReadError("invalid");
     let app: ContainerApp;
     try {
-      app = await this.apps.get(group, input.appName, { abortSignal: AbortSignal.timeout(15_000) });
+      app = await this.apps.get(resource.resourceGroup, input.appName, { abortSignal: AbortSignal.timeout(15_000) });
     } catch (error: unknown) {
       if (error instanceof ResilienceError) throw error;
       const status: unknown = typeof error === "object" && error !== null && "statusCode" in error ? error.statusCode : undefined;
       throw new DeploymentConfigurationReadError(status === 404 ? "missing" : status === 403 ? "invalid" : "unavailable");
     }
-    if (app.id?.toLowerCase() !== expected.toLowerCase() || app.tags?.["kumo-deployment-id"] !== input.deploymentId || !app.location) {
+    if (app.id?.toLowerCase() !== resource.resourceId.toLowerCase() || app.tags?.["kumo-deployment-id"] !== input.deploymentId || !app.location) {
       throw new DeploymentConfigurationReadError("invalid");
     }
     const containers: Container[] = app.template?.containers ?? [];

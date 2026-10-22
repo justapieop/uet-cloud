@@ -27,8 +27,8 @@ test("resource routes check specific grants before lookups and cached responses"
     providers: [
       { provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => roles }) },
       { provide: CreateDeploymentCase, useValue: {} },
-      { provide: StartDeploymentCase, useValue: {} },
-      { provide: StopDeploymentCase, useValue: {} },
+      { provide: StartDeploymentCase, useValue: { exec: (input: { id: string; userId: string }): Promise<never> => missing(input.id, input.userId) } },
+      { provide: StopDeploymentCase, useValue: { exec: (input: { id: string; userId: string }): Promise<never> => missing(input.id, input.userId) } },
       { provide: GetDeploymentCase, useValue: { exec: missing,
         list: async (userId: string): Promise<Deployment[]> => { calls++; assert.equal(userId, "123"); return []; },
       } },
@@ -86,6 +86,19 @@ test("resource routes check specific grants before lookups and cached responses"
   assert.equal((await fetch(base + routes[1])).status, 403);
   grant(Permission.Super);
   for (const route of routes.slice(1)) assert.equal((await fetch(base + route)).status, 404);
+  const lifecycleGrants: readonly (PermissionDefinition | undefined)[] = [undefined, Permission.DeploymentRead, Permission.DeploymentUpdate, Permission.Super];
+  for (let index: number = 0; index < lifecycleGrants.length; index++) {
+    const permission: PermissionDefinition | undefined = lifecycleGrants[index];
+    grant(...(permission ? [permission] : []));
+    const before: number = calls;
+    const allowed: boolean = permission === Permission.DeploymentUpdate || permission === Permission.Super;
+    const actions: readonly string[] = ["start", "stop"];
+    for (let actionIndex: number = 0; actionIndex < actions.length; actionIndex++) {
+      const action: string = actions[actionIndex]!;
+      assert.equal((await fetch(`${base}/deployments/${id}/${action}`, { method: "POST" })).status, allowed ? 404 : 403);
+    }
+    assert.equal(calls, before + (allowed ? 2 : 0));
+  }
 });
 
 test("permission decorator enforces role unions and additive controller/method policies over HTTP", async (context: TestContext): Promise<void> => {

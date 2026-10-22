@@ -1,14 +1,14 @@
 import type { ContainerAppsAPIClient, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, WorkloadProfile } from "@azure/arm-appcontainers";
 import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
-import { BuildProviderError, type ContainerLifecycleManager, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
+import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
 import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { setTimeout as delay } from "node:timers/promises";
 import { DEFAULT_REGION, normalizeAzureRegion } from "./region.js";
 import { describeBuildFailure, runBuildStep } from "../build-errors.js";
+import { userWorkloadResourceGroup } from "./workload-scope.js";
 
-const RG_PREFIX: string = "user-rg-";
 const ACA_ENV_PREFIX: string = "user-aca-env-";
 
 export interface AzureRgInput {
@@ -40,11 +40,11 @@ export interface AzureProviderClients {
   resources: Pick<ResourceManagementClient["resources"], "getById">;
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get" | "createOrUpdate">;
-  containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate" | "start" | "stop">;
+  containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate">;
 }
 
 @Injectable()
-export class AzureProvider implements DeploymentProvisioner, ContainerLifecycleManager {
+export class AzureProvider implements DeploymentProvisioner {
   private readonly platformResourceGroup: string;
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
@@ -126,22 +126,6 @@ export class AzureProvider implements DeploymentProvisioner, ContainerLifecycleM
       throw new BuildProviderError("Azure did not return a successfully provisioned app with build metadata");
     }
     return { buildId, image, resourceId: app.id, fqdn: app.configuration?.ingress?.fqdn ?? null };
-  }
-
-  public async startApp(userId: string, appName: string, signal?: AbortSignal): Promise<void> {
-    const rgName: string = this.userResourceGroup(userId);
-    const opSignal: AbortSignal = this.operationSignal(signal);
-    await runBuildStep("Container App start", (): Promise<ContainerApp> =>
-      this.clients.containerApps.start(rgName, appName, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
-    );
-  }
-
-  public async stopApp(userId: string, appName: string, signal?: AbortSignal): Promise<void> {
-    const rgName: string = this.userResourceGroup(userId);
-    const opSignal: AbortSignal = this.operationSignal(signal);
-    await runBuildStep("Container App stop", (): Promise<ContainerApp> =>
-      this.clients.containerApps.stop(rgName, appName, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
-    );
   }
 
   public async createDeployment(input: AzureDeploymentCreateInput): Promise<ContainerApp> {
@@ -265,8 +249,8 @@ export class AzureProvider implements DeploymentProvisioner, ContainerLifecycleM
 
   private userResourceGroup(userId: string): string {
     if (!/^[0-9]{1,32}$/.test(userId)) throw new BuildProviderError("A valid numeric GitHub user ID is required");
-    const name: string = `${RG_PREFIX}${userId}`;
-    if (name.toLowerCase() === this.platformResourceGroup.toLowerCase()) {
+    const name: string | null = userWorkloadResourceGroup(userId, this.platformResourceGroup);
+    if (!name) {
       throw new BuildProviderError("User workloads cannot target the platform resource group");
     }
     return name;
