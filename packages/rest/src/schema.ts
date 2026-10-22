@@ -72,23 +72,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/deployment/build/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get an owned build and refresh its pipeline status */
-        get: operations["DeploymentController_getBuild"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/builds/{id}/manifest": {
         parameters: {
             query?: never;
@@ -141,23 +124,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/deployments/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get an owned deployment's provisioning status */
-        get: operations["DeploymentsController_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/deployments/{id}/start": {
         parameters: {
             query?: never;
@@ -192,6 +158,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an owned deployment's provisioning status */
+        get: operations["DeploymentsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/build/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an owned build and refresh its pipeline status */
+        get: operations["DeploymentController_getBuild"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Azure Monitor usage for an owned running Container App */
+        get: operations["DeploymentMetricsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -202,23 +219,6 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             suspended: boolean;
-        };
-        BuildResponseDto: {
-            /** Format: uuid */
-            build_id: string;
-            run_url: string | null;
-            /** @example 42 */
-            run_id: string | null;
-            /**
-             * @example PENDING
-             * @enum {string}
-             */
-            status: "PENDING" | "PREPARING" | "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELED";
-            /** @example registry.azurecr.io/my-app:v1.2.3 */
-            image: string;
-            commit_sha: string | null;
-            /** @description Preparation or scheduling failure; null when none has been recorded */
-            error: string | null;
         };
         BuildManifestDto: {
             /** Format: uuid */
@@ -305,6 +305,59 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        BuildResponseDto: {
+            /** Format: uuid */
+            build_id: string;
+            run_url: string | null;
+            /** @example 42 */
+            run_id: string | null;
+            /**
+             * @example PENDING
+             * @enum {string}
+             */
+            status: "PENDING" | "PREPARING" | "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+            /** @example registry.azurecr.io/my-app:v1.2.3 */
+            image: string;
+            commit_sha: string | null;
+            /** @description Preparation or scheduling failure; null when none has been recorded */
+            error: string | null;
+        };
+        MetricPointDto: {
+            /**
+             * Format: date-time
+             * @description UTC timestamp
+             */
+            timestamp: string;
+            /** @description Null means Azure supplied no sample */
+            value: number | null;
+        };
+        MetricSeriesDto: {
+            revision_name: string | null;
+            /** @description Null for the revision-level replica count metric */
+            replica_name: string | null;
+            points: components["schemas"]["MetricPointDto"][];
+        };
+        DeploymentMetricsResponseDto: {
+            /** Format: uuid */
+            deployment_id: string;
+            /** @example 60 */
+            interval_seconds: number;
+            /**
+             * @description Mean within each one-minute bucket, for each revision/replica series
+             * @enum {string}
+             */
+            aggregation: "Average";
+            /** @enum {string} */
+            cpu_unit: "cores";
+            /** @enum {string} */
+            memory_unit: "MiB";
+            /** @description CPU used by each replica, in cores */
+            cpu: components["schemas"]["MetricSeriesDto"][];
+            /** @description Working set of each replica, in MiB */
+            memory: components["schemas"]["MetricSeriesDto"][];
+            /** @description Average active replica count per revision; zero is returned only when Azure emits zero */
+            replicas: components["schemas"]["MetricSeriesDto"][];
         };
     };
     responses: never;
@@ -393,55 +446,6 @@ export interface operations {
             };
             /** @description The request has no authenticated session */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DeploymentController_getBuild: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BuildResponseDto"];
-                };
-            };
-            /** @description Invalid build ID */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description No authenticated session or suspended user */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Build not found for this user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Azure Pipeline status request failed */
-            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -568,8 +572,22 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description No authenticated session or suspended user */
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An Azure resource is missing, invalid, or inaccessible */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure configuration is temporarily unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -580,7 +598,10 @@ export interface operations {
     DeploymentsController_create: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Unique key per deployment request; reuse it for retries (1-255 printable ASCII characters) */
+                "Idempotency-Key": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -605,7 +626,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description No authenticated session, suspended user, or no active subscription linked to an active Kumo plan */
+            /** @description DeploymentCreate permission and an active Stripe subscription linked to an active Kumo plan are required */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -619,43 +640,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Idempotency-Key reused with a different request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Stripe subscription verification is temporarily unavailable */
             503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DeploymentsController_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponseDto"];
-                };
-            };
-            /** @description No authenticated session or suspended user */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Deployment not found for this user */
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -682,7 +675,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
-            /** @description No authenticated session or suspended user */
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -731,7 +724,7 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
-            /** @description No authenticated session or suspended user */
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -754,6 +747,169 @@ export interface operations {
             };
             /** @description Azure failed to stop the container app */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure resource is missing, invalid, or inaccessible */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure configuration is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentController_getBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildResponseDto"];
+                };
+            };
+            /** @description Invalid build ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or BuildRead permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Build not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Pipeline status request failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentMetricsController_get: {
+        parameters: {
+            query?: {
+                range?: "1h" | "6h" | "24h";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentMetricsResponseDto"];
+                };
+            };
+            /** @description Invalid deployment UUID or range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or DeploymentRead/DeploymentMetricsRead permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is not running or its stored Container App ID is invalid */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Monitor denied access or returned invalid metric data */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Monitor is throttling or unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
