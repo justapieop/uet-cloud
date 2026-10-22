@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import type { ContainerApp } from "@azure/arm-appcontainers";
-import { BuildProviderError, type TriggerBuildCase, type GetBuildCase } from "@kumo/application";
-import { AzureProvider, type AzureProviderClients } from "../dist/azure/provider.js";
+import { BuildProviderError } from "@kumo/application";
+import { AzureContainerLifecycleManager, type ContainerAppLifecycleClient } from "../dist/azure/container-lifecycle.js";
 
 interface LifecycleFixture {
-  provider: AzureProvider;
+  provider: AzureContainerLifecycleManager;
   calls: { start: string[]; stop: string[] };
 }
 
@@ -17,83 +17,47 @@ function createFixture(overrides: {
 } = {}): LifecycleFixture {
   const calls: { start: string[]; stop: string[] } = { start: [], stop: [] };
 
-  const clients: AzureProviderClients = {
-    resources: {
-      getById: async (): Promise<never> => {
-        throw new Error("not implemented");
+  const clients: ContainerAppLifecycleClient = {
+    start: (rg: string, app: string): ReturnType<ContainerAppLifecycleClient["start"]> => ({
+      pollUntilDone: async (): Promise<ContainerApp> => {
+        if (overrides.startError) throw overrides.startError;
+        calls.start.push(`${rg}/${app}`);
+        return { name: app, location: "southeastasia" };
       },
-    },
-    resourceGroups: {
-      checkExistence: async (): Promise<never> => {
-        throw new Error("not implemented");
+    } as ReturnType<ContainerAppLifecycleClient["start"]>),
+    stop: (rg: string, app: string): ReturnType<ContainerAppLifecycleClient["stop"]> => ({
+      pollUntilDone: async (): Promise<ContainerApp> => {
+        if (overrides.stopError) throw overrides.stopError;
+        calls.stop.push(`${rg}/${app}`);
+        return { name: app, location: "southeastasia" };
       },
-      get: async (): Promise<never> => {
-        throw new Error("not implemented");
-      },
-      createOrUpdate: async (): Promise<never> => {
-        throw new Error("not implemented");
-      },
-    },
-    managedEnvironments: {
-      get: async (): Promise<never> => {
-        throw new Error("not implemented");
-      },
-      createOrUpdate: (): never => {
-        throw new Error("not implemented");
-      },
-    },
-    containerApps: {
-      get: async (): Promise<never> => {
-        throw new Error("not implemented");
-      },
-      createOrUpdate: (): never => {
-        throw new Error("not implemented");
-      },
-      start: (rg: string, app: string): ReturnType<AzureProviderClients["containerApps"]["start"]> => ({
-        pollUntilDone: async (): Promise<ContainerApp> => {
-          if (overrides.startError) throw overrides.startError;
-          calls.start.push(`${rg}/${app}`);
-          return { name: app, location: "southeastasia" };
-        },
-      } as ReturnType<AzureProviderClients["containerApps"]["start"]>),
-      stop: (rg: string, app: string): ReturnType<AzureProviderClients["containerApps"]["stop"]> => ({
-        pollUntilDone: async (): Promise<ContainerApp> => {
-          if (overrides.stopError) throw overrides.stopError;
-          calls.stop.push(`${rg}/${app}`);
-          return { name: app, location: "southeastasia" };
-        },
-      } as ReturnType<AzureProviderClients["containerApps"]["stop"]>),
-    },
+    } as ReturnType<ContainerAppLifecycleClient["stop"]>),
   };
 
   const config: ConfigService = new ConfigService({
     AZURE_RG_NAME: "central-rg",
     AZURE_DEPLOYMENT_TIMEOUT_MS: "5000",
-    AZURE_DEPLOYMENT_POLL_INTERVAL_MS: "100",
   });
 
-  const triggerBuild: Pick<TriggerBuildCase, "exec"> = { exec: async (): Promise<never> => { throw new Error("not needed"); } };
-  const getBuild: Pick<GetBuildCase, "exec"> = { exec: async (): Promise<never> => { throw new Error("not needed"); } };
-
-  const provider: AzureProvider = new AzureProvider(config, triggerBuild, getBuild, clients);
+  const provider: AzureContainerLifecycleManager = new AzureContainerLifecycleManager(config, clients);
   return { provider, calls };
 }
 
-test("AzureProvider.startApp calls containerApps.start with correct resource group and app name", async (): Promise<void> => {
+test("AzureContainerLifecycleManager.startApp calls containerApps.start with correct resource group and app name", async (): Promise<void> => {
   const { provider, calls }: LifecycleFixture = createFixture();
   await provider.startApp("123", "my-app");
   assert.deepEqual(calls.start, ["user-rg-123/my-app"]);
   assert.deepEqual(calls.stop, []);
 });
 
-test("AzureProvider.stopApp calls containerApps.stop with correct resource group and app name", async (): Promise<void> => {
+test("AzureContainerLifecycleManager.stopApp calls containerApps.stop with correct resource group and app name", async (): Promise<void> => {
   const { provider, calls }: LifecycleFixture = createFixture();
   await provider.stopApp("123", "my-app");
   assert.deepEqual(calls.stop, ["user-rg-123/my-app"]);
   assert.deepEqual(calls.start, []);
 });
 
-test("AzureProvider.startApp wraps Azure errors in BuildProviderError", async (): Promise<void> => {
+test("AzureContainerLifecycleManager.startApp wraps Azure errors in BuildProviderError", async (): Promise<void> => {
   const { provider }: LifecycleFixture = createFixture({
     startError: new Error("ARM start failed"),
   });
@@ -103,7 +67,7 @@ test("AzureProvider.startApp wraps Azure errors in BuildProviderError", async ()
   );
 });
 
-test("AzureProvider.stopApp wraps Azure errors in BuildProviderError", async (): Promise<void> => {
+test("AzureContainerLifecycleManager.stopApp wraps Azure errors in BuildProviderError", async (): Promise<void> => {
   const { provider }: LifecycleFixture = createFixture({
     stopError: new Error("ARM stop failed"),
   });
@@ -111,4 +75,21 @@ test("AzureProvider.stopApp wraps Azure errors in BuildProviderError", async ():
     provider.stopApp("123", "my-app"),
     (err: unknown): boolean => err instanceof BuildProviderError && err.message.includes("Container App stop failed"),
   );
+});
+
+test("lifecycle refuses invalid workload targets before calling Azure", async (): Promise<void> => {
+  const { provider, calls }: LifecycleFixture = createFixture();
+  const actions: readonly ("startApp" | "stopApp")[] = ["startApp", "stopApp"];
+  for (let index: number = 0; index < actions.length; index++) {
+    const action: "startApp" | "stopApp" = actions[index]!;
+    await assert.rejects(provider[action]("../platform", "my-app"), BuildProviderError);
+    await assert.rejects(provider[action]("123", "../other-app"), BuildProviderError);
+  }
+  assert.deepEqual(calls, { start: [], stop: [] });
+  const blocked: AzureContainerLifecycleManager = new AzureContainerLifecycleManager(
+    new ConfigService({ AZURE_PLATFORM_RESOURCE_GROUP: "USER-RG-123" }),
+    { start: (): never => { throw new Error("Unexpected Azure access"); }, stop: (): never => { throw new Error("Unexpected Azure access"); } },
+  );
+  await assert.rejects(blocked.startApp("123", "my-app"), BuildProviderError);
+  await assert.rejects(blocked.stopApp("123", "my-app"), BuildProviderError);
 });
