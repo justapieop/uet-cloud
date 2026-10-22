@@ -5,3 +5,5 @@ export * from "./exceptions/index.js";
 export * from "./plan/SubscribeToPlan.case.js";
 export * from "./plan/GetPlans.case.js";
 export * from "./plan/GetUserPlans.case.js";
+export * from "./plan/AdminPlans.case.js";
+export * from "./plan/AdminSubscriptions.case.js";

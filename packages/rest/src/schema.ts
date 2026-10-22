@@ -209,26 +209,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plans": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List active Stripe-linked plans
-         * @description Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout includes all active prices of the linked product.
-         */
-        get: operations["PlansController_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/plans/me": {
         parameters: {
             query?: never;
@@ -244,6 +224,69 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active Stripe-linked plans
+         * @description Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout includes all active prices of the linked product.
+         */
+        get: operations["PlansController_list"];
+        put?: never;
+        /** Create a local plan; does not create Stripe products or prices */
+        post: operations["PlansController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all local plans, including inactive and unmapped plans */
+        get: operations["PlansController_listAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect a local plan */
+        get: operations["PlansController_get"];
+        /**
+         * Replace a local plan's configuration; ID stays unchanged
+         * @description Requires all configuration fields. Changes affect subsequent eligibility/quota checks. Does not edit Stripe prices or existing workloads.
+         */
+        put: operations["PlansController_replace"];
+        post?: never;
+        /**
+         * Deactivate a plan without deleting it or canceling Stripe subscriptions
+         * @description Sets active=false. This removes eligibility for subsequent deployment admissions through this plan.
+         */
+        delete: operations["PlansController_deactivate"];
         options?: never;
         head?: never;
         patch?: never;
@@ -267,6 +310,43 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/user/{userId}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a user's Stripe subscriptions in all statuses with cursor pagination */
+        get: operations["UserSubscriptionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/{userId}/subscriptions/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Schedule or undo cancellation at the end of the subscription period
+         * @description Only accepts cancel_at_period_end. Does not immediately cancel, reactivate an ended subscription, change prices, or remove metered items.
+         */
+        patch: operations["UserSubscriptionsController_setCancellation"];
         trace?: never;
     };
 }
@@ -441,6 +521,53 @@ export interface components {
             /** @description Active local plans matching the user's active Stripe subscriptions */
             plans: components["schemas"]["PlanResponseDto"][];
         };
+        AdminPlanResponseDto: {
+            id: string;
+            name: string;
+            /** @description Local catalog price; Checkout bills the linked Stripe product's configured default price */
+            price: number;
+            /** @description Maximum vCPU per deployment replica */
+            vcpu: number;
+            /** @description Maximum memory per deployment replica in GiB */
+            memory: number;
+            /** @description Maximum reserved deployment slots */
+            deployments: number;
+            /** @description Configured storage quota; enforced by the future storage-allocation flow */
+            disk: number;
+            /** @description Maximum replicas per deployment */
+            max_replicas: number;
+            active: boolean;
+            stripe_product_id: string | null;
+        };
+        AdminPlanPageDto: {
+            plans: components["schemas"]["AdminPlanResponseDto"][];
+            page: number;
+            per_page: number;
+            has_next_page: boolean;
+        };
+        AdminPlanCreateDto: {
+            name: string;
+            price: number;
+            vcpu: number;
+            memory: number;
+            deployments: number;
+            disk: number;
+            active: boolean;
+            stripe_product_id: string | null;
+            max_replicas: number;
+            id: string;
+        };
+        AdminPlanWriteDto: {
+            name: string;
+            price: number;
+            vcpu: number;
+            memory: number;
+            deployments: number;
+            disk: number;
+            active: boolean;
+            stripe_product_id: string | null;
+            max_replicas: number;
+        };
         PlanSubscriptionResponseDto: {
             checkout_session_id: string;
             /**
@@ -448,6 +575,27 @@ export interface components {
              * @description Redirect the browser to this Stripe-hosted payment page
              */
             checkout_url: string;
+        };
+        AdminSubscriptionItemDto: {
+            price_id: string;
+            product_id: string;
+        };
+        AdminSubscriptionResponseDto: {
+            id: string;
+            status: string;
+            cancel_at_period_end: boolean;
+            /** @description Unix timestamp from Stripe */
+            cancel_at: number | null;
+            items: components["schemas"]["AdminSubscriptionItemDto"][];
+        };
+        AdminSubscriptionPageDto: {
+            subscriptions: components["schemas"]["AdminSubscriptionResponseDto"][];
+            has_more: boolean;
+            next_cursor: string | null;
+        };
+        AdminCancellationDto: {
+            /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
+            cancel_at_period_end: boolean;
         };
     };
     responses: never;
@@ -1028,25 +1176,6 @@ export interface operations {
             };
         };
     };
-    PlansController_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanResponseDto"][];
-                };
-            };
-        };
-    };
     UserPlansController_get: {
         parameters: {
             query?: never;
@@ -1073,6 +1202,275 @@ export interface operations {
             };
             /** @description Stripe subscription verification unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponseDto"][];
+                };
+            };
+        };
+    };
+    PlansController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPlanCreateDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponseDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_listAll: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanPageDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponseDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPlanWriteDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponseDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_deactivate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1138,6 +1536,129 @@ export interface operations {
                 content?: never;
             };
             /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserSubscriptionsController_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                starting_after?: string;
+            };
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionPageDto"];
+                };
+            };
+            /** @description Invalid query, payload, subscription ID, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SubscriptionManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User or user-owned subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription management unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserSubscriptionsController_setCancellation: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                userId: string;
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCancellationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid query, payload, subscription ID, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SubscriptionManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User or user-owned subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription management unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Permission-protected backend APIs share the existing plan/user routes (without an admin prefix) and manage local plans (list/read/create/full replacement/deactivation), inspect users' Stripe subscriptions, and schedule or undo period-end cancellation. They require PlanManage or SubscriptionManage respectively; existing Super admins receive both. Deactivating a plan affects subsequent eligibility without canceling subscriptions or deleting workloads. See [admin billing](../admin-billing.md).
+
 - `GET /plans/me` lets an authenticated, active, unsuspended user check plan membership through live active Stripe subscriptions matched to active local plans. It returns `has_plan` and the matching public plan details, uses private no-store responses, and reports Stripe outages as 503 rather than falsely reporting no plan. It does not indicate remaining quota.
 
 - `GET /plans` is a public catalog of active Stripe-linked local plans, exposing plan IDs, names, local prices, and quotas while omitting Stripe identifiers. It reads SQL without querying Stripe; Checkout remains authoritative for the billed price and product availability.

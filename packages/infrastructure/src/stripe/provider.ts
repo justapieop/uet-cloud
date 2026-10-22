@@ -1,13 +1,68 @@
 import { SubscriptionCheckUnavailable, type StripeCustomerGateway, type StripeSubscriptionGateway } from "@kumo/application";
 import { Injectable, Logger } from "@nestjs/common";
 import type Stripe from "stripe";
+import { AdminBillingConflict, AdminBillingNotFound, AdminBillingUnavailable, type AdminSubscription, type AdminSubscriptionGateway, type AdminSubscriptionPage } from "@kumo/application";
 import { PlanSubscriptionConflict, PlanSubscriptionUnavailable, type PlanCheckoutRedirects, type PlanSubscriptionGateway, type PlanSubscriptionPrice, type PlanSubscriptionResult } from "@kumo/application";
 
 @Injectable()
-export class StripeProvider implements StripeCustomerGateway, StripeSubscriptionGateway, PlanSubscriptionGateway {
+export class StripeProvider implements StripeCustomerGateway, StripeSubscriptionGateway, PlanSubscriptionGateway, AdminSubscriptionGateway {
   private readonly logger: Logger = new Logger(StripeProvider.name);
 
   public constructor(private readonly client: Stripe) { }
+
+  private async adminSubscription(subscription: Stripe.Subscription): Promise<AdminSubscription> {
+    const prices: { priceId: string; productId: string }[] = [];
+    const cursors: Set<string> = new Set();
+    let page: Stripe.ApiList<Stripe.SubscriptionItem> = subscription.items;
+    while (true) {
+      prices.push(...page.data.map((item: Stripe.SubscriptionItem): { priceId: string; productId: string } => ({
+        priceId: item.price.id, productId: typeof item.price.product === "string" ? item.price.product : item.price.product.id,
+      })));
+      if (!page.has_more) break;
+      const cursor: string | undefined = page.data.at(-1)?.id;
+      if (!cursor || cursors.has(cursor)) throw new Error("Invalid subscription item pagination");
+      cursors.add(cursor);
+      page = await this.client.subscriptionItems.list({ subscription: subscription.id, starting_after: cursor, limit: 100 });
+    }
+    return { id: subscription.id, status: subscription.status, cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      cancelAt: subscription.cancel_at, items: prices };
+  }
+
+  private adminError(error: unknown): never {
+    if (error instanceof AdminBillingNotFound) throw error;
+    if (typeof error === "object" && error !== null) {
+      if ("code" in error && error.code === "resource_missing") throw new AdminBillingNotFound("Subscription not found for this user");
+      if (("type" in error && (error.type === "StripeIdempotencyError" || error.type === "StripeInvalidRequestError")) ||
+        ("code" in error && error.code === "idempotency_key_in_use")) throw new AdminBillingConflict("Subscription update conflicts with its state or idempotency key");
+    }
+    throw new AdminBillingUnavailable("Stripe subscription management is unavailable; retry later");
+  }
+
+  public async listCustomerSubscriptions(customerId: string, limit: number, cursor?: string): Promise<AdminSubscriptionPage> {
+    try {
+      const page: Stripe.ApiList<Stripe.Subscription> = await this.client.subscriptions.list({ customer: customerId, status: "all", limit, ...(cursor ? { starting_after: cursor } : {}) });
+      if (page.has_more && page.data.length === 0) throw new Error("Invalid subscription pagination");
+      const subscriptions: AdminSubscription[] = [];
+      for (let offset: number = 0; offset < page.data.length; offset += 5) {
+        subscriptions.push(...await Promise.all(page.data.slice(offset, offset + 5).map((subscription: Stripe.Subscription): Promise<AdminSubscription> => {
+          if ((typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id) !== customerId) throw new Error("Unexpected customer");
+          return this.adminSubscription(subscription);
+        })));
+      }
+      return { subscriptions,
+        hasMore: page.has_more, nextCursor: page.has_more ? page.data.at(-1)?.id ?? null : null };
+    } catch { throw new AdminBillingUnavailable("Unable to list Stripe subscriptions; retry later"); }
+  }
+
+  public async setSubscriptionCancellation(customerId: string, subscriptionId: string, cancelAtPeriodEnd: boolean, key: string): Promise<AdminSubscription> {
+    try {
+      const subscription: Stripe.Subscription = await this.client.subscriptions.retrieve(subscriptionId);
+      const owner: string = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+      if (owner !== customerId) throw new AdminBillingNotFound("Subscription not found for this user");
+      const updated: Stripe.Subscription = await this.client.subscriptions.update(subscriptionId, { cancel_at_period_end: cancelAtPeriodEnd }, { idempotencyKey: key });
+      return await this.adminSubscription(updated);
+    } catch (error: unknown) { return this.adminError(error); }
+  }
 
   public async getPlanPrices(productId: string): Promise<readonly PlanSubscriptionPrice[]> {
     try {

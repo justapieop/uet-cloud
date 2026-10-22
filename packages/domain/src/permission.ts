@@ -54,9 +54,17 @@ export const DeploymentMetricsRead: PermissionDefinition = {
   requires: [DeploymentRead],
 };
 
+export const PlanManage: PermissionDefinition = {
+  offset: 7, name: "Manage plans", description: "Create, replace, deactivate, and inspect local plans across users.", requires: [],
+};
+
+export const SubscriptionManage: PermissionDefinition = {
+  offset: 8, name: "Manage subscriptions", description: "Inspect users' Stripe subscriptions and schedule or undo period-end cancellation.", requires: [],
+};
+
 export const Permission: Readonly<Record<
   "Super" | "DeploymentRead" | "DeploymentCreate" | "DeploymentUpdate" |
-  "DeploymentDelete" | "BuildRead" | "DeploymentMetricsRead",
+  "DeploymentDelete" | "BuildRead" | "DeploymentMetricsRead" | "PlanManage" | "SubscriptionManage",
   PermissionDefinition
 >> = {
   Super,
@@ -66,6 +74,8 @@ export const Permission: Readonly<Record<
   DeploymentDelete,
   BuildRead,
   DeploymentMetricsRead,
+  PlanManage,
+  SubscriptionManage,
 };
 
 export type Permission = PermissionDefinition;

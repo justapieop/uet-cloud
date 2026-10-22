@@ -11,6 +11,8 @@ test("permission catalog preserves persisted offsets and fits SQL Server role bi
     DeploymentDelete: 4,
     BuildRead: 5,
     DeploymentMetricsRead: 6,
+    PlanManage: 7,
+    SubscriptionManage: 8,
   };
   const definitions: PermissionDefinition[] = Object.values(Permission);
   assert.equal(new Set(definitions.map((definition: PermissionDefinition): number => definition.offset)).size, definitions.length);

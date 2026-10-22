@@ -13,8 +13,10 @@ Offsets are stable persisted bit positions. Existing roles retain their grants; 
 | `DeploymentDelete` | 4 | Delete owned deployments and their resources | `DeploymentRead` |
 | `BuildRead` | 5 | Read owned build status and pipeline details | None |
 | `DeploymentMetricsRead` | 6 | Read owned deployment usage metrics | `DeploymentRead` |
+| `PlanManage` | 7 | Administer local plans | None |
+| `SubscriptionManage` | 8 | Inspect users' subscriptions and schedule/undo cancellation | None |
 
-Update/delete definitions cover application use cases; they do not add HTTP endpoints. The catalog does not grant access to other users' resources, and Super does not bypass ownership, subscription, or quota checks.
+Deployment update/delete definitions cover application use cases; they do not add HTTP endpoints. PlanManage and SubscriptionManage explicitly grant cross-user administrative billing access. Super does not bypass ownership, subscription, or quota checks on ordinary deployment APIs. See [admin billing APIs](admin-billing.md).
 
 To store grants on a role, OR the masks computed as `1n << BigInt(permission.offset)`. Do not persist catalog definitions as separate permission rows. The SQL Server signed bigint storage supports offsets 0–62. Never reuse or renumber an assigned offset.
 

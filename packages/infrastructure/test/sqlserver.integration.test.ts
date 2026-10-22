@@ -4,10 +4,11 @@ import { randomUUID } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
-import { CreateDeploymentCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
-import { Build, Deployment, Role, User, type DeploymentSpec } from "@kumo/domain";
+import { AdminBillingConflict, AdminBillingNotFound, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
+import { Build, Deployment, Plan, Role, User, type DeploymentSpec } from "@kumo/domain";
 import { InfraSessionAuthorizationReader } from "../dist/auth/session-authorization.js";
 import { InfraBuild, InfraBuildRepository } from "../dist/db/repositories/build.js";
+import { InfraPlanRepository } from "../dist/db/repositories/plan.js";
 import { DATABASE_MIGRATIONS, InfraDeployment, InfraDeploymentRepository, InfraPlan, InfraRole, InfraRoleRepository, InfraUser, InfraUserRepository, InfraUserRole, SqlServerIdempotencyStore, TypeOrmUnitOfWork, addGithubAdmin, seedDatabase, type DatabaseSeedInput } from "../dist/db/index.js";
 
 const ENABLED: boolean = process.env.RUN_SQLSERVER_TESTS === "true";
@@ -67,6 +68,27 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     assert.equal(receipts[0]!.count, 1);
   });
   assert.ok(accepted!, "Acceptance race must produce a deployment");
+
+  await context.test("admin plan writes enforce unique mappings, replace fields, and deactivate without deleting", async (): Promise<void> => {
+    const orm: Repository<InfraPlan> = source.getRepository(InfraPlan);
+    const plans: InfraPlanRepository = new InfraPlanRepository(orm);
+    const suffix: string = randomUUID().replaceAll("-", "");
+    const id: string = `admin-${suffix}`;
+    const plan: Plan = new Plan({ id, name: "Admin test", price: 5, vcpu: 1, memory: 2, disk: 10, deployments: 2, maxReplicas: 3, stripeProductId: `prod_${suffix}` });
+    try {
+      await plans.insert(plan);
+      await assert.rejects(plans.insert(plan), AdminBillingConflict);
+      await assert.rejects(plans.insert(new Plan({ ...plan, id: `${id}-duplicate` })), AdminBillingConflict);
+      await plans.replace(new Plan({ ...plan, name: "Updated", maxReplicas: 4, price: 6.25 }));
+      assert.equal((await plans.findById(id))?.price, 6.25);
+      assert.equal((await plans.findById(id))?.maxReplicas, 4);
+      await plans.deactivate(id);
+      assert.equal((await plans.findById(id))?.active, false);
+      assert.ok((await plans.list(1, 100)).some((item: Plan): boolean => item.id === id));
+      await assert.rejects(plans.replace(new Plan({ ...plan, id: `${id}-missing` })), AdminBillingNotFound);
+      await assert.rejects(plans.deactivate(`${id}-missing`), AdminBillingNotFound);
+    } finally { await orm.delete([id, `${id}-duplicate`]); }
+  });
 
   await context.test("user active defaults to true and persists explicit false", async (): Promise<void> => {
     const users: InfraUserRepository = new InfraUserRepository(source.getRepository(InfraUser));

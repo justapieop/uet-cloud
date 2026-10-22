@@ -1,4 +1,4 @@
-import type { PlanCatalogReader, PlanReader, PlanRepository } from "@kumo/application";
+import { AdminBillingConflict, AdminBillingNotFound, type AdminPlanRepository, type PlanCatalogReader, type PlanReader, type PlanRepository } from "@kumo/application";
 import { Plan } from "@kumo/domain";
 import { Check, Column, Entity, Index, In, IsNull, Not, PrimaryColumn, type Repository } from "typeorm";
 
@@ -48,8 +48,43 @@ export class InfraPlan {
   public readonly maxReplicas!: number;
 }
 
-export class InfraPlanRepository implements PlanRepository, PlanReader, PlanCatalogReader {
+export class InfraPlanRepository implements PlanRepository, PlanReader, PlanCatalogReader, AdminPlanRepository {
   public constructor(private readonly repository: Repository<InfraPlan>) {}
+
+  public async list(page: number, perPage: number): Promise<Plan[]> {
+    const records: InfraPlan[] = await this.repository.find({ order: { id: "ASC" }, skip: (page - 1) * perPage, take: perPage + 1 });
+    return records.map((record: InfraPlan): Plan => new Plan({ ...record }));
+  }
+
+  private record(plan: Plan): InfraPlan {
+    return { id: plan.id, name: plan.name, price: plan.price, vcpu: plan.vcpu, memory: plan.memory, deployments: plan.deployments,
+      disk: plan.disk, active: plan.active, stripeProductId: plan.stripeProductId, maxReplicas: plan.maxReplicas };
+  }
+
+  private writeError(error: unknown): never {
+    const driver: unknown = typeof error === "object" && error !== null && "driverError" in error ? error.driverError : error;
+    if (typeof driver === "object" && driver !== null && "number" in driver && (driver.number === 2601 || driver.number === 2627)) {
+      throw new AdminBillingConflict("Plan ID or Stripe product mapping already exists");
+    }
+    throw error;
+  }
+
+  public async insert(plan: Plan): Promise<void> {
+    try { await this.repository.insert(this.record(plan)); } catch (error: unknown) { this.writeError(error); }
+  }
+
+  public async replace(plan: Plan): Promise<void> {
+    const { id, ...record }: InfraPlan = this.record(plan);
+    try {
+      const result: { affected?: number | null } = await this.repository.update({ id }, record);
+      if (!result.affected) throw new AdminBillingNotFound("Plan not found");
+    } catch (error: unknown) { this.writeError(error); }
+  }
+
+  public async deactivate(id: string): Promise<void> {
+    const result: { affected?: number | null } = await this.repository.update({ id }, { active: false });
+    if (!result.affected) throw new AdminBillingNotFound("Plan not found");
+  }
 
   public async findAvailable(): Promise<Plan[]> {
     const records: InfraPlan[] = await this.repository.find({
