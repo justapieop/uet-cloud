@@ -1,0 +1,1 @@
+export { AccessCheckPage } from "./ui/access-check-page";
