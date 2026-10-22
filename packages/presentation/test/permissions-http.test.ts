@@ -4,7 +4,7 @@ import { test, type TestContext } from "node:test";
 import { Controller, Get, Module, type INestApplication } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { BuildNotFound, CheckPermissionsCase, CreateDeploymentCase, DeploymentNotFoundError, GetBuildCase, GetDeploymentCase, GetDeploymentMetricsCase, StartDeploymentCase, StopDeploymentCase } from "@kumo/application";
-import { Permission, Role, User, type Deployment, type PermissionDefinition } from "@kumo/domain";
+import { Deployment, Permission, Role, User, type PermissionDefinition } from "@kumo/domain";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
 import { DeploymentMetricsController } from "../dist/controllers/DeploymentMetrics.controller.js";
@@ -17,9 +17,15 @@ const WRITE: PermissionDefinition = { offset: 2, name: "Test write", description
 test("resource routes check specific grants before lookups and cached responses", async (context: TestContext): Promise<void> => {
   let roles: Role[] = [];
   let calls: number = 0;
+  let lifecycleSuccess: boolean = false;
   const cache: Map<string, unknown> = new Map();
   const missing: (id: string, userId: string) => Promise<never> = async (_id: string, userId: string): Promise<never> => {
     calls++; assert.equal(userId, "123"); throw new DeploymentNotFoundError();
+  };
+  const lifecycle: (input: { id: string; userId: string }) => Promise<Deployment> = async (input: { id: string; userId: string }): Promise<Deployment> => {
+    if (!lifecycleSuccess) return missing(input.id, input.userId);
+    calls++;
+    return new Deployment({ id: input.id, userId: input.userId, name: "my-app", status: "RUNNING" });
   };
   class ResourceModule {}
   Module({
@@ -27,8 +33,8 @@ test("resource routes check specific grants before lookups and cached responses"
     providers: [
       { provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => roles }) },
       { provide: CreateDeploymentCase, useValue: {} },
-      { provide: StartDeploymentCase, useValue: { exec: (input: { id: string; userId: string }): Promise<never> => missing(input.id, input.userId) } },
-      { provide: StopDeploymentCase, useValue: { exec: (input: { id: string; userId: string }): Promise<never> => missing(input.id, input.userId) } },
+      { provide: StartDeploymentCase, useValue: { exec: lifecycle } },
+      { provide: StopDeploymentCase, useValue: { exec: lifecycle } },
       { provide: GetDeploymentCase, useValue: { exec: missing,
         list: async (userId: string): Promise<Deployment[]> => { calls++; assert.equal(userId, "123"); return []; },
       } },
@@ -98,6 +104,14 @@ test("resource routes check specific grants before lookups and cached responses"
       assert.equal((await fetch(`${base}/deployments/${id}/${action}`, { method: "POST" })).status, allowed ? 404 : 403);
     }
     assert.equal(calls, before + (allowed ? 2 : 0));
+  }
+  lifecycleSuccess = true;
+  for (let index: number = 0; index < 2; index++) {
+    const action: string = index === 0 ? "start" : "stop";
+    assert.equal((await fetch(`${base}/deployments/${id}/${action}`, { method: "POST" })).status, 200);
+    const before: number = calls;
+    assert.equal((await fetch(`${base}/deployments/invalid-id/${action}`, { method: "POST" })).status, 400);
+    assert.equal(calls, before);
   }
 });
 

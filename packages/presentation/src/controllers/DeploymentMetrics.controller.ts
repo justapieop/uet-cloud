@@ -2,13 +2,14 @@ import { DeploymentMetricsReadError, DeploymentMetricsUnavailableError, Deployme
 import { Permission, type User } from "@kumo/domain";
 import { RequirePermissions } from "../common/RequirePermissions.decorator.js";
 import { BadGatewayException, BadRequestException, ConflictException, Controller, ForbiddenException, Get, Header, NotFoundException, Param, ParseUUIDPipe, Query, Req, ServiceUnavailableException, UseGuards, UseInterceptors, ValidationPipe } from "@nestjs/common";
-import { ApiBadGatewayResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBadGatewayResponse, ApiBadRequestResponse, ApiConflictResponse, ApiCookieAuth, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { CacheRead, UserReadCacheInterceptor } from "../common/ReadCache.js";
 import { DeploymentMetricsQueryDto, DeploymentMetricsResponseDto } from "../dto/DeploymentMetrics.dto.js";
 
 @ApiTags("deployments")
+@ApiCookieAuth("session")
 @Controller("deployments")
 @UseGuards(LoggedInGuard)
 export class DeploymentMetricsController {

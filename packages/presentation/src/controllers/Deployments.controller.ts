@@ -15,6 +15,7 @@ import {
 } from "@nestjs/common";
 import {
   ApiBadGatewayResponse,
+  ApiCookieAuth,
 } from "@nestjs/swagger";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, SubscriptionCheckUnavailable, DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
 import { Permission, InvalidDomainParams, type BuildDetails, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
@@ -29,6 +30,7 @@ import { ListDeploymentsQueryDto } from "../dto/ListDeploymentsQuery.dto.js";
 import { CacheRead, RouteReadCache, UserReadCacheInterceptor } from "../common/ReadCache.js";
 
 @ApiTags("deployments")
+@ApiCookieAuth("session")
 @Controller()
 @UseGuards(LoggedInGuard)
 @ApiForbiddenResponse({ description: "No authenticated session, inactive or suspended user, or required permission missing" })
@@ -85,10 +87,12 @@ export class DeploymentsController {
   }
 
   @Post("deployments/:id/start")
+  @HttpCode(HttpStatus.OK)
   @RequirePermissions(Permission.DeploymentUpdate)
   @Header("Cache-Control", "private, no-store")
   @ApiOperation({ summary: "Start an owned stopped container deployment" })
   @ApiOkResponse({ type: DeploymentResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
   @ApiConflictResponse({ description: "Deployment is not in a stopped state" })
   @ApiBadGatewayResponse({ description: "Azure failed to start the container app" })
@@ -107,10 +111,12 @@ export class DeploymentsController {
   }
 
   @Post("deployments/:id/stop")
+  @HttpCode(HttpStatus.OK)
   @RequirePermissions(Permission.DeploymentUpdate)
   @Header("Cache-Control", "private, no-store")
   @ApiOperation({ summary: "Stop an owned running container deployment" })
   @ApiOkResponse({ type: DeploymentResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
   @ApiConflictResponse({ description: "Deployment is not in a running state" })
   @ApiBadGatewayResponse({ description: "Azure failed to stop the container app" })
@@ -135,6 +141,7 @@ export class DeploymentsController {
   @UseInterceptors(UserReadCacheInterceptor)
   @ApiOperation({ summary: "Get an owned deployment's provisioning status" })
   @ApiOkResponse({ type: DeploymentResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
   @ApiBadGatewayResponse({ description: "Azure resource is missing, invalid, or inaccessible" })
   @ApiServiceUnavailableResponse({ description: "Azure configuration is temporarily unavailable" })

@@ -23,7 +23,7 @@ export class ListDeploymentsQueryDto {
   @MaxLength(32)
   public name?: string;
 
-  @ApiPropertyOptional({ example: "japaneast", description: "Exact requested region saved on the deployment" })
+  @ApiPropertyOptional({ example: "japaneast", description: "Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource" })
   @ValidateIf((_input: ListDeploymentsQueryDto, value: unknown): boolean => value !== undefined)
   @Transform(trimQueryValue)
   @IsString()

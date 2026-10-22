@@ -548,7 +548,7 @@ export interface operations {
                 status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
                 /** @description Case-insensitive literal substring of the deployment name */
                 name?: string;
-                /** @description Exact requested region saved on the deployment */
+                /** @description Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource */
                 region?: string;
             };
             header?: never;
@@ -675,6 +675,13 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
@@ -724,6 +731,13 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
@@ -772,6 +786,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
+            };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {

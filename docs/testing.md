@@ -22,6 +22,8 @@ The backend GitHub Actions workflow runs the regular check on Windows and Linux 
 
 The backend suite includes database-load regressions for idle worker backoff, unchanged build polling, in-flight request coalescing, request-local permission freshness, and state-aware cache TTLs. SQL integration runs with `READ_COMMITTED_SNAPSHOT` enabled and covers the atomic claim statements and aggregate quota behavior.
 
+OpenAPI coverage uses the production configuration from `packages/presentation/src/common/OpenApi.ts` with isolated controllers, without SQL or cloud startup. It checks session-cookie authentication, build-source bearer authentication, UUID validation responses, and generated client route coverage. HTTP tests also verify that start/stop return the documented 200 status. GitHub login establishes the `connect.sid` session cookie; GitHub access tokens are not API session credentials. After changing API contracts, regenerate `packages/rest/src/schema.ts` from the running API's `/api-docs-json` document with `npm run generate:api -- http://localhost:3000/api-docs-json` (adjust the port as needed); do not edit generated types directly.
+
 - Validate negative cases against otherwise valid fixtures and assert the intended error, so an earlier validation failure cannot produce a false positive.
 - Supply typed application ports and injected SDK clients. Unused dependencies should fail loudly rather than pretending to work.
 - Use mock timers and deferred promises for polling, overlap, shutdown, and failure recovery tests.
