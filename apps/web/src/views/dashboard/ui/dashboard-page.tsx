@@ -47,8 +47,9 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
             <h1 className="text-[28px] font-semibold leading-tight tracking-tight sm:text-[32px]">Deployments</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-text">Build, run, and keep track of your applications.</p>
           </div>
-          <span className="rounded-md border border-surface-border px-2.5 py-1.5 font-mono text-[10px] tracking-wide text-muted-text">AZURE CONTAINER APPS</span>
+          <a href="/dashboard/create" className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"><span aria-hidden="true">+</span> Create deployment</a>
         </div>
+        {typeof params.created === "string" && result.kind === "success" && result.deployments.some((deployment: Deployment): boolean => deployment.id === params.created) && <p role="status" className="mb-5 rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-5 py-4 text-sm text-emerald-200">Deployment accepted. Its current status is shown below. Refresh the list to check progress.</p>}
         <section aria-label="Deployments" className="overflow-hidden rounded-xl border border-surface-border bg-surface/40">
           <div className="flex min-h-16 items-center justify-between gap-4 border-b border-surface-border px-5 sm:px-6">
             <div className="flex items-center gap-2.5">
@@ -75,6 +76,7 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
               <span aria-hidden="true" className="mb-5 flex size-11 items-center justify-center rounded-xl border border-surface-border bg-background font-mono text-sm text-muted-text">{filtered ? "0" : "/"}</span>
               <h3 className="text-base font-medium">{filtered ? "No deployments match these filters" : "A home for your applications"}</h3>
               <p className="mt-2 max-w-sm text-sm leading-6 text-muted-text">{filtered ? "Try a different name, status, or region, or reset your filters." : "Once you create your first deployment, its status and configuration will appear here."}</p>
+              {!filtered && <a href="/dashboard/create" className="mt-6 inline-flex h-10 items-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Create your first deployment</a>}
             </div>
           ) : (
               <div className="overflow-x-auto">
