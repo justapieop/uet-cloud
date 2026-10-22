@@ -8,7 +8,7 @@ Nest module factories construct external clients and pass them to infrastructure
 | --- | --- | --- |
 | GitHubModule | KeyClient | KmsProvider, used by GitHubProvider |
 | BuildModule | Injected credential and HTTP transport | AzurePipelinesProvider |
-| DeploymentModule | ResourceManagementClient and ContainerAppsAPIClient | AzureProvider |
+| DeploymentModule | ResourceManagementClient and ContainerAppsAPIClient | AzureProvider (provisioning), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
 | MonitoringModule | MonitorClient | AzureMonitorMetricsReader |
 | AcrModule | ContainerRegistryTasksManagementClient | AcrProvider |
 
@@ -19,5 +19,7 @@ GitHubProvider, AzurePipelinesProvider, and AcrProvider receive an explicit HTTP
 To substitute a dependency in a Nest testing module, override `AZURE_CREDENTIAL`, `HTTP_TRANSPORT`, or the SDK client class token before compiling the module. For direct construction, supply the client's required interface and transport explicitly. AzureProvider uses `AzureProviderClients`, metrics uses `MetricsClient`, ACR uses `AcrClient`, and Key Vault requires the `getCryptographyClient` surface of KeyClient.
 
 App Configuration loading remains a bootstrap configuration factory, since it runs while ConfigModule is loading. It is not a provider constructor.
+
+Start/stop use cases receive the dedicated `AzureContainerLifecycleManager`, whose client surface contains only `start` and `stop`. It does not depend on build use cases, resource-group creation, or managed-environment provisioning. The existing timeout, polling-to-completion, and safe error mapping remain in effect. Provisioning, lifecycle operations, configuration reads, and metrics reads share workload resource-group isolation through `azure/workload-scope.ts`; read adapters retain their own error contracts and configuration reads still verify the deployment tag on the returned app.
 
 The default injected HTTP transport now applies dependency resilience policies. Azure SDK factory registrations attach an equivalent pipeline policy and disable SDK retries to avoid multiplying attempts. See [Resilience and idempotency](reliability.md).

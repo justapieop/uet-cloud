@@ -39,12 +39,14 @@ The API enforces these policies before use cases, idempotency replay, and respon
 | Route | Required permissions |
 | --- | --- |
 | `POST /deployments` | `DeploymentCreate` |
+| `POST /deployments/:id/start` | `DeploymentUpdate` |
+| `POST /deployments/:id/stop` | `DeploymentUpdate` |
 | `GET /deployments` | `DeploymentRead` |
 | `GET /deployments/:id` | `DeploymentRead` |
 | `GET /deployment/build/:id` | `BuildRead` |
 | `GET /deployments/:id/metrics` | `DeploymentRead`, `DeploymentMetricsRead` |
 
-Permission checks do not replace resource ownership, Stripe subscription, or quota checks. Authentication and current-profile routes retain their session policies; pipeline manifest/source routes retain their per-build bearer-token authorization. Update/delete permissions are reserved for the application use cases until their HTTP endpoints are introduced. Internal workers do not require user sessions or permission decorators.
+Permission checks do not replace resource ownership, Stripe subscription, or quota checks. Authentication and current-profile routes retain their session policies; pipeline manifest/source routes retain their per-build bearer-token authorization. Start/stop require DeploymentUpdate; rename and delete use cases still have no HTTP endpoints. Internal workers do not require user sessions or permission decorators.
 
 Users without assigned active roles granting the required bits receive HTTP 403. Role assignment and provisioning are not automatic. Revoking grants blocks subsequent requests, including cached reads and accepted-request retries.
 
