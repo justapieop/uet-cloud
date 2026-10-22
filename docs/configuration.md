@@ -185,6 +185,10 @@ Additional target ports must be distinct from each other and from the primary ta
 
 `STRIPE_SECRET_KEY` is required by `StripeModule` when the API starts. Set it in the selected configuration source: the repository-root `.env` for local configuration, or an App Configuration Key Vault reference for Azure configuration. Keep the secret on the server.
 
+The plan subscription Checkout endpoint also requires `FRONTEND_URL`. Configure the frontend's HTTP(S) base URL without embedded credentials. Stripe Checkout success and cancellation both return to its `/dashboard` path; browser requests cannot override these destinations. See [plan subscriptions](plan-subscriptions.md).
+
+For each active local plan, set the linked Stripe product's default price to the approved active licensed recurring price. Checkout resolves only that default; clients cannot select a Price ID, and invalid/missing defaults fail with 503 without falling back to other prices.
+
 The presentation module constructs the Stripe SDK client and injects it into the infrastructure `StripeProvider`, which is exported by the module.
 
 The provider supports customer creation linked through `metadata.kumoId` without an email, active product queries, recurring price queries for a product, customer subscription queries (all statuses by default), and direct subscription creation. List methods return a Stripe page with `has_more` and accept pagination parameters such as `starting_after`.

@@ -1,10 +1,47 @@
 import { SubscriptionCheckUnavailable, type StripeCustomerGateway, type StripeSubscriptionGateway } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
 import type Stripe from "stripe";
+import { PlanSubscriptionConflict, PlanSubscriptionUnavailable, type PlanCheckoutRedirects, type PlanSubscriptionGateway, type PlanSubscriptionResult } from "@kumo/application";
 
 @Injectable()
-export class StripeProvider implements StripeCustomerGateway, StripeSubscriptionGateway {
+export class StripeProvider implements StripeCustomerGateway, StripeSubscriptionGateway, PlanSubscriptionGateway {
   public constructor(private readonly client: Stripe) { }
+
+  public async getPlanDefaultPriceId(productId: string): Promise<string> {
+    let product: Stripe.Product | Stripe.DeletedProduct;
+    try {
+      product = await this.client.products.retrieve(productId, { expand: ["default_price"] });
+    } catch {
+      throw new PlanSubscriptionUnavailable("Unable to resolve the plan's default price; retry later");
+    }
+    if (product.deleted || !product.active || product.id !== productId) {
+      throw new PlanSubscriptionUnavailable("The plan's Stripe product is unavailable");
+    }
+    const price: Stripe.Product["default_price"] = product.default_price;
+    if (!price || typeof price === "string" || !price.active || price.type !== "recurring" || price.recurring?.usage_type !== "licensed" ||
+      (typeof price.product === "string" ? price.product : price.product.id) !== productId) {
+      throw new PlanSubscriptionUnavailable("The plan needs an active licensed recurring default price in Stripe");
+    }
+    return price.id;
+  }
+
+  public async createPlanCheckoutSession(input: PlanCheckoutRedirects & { customerId: string; priceId: string; idempotencyKey: string }): Promise<PlanSubscriptionResult> {
+    try {
+      const session: Stripe.Checkout.Session = await this.client.checkout.sessions.create({
+        mode: "subscription", ui_mode: "hosted", customer: input.customerId,
+        line_items: [{ price: input.priceId, quantity: 1 }],
+        success_url: input.successUrl, cancel_url: input.cancelUrl,
+      }, { idempotencyKey: input.idempotencyKey });
+      if (!session.url) throw new Error("Stripe did not return an available Checkout URL");
+      return { checkoutSessionId: session.id, checkoutUrl: session.url };
+    } catch (error: unknown) {
+      if (typeof error === "object" && error !== null &&
+        (("type" in error && error.type === "StripeIdempotencyError") || ("code" in error && error.code === "idempotency_key_in_use"))) {
+        throw new PlanSubscriptionConflict("Idempotency-Key is in use or was reused with different subscription parameters");
+      }
+      throw new PlanSubscriptionUnavailable("Unable to create the Checkout Session; retry with the same Idempotency-Key");
+    }
+  }
 
   public async getActiveSubscriptionProductIds(customerId: string): Promise<readonly string[]> {
     const products: Set<string> = new Set<string>();

@@ -1,6 +1,6 @@
-import type { PlanRepository } from "@kumo/application";
+import type { PlanCatalogReader, PlanReader, PlanRepository } from "@kumo/application";
 import { Plan } from "@kumo/domain";
-import { Check, Column, Entity, Index, In, PrimaryColumn, type Repository } from "typeorm";
+import { Check, Column, Entity, Index, In, IsNull, Not, PrimaryColumn, type Repository } from "typeorm";
 
 @Entity({ name: "plans" })
 @Index("UQ_plans_stripe_product_id", ["stripeProductId"], { unique: true, where: "stripe_product_id IS NOT NULL" })
@@ -48,8 +48,21 @@ export class InfraPlan {
   public readonly maxReplicas!: number;
 }
 
-export class InfraPlanRepository implements PlanRepository {
+export class InfraPlanRepository implements PlanRepository, PlanReader, PlanCatalogReader {
   public constructor(private readonly repository: Repository<InfraPlan>) {}
+
+  public async findAvailable(): Promise<Plan[]> {
+    const records: InfraPlan[] = await this.repository.find({
+      where: { active: true, stripeProductId: Not(IsNull()) },
+      order: { price: "ASC", id: "ASC" },
+    });
+    return records.map((record: InfraPlan): Plan => new Plan({ ...record }));
+  }
+
+  public async findById(id: string): Promise<Plan | null> {
+    const record: InfraPlan | null = await this.repository.findOneBy({ id });
+    return record ? new Plan({ ...record }) : null;
+  }
 
   public async findActiveByStripeProductIds(productIds: readonly string[]): Promise<Plan[]> {
     if (productIds.length === 0) return [];

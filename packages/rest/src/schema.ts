@@ -209,6 +209,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active Stripe-linked plans
+         * @description Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout validates the linked product's default price before creating a session.
+         */
+        get: operations["PlansController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/{id}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe-hosted subscription checkout for the signed-in user
+         * @description Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
+         */
+        post: operations["PlanSubscriptionsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -358,6 +398,30 @@ export interface components {
             memory: components["schemas"]["MetricSeriesDto"][];
             /** @description Average active replica count per revision; zero is returned only when Azure emits zero */
             replicas: components["schemas"]["MetricSeriesDto"][];
+        };
+        PlanResponseDto: {
+            id: string;
+            name: string;
+            /** @description Local catalog price; Checkout bills the linked Stripe product's configured default price */
+            price: number;
+            /** @description Maximum vCPU per deployment replica */
+            vcpu: number;
+            /** @description Maximum memory per deployment replica in GiB */
+            memory: number;
+            /** @description Maximum reserved deployment slots */
+            deployments: number;
+            /** @description Configured storage quota; enforced by the future storage-allocation flow */
+            disk: number;
+            /** @description Maximum replicas per deployment */
+            max_replicas: number;
+        };
+        PlanSubscriptionResponseDto: {
+            checkout_session_id: string;
+            /**
+             * Format: uri
+             * @description Redirect the browser to this Stripe-hosted payment page
+             */
+            checkout_url: string;
         };
     };
     responses: never;
@@ -930,6 +994,91 @@ export interface operations {
                 content?: never;
             };
             /** @description Azure Monitor is throttling or unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponseDto"][];
+                };
+            };
+        };
+    };
+    PlanSubscriptionsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Local Kumo plan ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description No body is needed. Only an empty object is accepted; pricing is selected by the server. */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid plan/key or nonempty request body; client price selection is forbidden */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended user with a linked Stripe customer is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan is missing, inactive, or not linked to Stripe */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe unavailable or plan has no valid recurring default price */
             503: {
                 headers: {
                     [name: string]: unknown;

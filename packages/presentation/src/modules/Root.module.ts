@@ -11,6 +11,7 @@ import { ConfigService } from "@nestjs/config";
 import { AppCacheModule } from "./AppCache.module.js";
 import { MonitoringModule } from "./Monitoring.module.js";
 import { PermissionsModule } from "./Permissions.module.js";
+import { PlanModule } from "./Plan.module.js";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { PermissionsModule } from "./Permissions.module.js";
     MonitoringModule,
     AppCacheModule,
     StripeModule,
+    PlanModule,
   ],
 })
 export class RootModule { }

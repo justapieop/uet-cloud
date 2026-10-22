@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { test, type TestContext } from "node:test";
 import { Module, type INestApplication, type Provider, type Type } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
-import { SwaggerModule, type OpenAPIObject, type OperationObject, type PathItemObject } from "@nestjs/swagger";
+import { SwaggerModule, type OpenAPIObject, type OperationObject, type PathItemObject, type RequestBodyObject } from "@nestjs/swagger";
 import { CACHE_MANAGER } from "@nestjs/cache-manager";
 import { CheckPermissionsCase } from "@kumo/application";
 import { AuthController } from "../dist/controllers/Auth.controller.js";
@@ -12,10 +12,12 @@ import { UserController } from "../dist/controllers/User.controller.js";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
 import { DeploymentMetricsController } from "../dist/controllers/DeploymentMetrics.controller.js";
 import { BuildSourceController } from "../dist/controllers/BuildSource.controller.js";
+import { PlanSubscriptionsController } from "../dist/controllers/PlanSubscriptions.controller.js";
+import { PlansController } from "../dist/controllers/Plans.controller.js";
 import { createOpenApiConfig } from "../dist/common/OpenApi.js";
 
 test("OpenAPI covers controller operations, session authentication, and generated client paths", async (context: TestContext): Promise<void> => {
-  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController];
+  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, PlanSubscriptionsController];
   // Resolve controllers without starting SQL, sessions, workers, or cloud clients.
   const tokens: Set<Type<object> | string | symbol> = new Set([
     CheckPermissionsCase, CACHE_MANAGER,
@@ -37,16 +39,20 @@ test("OpenAPI covers controller operations, session authentication, and generate
       count++;
       assert.ok(client.includes(`"${path}":`), `Generated client lacks ${method} ${path}`);
       assert.ok(client.includes(`operations["${operation.operationId}"]`), `Generated client lacks operation ${operation.operationId}`);
-      if (path.startsWith("/deployments") || path.startsWith("/deployment/") || path === "/user/me") {
+      if (path.startsWith("/deployments") || path.startsWith("/deployment/") || path.startsWith("/plans/") || path === "/user/me") {
         assert.deepEqual(operation.security, [{ session: [] }], `${method} ${path} must document the session cookie`);
       } else if (path.startsWith("/builds/")) {
         assert.deepEqual(operation.security, [{ "build-source": [] }]);
       } else {
-        assert.equal(operation.security, undefined, "Login redirects do not require an existing session");
+        assert.equal(operation.security, undefined, "Public operations do not require an existing session");
       }
     }
   });
-  assert.equal(count, 13);
+  assert.equal(count, 15);
+  const checkoutBody: RequestBodyObject = document.paths["/plans/{id}/subscriptions"]!.post!.requestBody as RequestBodyObject;
+  assert.equal(checkoutBody.required, false);
+  assert.deepEqual(checkoutBody.content["application/json"]?.schema, { type: "object", additionalProperties: false, maxProperties: 0 });
+  assert.equal(document.components?.schemas?.SubscribeToPlanDto, undefined);
   assert.deepEqual(document.components?.securitySchemes?.session, {
     type: "apiKey", in: "cookie", name: "connect.sid",
     description: "Session cookie established by the GitHub login redirect flow at /auth/login.",

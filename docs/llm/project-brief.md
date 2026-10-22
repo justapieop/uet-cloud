@@ -13,6 +13,10 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- `GET /plans` is a public catalog of active Stripe-linked local plans, exposing plan IDs, names, local prices, and quotas while omitting Stripe identifiers. It reads SQL without querying Stripe; Checkout remains authoritative for the billed price and product availability.
+
+- `POST /plans/:id/subscriptions` allows an authenticated, active, unsuspended user with a linked Stripe customer to select only the local plan; the backend resolves its linked Stripe product's active licensed recurring default price. Client-supplied prices and other nonempty body fields are rejected. It returns a Stripe-hosted Checkout Session ID and URL, requires an idempotency key, and leaves deployment access dependent on Stripe reporting an active subscription. Success and cancellation return to the configured frontend dashboard. See [plan subscriptions](../plan-subscriptions.md).
+
 - Database load reduction retains SQL-backed durable queues and transactional quota/idempotency guarantees. Idle queue polling backs off to ten seconds, stale sweeps run once per minute, and unchanged build states are not persisted repeatedly. Authentication reloads user eligibility and active role grants per request; running/stopped read caching is bounded to ten seconds and terminal build caching to thirty seconds. See [database load](../database-load.md).
 
 - Deployment detail and list reads obtain applied CPU/RAM, replica limits, ports, region, image, and FQDN from Azure for provisioned resources. Saved creation inputs remain durable for queued work and quota reservations; workflow records retain identity, ownership, status, and errors. See [applied configuration](../deployment-configuration.md).

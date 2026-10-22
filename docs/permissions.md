@@ -48,6 +48,8 @@ The API enforces these policies before use cases, idempotency replay, and respon
 
 Permission checks do not replace resource ownership, Stripe subscription, or quota checks. Authentication and current-profile routes retain their session policies; pipeline manifest/source routes retain their per-build bearer-token authorization. Start/stop require DeploymentUpdate; rename and delete use cases still have no HTTP endpoints. Internal workers do not require user sessions or permission decorators.
 
+`POST /plans/:id/subscriptions` is self-service billing for the current user. It requires an active, unsuspended authenticated user and a linked Stripe customer, rather than deployment role grants. It cannot subscribe another user or assign permissions.
+
 Users without assigned active roles granting the required bits receive HTTP 403. Role assignment and provisioning are not automatic. Revoking grants blocks subsequent requests, including cached reads and accepted-request retries.
 
 The role activity migration defaults existing roles to active. Apply the new database migration before serving permission-protected routes.
