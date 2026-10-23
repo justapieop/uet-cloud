@@ -352,6 +352,69 @@ export interface paths {
         patch: operations["UserSubscriptionsController_setCancellation"];
         trace?: never;
     };
+    "/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List roles and the permission catalog
+         * @description Returns every role, including inactive roles, with its exact stored permission keys. The permission catalog is metadata only and does not assign grants.
+         */
+        get: operations["RolesController_list"];
+        put?: never;
+        /** Create a role */
+        post: operations["RolesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a role */
+        put: operations["RolesController_replace"];
+        post?: never;
+        /**
+         * Deactivate a role
+         * @description Marks the role inactive. Existing assignments are retained but grant no permissions.
+         */
+        delete: operations["RolesController_deactivate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/{userId}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a user's exact role assignments */
+        get: operations["UserRolesController_get"];
+        /**
+         * Replace a user's role assignments
+         * @description Applies the exact set of active role IDs. An empty array removes every assignment.
+         */
+        put: operations["UserRolesController_replace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -601,6 +664,49 @@ export interface components {
         AdminCancellationDto: {
             /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
             cancel_at_period_end: boolean;
+        };
+        RoleResponseDto: {
+            id: string;
+            name: string;
+            active: boolean;
+            /** @description Exact stored permission keys; Super does not expand into every permission */
+            permissions: string[];
+            /** Format: date-time */
+            created_at: string;
+        };
+        PermissionResponseDto: {
+            /** @description Stable permission key used by role write operations */
+            key: string;
+            name: string;
+            description: string;
+            /** @description Permission keys that should accompany this permission */
+            requires: string[];
+        };
+        RoleCatalogResponseDto: {
+            roles: components["schemas"]["RoleResponseDto"][];
+            permissions: components["schemas"]["PermissionResponseDto"][];
+        };
+        RoleCreateDto: {
+            name: string;
+            active: boolean;
+            /** @description Exact permission keys from the catalog. Unknown keys and duplicates are rejected. */
+            permissions: string[];
+            /** @description Stable role identifier */
+            id: string;
+        };
+        RoleWriteDto: {
+            name: string;
+            active: boolean;
+            /** @description Exact permission keys from the catalog. Unknown keys and duplicates are rejected. */
+            permissions: string[];
+        };
+        UserRolesResponseDto: {
+            user: components["schemas"]["UserResponseDto"];
+            roles: components["schemas"]["RoleResponseDto"][];
+        };
+        UserRoleWriteDto: {
+            /** @description Exact replacement set of role IDs */
+            role_ids: string[];
         };
     };
     responses: never;
@@ -1665,6 +1771,253 @@ export interface operations {
             };
             /** @description Stripe subscription management unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleCatalogResponseDto"];
+                };
+            };
+            /** @description RoleManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleCreateDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponseDto"];
+                };
+            };
+            /** @description Invalid role name, ID, or permission keys */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description RoleManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A role with this ID already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleWriteDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponseDto"];
+                };
+            };
+            /** @description Invalid role name, ID, or permission keys */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The role would grant permissions the actor does not hold or remove the actor's role management access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Role not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The role ID cannot be changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_deactivate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role deactivated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The role grants permissions the actor does not hold or removal would remove the actor's role management access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Role not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserRolesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exact Kumo user ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRolesResponseDto"];
+                };
+            };
+            /** @description RoleManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserRolesController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exact Kumo user ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserRoleWriteDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRolesResponseDto"];
+                };
+            };
+            /** @description Invalid or duplicate role IDs */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request would grant permissions the actor does not hold or remove the actor's role management access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An inactive role was selected */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

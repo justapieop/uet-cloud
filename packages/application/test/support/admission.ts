@@ -52,6 +52,7 @@ export class AdmissionFixture implements UnitOfWork, StripeSubscriptionGateway {
         save: async (): Promise<void> => {},
       },
       roles: {} as UnitOfWorkRepositories["roles"],
+      userRoles: {} as UnitOfWorkRepositories["userRoles"],
       plans: { findActiveByStripeProductIds: async (ids: readonly string[]): Promise<Plan[]> =>
         this.plans.filter((plan: Plan): boolean => plan.active && plan.stripeProductId !== null && ids.includes(plan.stripeProductId)) },
       deploymentRequests: {

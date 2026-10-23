@@ -13,6 +13,7 @@ test("permission catalog preserves persisted offsets and fits SQL Server role bi
     DeploymentMetricsRead: 6,
     PlanManage: 7,
     SubscriptionManage: 8,
+    RoleManage: 9,
   };
   const definitions: PermissionDefinition[] = Object.values(Permission);
   assert.equal(new Set(definitions.map((definition: PermissionDefinition): number => definition.offset)).size, definitions.length);
@@ -43,4 +44,10 @@ test("catalog grants stay independent and prerequisite metadata does not grant e
   const role: Role = new Role({ id: "all-actions", name: "All resource actions", permission: bits });
   assert.deepEqual(role.getGrantedPermissions(), definitions);
   assert.equal(role.hasPermission(Permission.Super), false);
+});
+
+test("stored permission listing preserves exact grants without expanding Super or unknown bits", (): void => {
+  const role: Role = new Role({ id: "admin", name: "Admin", permission: 1n | (1n << BigInt(Permission.RoleManage.offset)) | (1n << 20n) });
+  assert.deepEqual(role.getStoredPermissions(), [Permission.Super, Permission.RoleManage]);
+  assert.deepEqual(role.getGrantedPermissions(), Object.values(Permission));
 });

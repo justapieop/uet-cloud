@@ -116,6 +116,7 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     await links.insert([{ userId: "123", roleId: "inactive" }, { userId: "456", roleId: "other-user" }]);
     assert.equal((await roles.findById("inactive"))?.active, false);
     assert.deepEqual((await roles.findActiveByUserId("123")).map((role: Role): string => role.id), ["reader", "writer"]);
+    assert.deepEqual((await roles.findAll()).map((role: Role): string => role.id), ["inactive", "other-user", "reader", "writer"]);
     await source.getRepository(InfraRole).delete(["inactive", "other-user"]);
     await assert.rejects(links.insert({ userId: "123", roleId: "reader" }));
     await assert.rejects(links.insert({ userId: "missing", roleId: "reader" }));

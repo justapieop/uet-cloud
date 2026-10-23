@@ -12,6 +12,7 @@ import { AppCacheModule } from "./AppCache.module.js";
 import { MonitoringModule } from "./Monitoring.module.js";
 import { PermissionsModule } from "./Permissions.module.js";
 import { PlanModule } from "./Plan.module.js";
+import { RoleModule } from "./Role.module.js";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { PlanModule } from "./Plan.module.js";
     AppCacheModule,
     StripeModule,
     PlanModule,
+    RoleModule,
   ],
 })
 export class RootModule { }

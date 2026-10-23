@@ -1,8 +1,8 @@
-import type { RoleRepository } from "@kumo/application";
+import { RoleManagementConflict, RoleManagementNotFound, type RoleRepository } from "@kumo/application";
 import { Role } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Column, CreateDateColumn, Entity, PrimaryColumn, Repository } from "typeorm";
+import { Column, CreateDateColumn, Entity, In, PrimaryColumn, Repository } from "typeorm";
 
 @Entity({
   name: "roles",
@@ -69,6 +69,29 @@ export class InfraRoleRepository implements RoleRepository {
     });
   }
 
+  public async findByIds(ids: readonly string[]): Promise<Role[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
+    const records: InfraRole[] = await this.roleRepository.find({
+      where: { id: In([...ids]) },
+      order: { id: "ASC" },
+    });
+
+    return records.map((record: InfraRole): Role => new Role({ ...record }));
+  }
+
+  public async findAll(): Promise<Role[]> {
+    const records: InfraRole[] = await this.roleRepository.find({
+      order: {
+        id: "ASC",
+      },
+    });
+
+    return records.map((record: InfraRole): Role => new Role({ ...record }));
+  }
+
   public async findActiveByUserId(userId: string): Promise<Role[]> {
     const records: InfraRole[] = await this.roleRepository.createQueryBuilder("role")
       .innerJoin("user_roles", "assignment", "assignment.role_id = role.id")
@@ -78,21 +101,56 @@ export class InfraRoleRepository implements RoleRepository {
     return records.map((record: InfraRole): Role => new Role({ ...record }));
   }
 
-  public async save(role: Role): Promise<void> {
+  private record(role: Role): InfraRole {
     const permissionBits: bigint = role.getPermissionBits();
 
     if (permissionBits > (1n << 63n) - 1n) {
       throw new RangeError("Role permissions exceed the SQL Server bigint range");
     }
 
-    const dbRole: InfraRole = this.roleRepository.create({
+    return {
       id: role.id,
       name: role.name,
       permission: permissionBits,
       createdAt: role.createdAt,
       active: role.active,
-    });
+    };
+  }
 
-    await this.roleRepository.save(dbRole);
+  private writeError(error: unknown): never {
+    const driver: unknown = typeof error === "object" && error !== null && "driverError" in error ? error.driverError : error;
+    if (typeof driver === "object" && driver !== null && "number" in driver && (driver.number === 2601 || driver.number === 2627)) {
+      throw new RoleManagementConflict("A role with this ID already exists");
+    }
+    throw error;
+  }
+
+  public async save(role: Role): Promise<void> {
+    await this.roleRepository.save(this.record(role));
+  }
+
+  public async insert(role: Role): Promise<void> {
+    try {
+      await this.roleRepository.insert(this.record(role));
+    } catch (error: unknown) {
+      this.writeError(error);
+    }
+  }
+
+  public async replace(role: Role): Promise<void> {
+    const { id, ...record }: InfraRole = this.record(role);
+    const result: { affected?: number | null } = await this.roleRepository.update({ id }, record);
+
+    if (!result.affected) {
+      throw new RoleManagementNotFound("Role not found");
+    }
+  }
+
+  public async deactivate(id: string): Promise<void> {
+    const result: { affected?: number | null } = await this.roleRepository.update({ id }, { active: false });
+
+    if (!result.affected) {
+      throw new RoleManagementNotFound("Role not found");
+    }
   }
 }

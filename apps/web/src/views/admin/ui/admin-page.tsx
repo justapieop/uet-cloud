@@ -7,9 +7,15 @@ import { PlanEditor } from "@/features/manage-plan";
 import { CancellationControl } from "@/features/manage-subscription";
 import type { AdminResult } from "@/shared/api/admin-errors";
 import { Navbar } from "@/widgets/navbar";
+import { RolesSection } from "./roles-section";
 
 const PANEL: string = "rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6";
 const LINK: string = "text-sm text-blue-300 transition-colors hover:text-blue-200 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent";
+const SECTIONS: readonly (readonly [string, string, string])[] = [
+  ["plans", "Plans", "/admin"],
+  ["subscriptions", "Subscriptions", "/admin?tab=subscriptions"],
+  ["roles", "Roles", "/admin?tab=roles"],
+];
 
 function ErrorNotice({ message }: { readonly message: string }): JSX.Element {
   return <div role="alert" className="rounded-lg border border-red-400/20 bg-red-400/5 p-5 text-sm leading-6 text-red-200">{message}</div>;
@@ -69,14 +75,14 @@ export async function AdminPage({ searchParams }: { readonly searchParams: Promi
   const edit: string | undefined = typeof params.edit === "string" ? params.edit : undefined;
   const userId: string = typeof params.user === "string" ? params.user.trim() : "";
   const cursor: string | undefined = typeof params.cursor === "string" ? params.cursor : undefined;
-  const invalid: boolean = [params.tab, params.page, params.edit, params.user, params.cursor].some((value: unknown): boolean => Array.isArray(value)) || !["plans", "subscriptions"].includes(tab) || !Number.isInteger(page) || page < 1 || page > 1_000_000 || Boolean(edit && edit.length > 255) || userId.length > 255 || Boolean(cursor && (cursor.length > 255 || !/^sub_[A-Za-z0-9]+$/.test(cursor)));
+  const invalid: boolean = [params.tab, params.page, params.edit, params.user, params.cursor].some((value: unknown): boolean => Array.isArray(value)) || !["plans", "subscriptions", "roles"].includes(tab) || !Number.isInteger(page) || page < 1 || page > 1_000_000 || Boolean(edit && edit.length > 255) || userId.length > 255 || Boolean(cursor && (cursor.length > 255 || !/^sub_[A-Za-z0-9]+$/.test(cursor)));
   return <div className="flex min-h-dvh flex-col bg-background text-foreground"><Navbar variant="dashboard" />
     <main className="mx-auto w-full max-w-6xl flex-1 px-5 pb-16 pt-8 sm:px-8 sm:pt-12">
       <a href="/dashboard" className="text-xs text-muted-text hover:text-foreground">← Back to deployments</a>
       <h1 className="mt-7 text-[28px] font-semibold tracking-tight sm:text-[32px]">Administration</h1>
-      <p className="mt-2 text-sm leading-6 text-muted-text">Manage plans and subscription access.</p>
-      <nav aria-label="Administration sections" className="mb-7 mt-7 flex gap-6 border-b border-surface-border">{[["plans", "Plans"], ["subscriptions", "Subscriptions"]].map(([value, label]: string[]): JSX.Element => <a key={value} href={value === "plans" ? "/admin" : "/admin?tab=subscriptions"} aria-current={tab === value ? "page" : undefined} className={`border-b-2 pb-3 text-sm transition-colors ${tab === value ? "border-accent text-foreground" : "border-transparent text-muted-text hover:text-foreground"}`}>{label}</a>)}</nav>
-      {invalid ? <ErrorNotice message="These page parameters are invalid. Select a section above to start again." /> : tab === "subscriptions" ? <SubscriptionsSection key={userId} userId={userId} cursor={cursor} /> : <PlansSection page={page} edit={edit} />}
+      <p className="mt-2 text-sm leading-6 text-muted-text">Manage plans, subscriptions, roles, and access.</p>
+      <nav aria-label="Administration sections" className="mb-7 mt-7 flex gap-6 border-b border-surface-border">{SECTIONS.map(([value, label, href]: readonly [string, string, string]): JSX.Element => <a key={value} href={href} aria-current={tab === value ? "page" : undefined} className={`border-b-2 pb-3 text-sm transition-colors ${tab === value ? "border-accent text-foreground" : "border-transparent text-muted-text hover:text-foreground"}`}>{label}</a>)}</nav>
+      {invalid ? <ErrorNotice message="These page parameters are invalid. Select a section above to start again." /> : tab === "subscriptions" ? <SubscriptionsSection key={userId} userId={userId} cursor={cursor} /> : tab === "roles" ? <RolesSection edit={edit} userId={userId} /> : <PlansSection page={page} edit={edit} />}
     </main><footer className="mx-auto w-full max-w-6xl px-5 pb-6 font-mono text-[10px] text-muted-dark sm:px-8">Kumo</footer>
   </div>;
 }

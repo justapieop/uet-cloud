@@ -29,6 +29,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 - User-to-role assignments use a many-to-many `user_roles` link table. Each user/role pair is unique, and deleting either parent removes its links.
 
+- Role administration uses `/roles` and `/user/:userId/roles` without an admin route prefix and requires RoleManage (offset 9). `GET /roles` returns all roles, including inactive roles, with exact stored permission keys and the static permission catalog. Super remains a stored grant rather than being expanded into every catalog entry. Role writes update exact grants or deactivate roles; assignments replace a user's exact role set. Non-Super actors cannot grant or remove permissions they do not hold, and no actor may remove their own resulting RoleManage access.
+
 - Deployment names are globally unique across all users, enforced in the database.
 - New deployment requests require an active subscription verified directly with Stripe using the user's linked Stripe Customer. Subscription product IDs map to active local plans through `plans.stripe_product_id`. Subscription registration is outside the current implementation scope.
 - Plan CPU and RAM quotas apply per deployment (per-replica allocation), with a separate per-deployment maximum replica limit (`plans.max_replicas`). The plan's deployment-count quota includes queued and provisioning deployments as well as running apps. Storage is capped when it is added to an instance later; deployment creation does not allocate storage.

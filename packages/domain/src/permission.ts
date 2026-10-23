@@ -62,9 +62,14 @@ export const SubscriptionManage: PermissionDefinition = {
   offset: 8, name: "Manage subscriptions", description: "Inspect users' Stripe subscriptions and schedule or undo period-end cancellation.", requires: [],
 };
 
+export const RoleManage: PermissionDefinition = {
+  offset: 9, name: "Manage roles", description: "Inspect and manage roles, the permission catalog, and role assignments across users.", requires: [],
+};
+
 export const Permission: Readonly<Record<
   "Super" | "DeploymentRead" | "DeploymentCreate" | "DeploymentUpdate" |
-  "DeploymentDelete" | "BuildRead" | "DeploymentMetricsRead" | "PlanManage" | "SubscriptionManage",
+  "DeploymentDelete" | "BuildRead" | "DeploymentMetricsRead" | "PlanManage" | "SubscriptionManage" |
+  "RoleManage",
   PermissionDefinition
 >> = {
   Super,
@@ -76,6 +81,7 @@ export const Permission: Readonly<Record<
   DeploymentMetricsRead,
   PlanManage,
   SubscriptionManage,
+  RoleManage,
 };
 
 export type Permission = PermissionDefinition;

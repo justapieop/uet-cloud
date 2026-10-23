@@ -15,6 +15,7 @@ import {
   InfraRoleRepository,
   InfraUser,
   InfraUserRole,
+  InfraUserRoleRepository,
   InfraUserRepository,
   InfraStripeCustomerLinkRepository,
   TypeOrmLoggerAdapter,
@@ -68,6 +69,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
   providers: [
     InfraUserRepository,
     InfraRoleRepository,
+    InfraUserRoleRepository,
     InfraDeploymentRepository,
     TypeOrmUnitOfWork,
     InfraStripeCustomerLinkRepository,
@@ -82,6 +84,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
     InfraDeploymentRepository,
     InfraUserRepository,
     InfraRoleRepository,
+    InfraUserRoleRepository,
   ]
 })
 export class DatabaseModule { }

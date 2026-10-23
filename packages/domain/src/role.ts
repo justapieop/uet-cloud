@@ -63,6 +63,18 @@ export class Role extends Domain<RoleDetails> {
     );
   }
 
+  public getStoredPermissions(): PermissionDefinition[] {
+    return Object.values(Permission).filter((permission: Permission): boolean => {
+      if (!Number.isSafeInteger(permission.offset) || permission.offset < 0) {
+        return false;
+      }
+
+      const mask: bigint = 1n << BigInt(permission.offset);
+
+      return (this.permission & mask) === mask;
+    });
+  }
+
   public getPermissionBits(): bigint {
     return this.permission;
   }

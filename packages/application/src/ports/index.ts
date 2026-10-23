@@ -1,4 +1,5 @@
 export * from "./role.js";
+export * from "./user-role.js";
 export * from "./user.js";
 export * from "./session-authorization.js";
 export * from "./uow.js";
