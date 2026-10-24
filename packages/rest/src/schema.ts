@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/github/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open GitHub App installation and repository selection */
+        get: operations["AuthController_installGitHubApp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/callback": {
         parameters: {
             query?: never;
@@ -731,6 +748,40 @@ export interface operations {
                 headers: {
                     /** @description GitHub authorization URL */
                     Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AuthController_installGitHubApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirects to GitHub to install the configured app or manage its repository access */
+            302: {
+                headers: {
+                    /** @description Configured GitHub App installation URL */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended authenticated user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub App installation lookup is unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content?: never;

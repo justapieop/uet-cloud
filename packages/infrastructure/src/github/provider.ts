@@ -31,6 +31,19 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     return runBuildStep("GitHub installation token request", () => this.requestRepositoryAccessToken(owner, repo));
   }
 
+  public async getInstallationUrl(): Promise<string> {
+    return runBuildStep("GitHub App lookup", async (): Promise<string> => {
+      const jwt: string = await this.createAppJwt();
+      const app: unknown = await this.getJson("/app", jwt);
+      if (typeof app !== "object" || app === null || !("slug" in app) ||
+        typeof app.slug !== "string" || app.slug.length > 100 ||
+        !/^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*$/.test(app.slug)) {
+        throw new BuildProviderError("GitHub returned an invalid app response");
+      }
+      return `https://github.com/apps/${app.slug}/installations/new`;
+    });
+  }
+
   private async requestRepositoryAccessToken(owner: string, repo: string): Promise<string> {
     if (
       !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(owner) ||
@@ -39,19 +52,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
       throw new InvalidBuildInput("Provide a valid GitHub repository owner and name");
     }
 
-    const now: number = Math.floor(Date.now() / 1000);
-    const header: string = Buffer.from(
-      JSON.stringify({ alg: "RS256", typ: "JWT" }),
-    ).toString("base64url");
-    const payload: string = Buffer.from(
-      JSON.stringify({ iss: this.clientId, iat: now - 60, exp: now + 540 }),
-    ).toString("base64url");
-    const signingInput: string = `${header}.${payload}`;
-    const signature: string = await this.kmsClient.sign({
-      data: signingInput,
-      keyName: this.keyName,
-    });
-    const jwt: string = `${signingInput}.${signature}`;
+    const jwt: string = await this.createAppJwt();
 
     const installationResponse: Response = await this.http(
       `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`,
@@ -204,6 +205,17 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
       reader.releaseLock();
     }
     return { archive: Buffer.concat(chunks), commitSha: source.commitSha };
+  }
+
+  private async createAppJwt(): Promise<string> {
+    const now: number = Math.floor(Date.now() / 1000);
+    const header: string = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+    const payload: string = Buffer.from(
+      JSON.stringify({ iss: this.clientId, iat: now - 60, exp: now + 540 }),
+    ).toString("base64url");
+    const signingInput: string = `${header}.${payload}`;
+    const signature: string = await this.kmsClient.sign({ data: signingInput, keyName: this.keyName });
+    return `${signingInput}.${signature}`;
   }
 
   private githubRequest(path: string, token: string): Promise<Response> {

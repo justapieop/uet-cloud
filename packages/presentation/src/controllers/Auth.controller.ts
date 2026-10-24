@@ -1,14 +1,17 @@
-import { Controller, Get, Header, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Controller, ForbiddenException, Get, Header, Post, Req, Res, ServiceUnavailableException, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ApiCreatedResponse, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiCookieAuth, ApiCreatedResponse, ApiForbiddenResponse, ApiOperation, ApiResponse, ApiServiceUnavailableResponse, ApiTags } from "@nestjs/swagger";
+import type { User } from "@kumo/domain";
+import { GitHubProvider } from "@kumo/infrastructure";
 import { type Request, type Response } from "express";
-import { GitHubAuthGuard } from "../common/Auth.guard.js";
+import { GitHubAuthGuard, LoggedInGuard } from "../common/Auth.guard.js";
 
 @ApiTags("auth")
 @Controller("auth")
 export class AuthController {
   public constructor(
     private readonly configService: ConfigService,
+    private readonly github: GitHubProvider,
   ) { }
 
   @Get("login")
@@ -23,6 +26,34 @@ export class AuthController {
     },
   })
   public login(): void {}
+
+  @Get("github/install")
+  @Header("Cache-Control", "private, no-store")
+  @UseGuards(LoggedInGuard)
+  @ApiCookieAuth("session")
+  @ApiOperation({ summary: "Open GitHub App installation and repository selection" })
+  @ApiResponse({
+    status: 302,
+    description: "Redirects to GitHub to install the configured app or manage its repository access",
+    headers: {
+      Location: { description: "Configured GitHub App installation URL", schema: { type: "string" } },
+    },
+  })
+  @ApiForbiddenResponse({ description: "An active, unsuspended authenticated user is required" })
+  @ApiServiceUnavailableResponse({ description: "GitHub App installation lookup is unavailable" })
+  public async installGitHubApp(@Req() request: Request, @Res() response: Response): Promise<void> {
+    const user: User = request.user as User;
+    if (!user.active) {
+      throw new ForbiddenException("An active user is required");
+    }
+    let installationUrl: string;
+    try {
+      installationUrl = await this.github.getInstallationUrl();
+    } catch {
+      throw new ServiceUnavailableException("GitHub App installation lookup is unavailable");
+    }
+    response.redirect(302, installationUrl);
+  }
 
   @Get("callback")
   @Header("Cache-Control", "no-store")

@@ -43,7 +43,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       count++;
       assert.ok(client.includes(`"${path}":`), `Generated client lacks ${method} ${path}`);
       assert.ok(client.includes(`operations["${operation.operationId}"]`), `Generated client lacks operation ${operation.operationId}`);
-      if (path.startsWith("/user/") || (path === "/plans" && method !== "get") || path.startsWith("/deployments") || path.startsWith("/deployment/") || path.startsWith("/plans/") || path === "/user/me" || path.startsWith("/roles")) {
+      if (path === "/auth/github/install" || path.startsWith("/user/") || (path === "/plans" && method !== "get") || path.startsWith("/deployments") || path.startsWith("/deployment/") || path.startsWith("/plans/") || path === "/user/me" || path.startsWith("/roles")) {
         assert.deepEqual(operation.security, [{ session: [] }], `${method} ${path} must document the session cookie`);
       } else if (path.startsWith("/builds/")) {
         assert.deepEqual(operation.security, [{ "build-source": [] }]);
@@ -52,7 +52,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 29);
+  assert.equal(count, 30);
   assert.equal(Object.keys(document.paths).some((path: string): boolean => path.startsWith("/admin/")), false);
   const checkoutBody: RequestBodyObject = document.paths["/plans/{id}/subscriptions"]!.post!.requestBody as RequestBodyObject;
   assert.equal(checkoutBody.required, false);

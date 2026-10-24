@@ -6,11 +6,13 @@ import { SESSION_AUTHORIZATION_READER } from "@kumo/application";
 import { DataSource } from "typeorm";
 import { UserModule } from "./User.module.js";
 import { PassportModule } from "@nestjs/passport";
+import { GitHubModule } from "./GitHub.module.js";
 
 @Module({
   imports: [
     PassportModule.register({ session: true, }),
     UserModule,
+    GitHubModule,
   ],
   providers: [
     PassportProvider,

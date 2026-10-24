@@ -66,6 +66,38 @@ test("installation token uses a KMS-signed JWT and repository-limited read permi
   ]);
 });
 
+test("installation URL discovers the authenticated app using the existing signing credentials", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  context.mock.method(globalThis, "fetch", async (url: string, init: RequestInit): Promise<Response> => {
+    assert.equal(url, "https://api.github.com/app");
+    const headers: Headers = new Headers(init.headers);
+    const jwt: string = headers.get("Authorization")!.replace("Bearer ", "");
+    const payload: { iss: string } = JSON.parse(Buffer.from(jwt.split(".")[1]!, "base64url").toString());
+    assert.equal(payload.iss, "Iv1.example");
+    assert.ok(jwt.endsWith(".signature"));
+    assert.ok(init.signal instanceof AbortSignal);
+    return Response.json({ slug: "kumo-platform" });
+  });
+  assert.equal(await provider.getInstallationUrl(), "https://github.com/apps/kumo-platform/installations/new");
+});
+
+test("installation URL rejects malformed app responses and upstream failures", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  const responses: Response[] = [
+    Response.json({}), Response.json({ slug: "../other" }), Response.json({ slug: "app?redirect=elsewhere" }),
+    Response.json({ slug: "https://example.com" }), Response.json({ slug: 123 }),
+    new Response("invalid-json"), new Response("sensitive-response", { status: 403 }),
+  ];
+  context.mock.method(globalThis, "fetch", async (): Promise<Response> => responses.shift()!);
+  for (let index: number = 0; index < 7; index++) {
+    await assert.rejects(provider.getInstallationUrl(), (error: unknown): boolean => {
+      assert.ok(error instanceof Error);
+      assert.doesNotMatch(error.message, /sensitive-response/);
+      return true;
+    });
+  }
+});
+
 test("invalid repository names never reach GitHub", async (context: TestContext): Promise<void> => {
   const provider: GitHubProvider = createProvider(context);
   context.mock.method(globalThis, "fetch", async (): Promise<Response> => {
