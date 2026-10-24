@@ -14,18 +14,30 @@ function formatDate(value: string): string {
 
 export function InfrastructureMetaCard({ deployment }: InfrastructureMetaCardProps): JSX.Element {
   return (
-    <section aria-labelledby="infra-heading" className="rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6">
-      <div className="flex items-center justify-between border-b border-surface-border pb-4">
+    <details className="group rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6 transition-colors">
+      <summary className="flex cursor-pointer list-none items-center justify-between rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
         <div>
-          <h2 id="infra-heading" className="text-sm font-medium text-foreground">Build & Environment Metadata</h2>
-          <p className="mt-0.5 text-xs text-muted-text">Artifact provenance and regional deployment details</p>
+          <h2 className="text-sm font-medium text-foreground">Build & Environment Metadata</h2>
+          <p className="mt-0.5 text-xs text-muted-text">Click to view artifact provenance and regional deployment details</p>
         </div>
-        <span className="rounded-md border border-surface-border bg-white/[0.02] px-2 py-0.5 font-mono text-[11px] text-muted-text">
-          Metadata
-        </span>
-      </div>
+        <div className="flex items-center gap-3">
+          <span className="rounded-md border border-surface-border bg-white/[0.02] px-2 py-0.5 font-mono text-[11px] text-muted-text">
+            Metadata
+          </span>
+          <svg
+            className="size-4 text-muted-text transition-transform duration-200 group-open:rotate-180"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            aria-hidden="true"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </summary>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div className="mt-5 border-t border-surface-border pt-5 grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-surface-border bg-background/50 p-4">
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-text">Region</span>
           <p className="mt-1.5 font-mono text-sm font-medium text-foreground">
@@ -64,6 +76,6 @@ export function InfrastructureMetaCard({ deployment }: InfrastructureMetaCardPro
           </p>
         </div>
       </div>
-    </section>
+    </details>
   );
 }
