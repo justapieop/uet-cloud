@@ -14,7 +14,7 @@ const CONFIG: ConfigService = new ConfigService({ AZURE_SUBSCRIPTION_ID: "sub", 
 const APP: ContainerApp = {
   id: INPUT.resourceId, location: "Japan East", tags: { "kumo-deployment-id": INPUT.deploymentId },
   template: { containers: [{ name: "my-app", image: "registry/app:v2", resources: { cpu: 2, memory: "4096Mi" } }], scale: { minReplicas: 0, maxReplicas: 5 } },
-  configuration: { ingress: { targetPort: 8080, fqdn: "live.example.com", additionalPortMappings: [{ targetPort: 9000, external: false }] } },
+  configuration: { ingress: { targetPort: 8080, external: false, fqdn: "live.example.com", additionalPortMappings: [{ targetPort: 9000, external: false }] } },
 };
 
 test("Azure reader maps applied configuration and GiB memory without requiring the creation request", async (): Promise<void> => {
@@ -23,13 +23,14 @@ test("Azure reader maps applied configuration and GiB memory without requiring t
   } });
   const result: DeploymentConfiguration = await reader.read(INPUT);
   assert.deepEqual(result, { region: "japaneast", maxVcpu: 2, maxMemory: 4, minScaling: 0, maxScaling: 5,
-    targetPort: 8080, additionalPorts: [{ targetPort: 9000, exposedPort: 9000, external: false }], image: "registry/app:v2", fqdn: "live.example.com" });
+    targetPort: 8080, external: false, additionalPorts: [{ targetPort: 9000, exposedPort: 9000, external: false }], image: "registry/app:v2", fqdn: "live.example.com" });
   const absent: AzureDeploymentConfigurationReader = new AzureDeploymentConfigurationReader(CONFIG, { get: async (): Promise<ContainerApp> => ({ ...APP,
     configuration: {}, template: { containers: [{ name: "my-app" }] },
   }) });
   assert.equal((await absent.read(INPUT)).maxMemory, null);
   assert.equal((await absent.read(INPUT)).image, null);
   assert.equal((await absent.read(INPUT)).fqdn, null);
+  assert.equal((await absent.read(INPUT)).external, null);
 });
 
 test("Azure reader refuses foreign resource IDs before access and rejects replacement apps", async (): Promise<void> => {

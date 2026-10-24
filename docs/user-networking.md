@@ -15,3 +15,7 @@ The presentation `DeploymentModule` constructs `NetworkManagementClient` using t
 Run `npm run test:api` for mocked provisioning order, readiness, reuse, region, isolation, failure, and external-port regressions. Source changes and compilation do not provision Azure resources. Live network creation, RBAC, and public TCP reachability require a configured Azure environment and are not established by these tests.
 
 References: [Azure subnet requirements](https://learn.microsoft.com/en-us/azure/container-apps/custom-virtual-networks?tabs=workload-profiles-env), [environment network immutability](https://learn.microsoft.com/en-us/azure/container-apps/networking#virtual-network-type), and [additional TCP ports](https://learn.microsoft.com/en-us/azure/container-apps/ingress#additional-tcp-ports).
+
+## Container visibility
+
+Top-level `external` in `POST /deployments` controls app ingress: omitted/true keeps external HTTPS ingress, and false allows only other apps in the shared environment to connect. Each additional TCP mapping still has a separate `external` flag, default false. An internal container with an external TCP mapping is rejected with HTTP 400 before queuing; the Azure provider validates the same rule before cloud operations. External TCP mappings are accepted for external containers in the new VNet-connected environments, subject to the existing port limits and Azure environment-wide uniqueness.

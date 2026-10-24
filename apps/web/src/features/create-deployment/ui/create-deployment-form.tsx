@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@heroui/react";
+import { Button, Label, Switch } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent, type Dispatch, type FormEvent, type JSX, type RefObject, type SetStateAction } from "react";
 import { createDeployment, type CreateDeploymentResult } from "../api/create-deployment";
@@ -8,6 +8,8 @@ import { parseDeploymentInput, type DeploymentInputResult } from "../model/reque
 import { getRepositories } from "../api/get-repositories";
 import type { GitHubRepository, RepositoryResult } from "../model/repositories";
 import { AdditionalPorts } from "./additional-ports";
+import { RegionPicker } from "./region-picker";
+import type { RegionsResult } from "../model/regions";
 
 const INPUT_CLASS: string = "mt-2 h-11 w-full rounded-lg border border-surface-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-dark focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-60";
 const LABEL_CLASS: string = "block text-xs font-medium text-foreground";
@@ -15,10 +17,11 @@ const SECTION_CLASS: string = "rounded-xl border border-surface-border bg-surfac
 
 type CreateDeploymentFormProps = {
   readonly initialRepositories: RepositoryResult;
+  readonly initialRegions: RegionsResult;
   readonly installUrl: string;
 };
 
-export function CreateDeploymentForm({ initialRepositories, installUrl }: CreateDeploymentFormProps): JSX.Element {
+export function CreateDeploymentForm({ initialRepositories, initialRegions, installUrl }: CreateDeploymentFormProps): JSX.Element {
   const [repositories, setRepositories]: [GitHubRepository[], Dispatch<SetStateAction<GitHubRepository[]>>] = useState(initialRepositories.data?.repositories ?? []);
   const [nextPage, setNextPage]: [number | null, Dispatch<SetStateAction<number | null>>] = useState(initialRepositories.data ? (initialRepositories.data.has_next_page ? initialRepositories.data.page + 1 : null) : 1);
   const [repositoryError, setRepositoryError]: [string | null, Dispatch<SetStateAction<string | null>>] = useState(initialRepositories.error ?? null);
@@ -28,6 +31,7 @@ export function CreateDeploymentForm({ initialRepositories, installUrl }: Create
   const selectedRepository: GitHubRepository | undefined = repositories.find((repository: GitHubRepository): boolean => repository.html_url === repositoryUrl);
   const router: ReturnType<typeof useRouter> = useRouter();
   const [cpu, setCpu]: [string, Dispatch<SetStateAction<string>>] = useState("0.5");
+  const [containerExternal, setContainerExternal]: [boolean, Dispatch<SetStateAction<boolean>>] = useState(true);
   const [error, setError]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
   const [pending, setPending]: [boolean, Dispatch<SetStateAction<boolean>>] = useState(false);
   const inFlight: RefObject<boolean> = useRef(false);
@@ -115,13 +119,21 @@ export function CreateDeploymentForm({ initialRepositories, installUrl }: Create
             <div><p className={LABEL_CLASS}>Memory per replica</p><output className="mt-2 flex h-11 items-center rounded-lg border border-surface-border bg-white/[0.02] px-3 font-mono text-sm">{cpu && Number.isFinite(Number(cpu)) ? Number(cpu) * 2 : "—"} GiB</output><p className="mt-2 text-xs leading-5 text-muted-text">Memory is twice the selected vCPU.</p></div>
             <label className={LABEL_CLASS}>Minimum replicas<input className={INPUT_CLASS} name="min_scaling" type="number" required min="0" step="1" defaultValue="0" /><span className="mt-2 block font-normal leading-5 text-muted-text">Use 0 to scale down when idle.</span></label>
             <label className={LABEL_CLASS}>Maximum replicas<input className={INPUT_CLASS} name="max_scaling" type="number" required min="1" step="1" defaultValue="1" /></label>
-            <label className={LABEL_CLASS}>Region <span className="font-normal text-muted-dark">(optional)</span><input className={INPUT_CLASS} name="region" maxLength={64} pattern="[a-z][a-z0-9]{0,63}" placeholder="Use workspace region" /><span className="mt-2 block font-normal leading-5 text-muted-text">For example, southeastasia. Must match your existing workspace region.</span></label>
+            <RegionPicker initialRegions={initialRegions} inputClass={INPUT_CLASS} labelClass={LABEL_CLASS} disabled={pending} />
           </div>
         </section>
         <section className={SECTION_CLASS} aria-labelledby="ports-heading">
           <h2 id="ports-heading" className="text-base font-medium">Networking</h2>
+          <Switch className="mt-6" isSelected={containerExternal} onChange={setContainerExternal} isDisabled={pending} aria-describedby="container-visibility-help">
+            <Switch.Content>
+              <Switch.Control><Switch.Thumb /></Switch.Control>
+              <Label className="text-sm">Public container</Label>
+            </Switch.Content>
+          </Switch>
+          <input type="hidden" name="external" value={String(containerExternal)} />
+          <p id="container-visibility-help" className="mt-2 text-xs leading-5 text-muted-text">{containerExternal ? "The main HTTPS endpoint is public. Choose internal or external access separately for each additional TCP port." : "The main HTTPS endpoint and all additional TCP ports are accessible only to apps in the same environment."}</p>
           <label className={`${LABEL_CLASS} mt-6`}>Main application port<input className={INPUT_CLASS} name="target_port" type="number" required min="1" max="65535" step="1" defaultValue="3000" /><span className="mt-2 block font-normal leading-5 text-muted-text">The port your application listens on inside its container, served through HTTPS ingress.</span></label>
-          <AdditionalPorts inputClass={INPUT_CLASS} labelClass={LABEL_CLASS} disabled={pending} />
+          <AdditionalPorts inputClass={INPUT_CLASS} labelClass={LABEL_CLASS} disabled={pending} containerExternal={containerExternal} />
         </section>
         <details className={SECTION_CLASS}>
           <summary className="cursor-pointer text-sm font-medium">Advanced settings</summary>

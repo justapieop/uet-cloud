@@ -19,7 +19,7 @@ test("GET detail and list serialize applied Azure values; failures never return 
       targetPort: 80, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 1, envVars: { SECRET: "hidden" } },
   });
   let applied: DeploymentConfiguration = { region: "japaneast", maxVcpu: 2, maxMemory: 4, minScaling: 1, maxScaling: 5,
-    targetPort: 8080, additionalPorts: [{ targetPort: 9000, exposedPort: 9001, external: true }], image: "live-image", fqdn: "live.example.com" };
+    targetPort: 8080, external: true, additionalPorts: [{ targetPort: 9000, exposedPort: 9001, external: true }], image: "live-image", fqdn: "live.example.com" };
   let failure: DeploymentConfigurationReadError | null = null;
   let reads: number = 0;
   const useCase: GetDeploymentCase = new GetDeploymentCase({ ...emptyRepositories().deployment,
@@ -49,14 +49,14 @@ test("GET detail and list serialize applied Azure values; failures never return 
   const body: Record<string, unknown> = await response.json() as Record<string, unknown>;
   assert.equal(body.region, "japaneast"); assert.equal(body.max_vcpu, 2); assert.equal(body.max_memory, 4);
   assert.equal(body.min_scaling, 1); assert.equal(body.max_scaling, 5); assert.equal(body.target_port, 8080);
-  assert.equal(body.image, "live-image"); assert.equal(body.fqdn, "live.example.com");
+  assert.equal(body.external, true); assert.equal(body.image, "live-image"); assert.equal(body.fqdn, "live.example.com");
   assert.deepEqual(body.additional_ports, [{ target_port: 9000, exposed_port: 9001, external: true }]);
   assert.equal(body.spec, undefined); assert.ok(!JSON.stringify(body).includes("hidden"));
   assert.deepEqual(await (await fetch(`${base}?region=japaneast`)).json(), [body]);
   assert.deepEqual(await (await fetch(`${base}?region=eastus`)).json(), []);
-  applied = { ...applied, image: null, fqdn: null, maxVcpu: null, maxMemory: null };
+  applied = { ...applied, external: false, image: null, fqdn: null, maxVcpu: null, maxMemory: null };
   const absent: Record<string, unknown> = await (await fetch(`${base}/${id}`)).json() as Record<string, unknown>;
-  assert.equal(absent.image, null); assert.equal(absent.fqdn, null); assert.equal(absent.max_vcpu, null);
+  assert.equal(absent.external, false); assert.equal(absent.image, null); assert.equal(absent.fqdn, null); assert.equal(absent.max_vcpu, null);
   failure = new DeploymentConfigurationReadError("unavailable");
   assert.equal((await fetch(`${base}/${id}`)).status, 503);
   assert.equal((await fetch(base)).status, 503);
@@ -65,6 +65,6 @@ test("GET detail and list serialize applied Azure values; failures never return 
   saved = new Deployment({ ...saved.getDetails(), status: "PENDING", resourceId: null });
   const readsBeforePending: number = reads;
   const pending: Record<string, unknown> = await (await fetch(`${base}/${id}`)).json() as Record<string, unknown>;
-  assert.equal(pending.max_vcpu, 0.5); assert.equal(pending.region, "eastus");
+  assert.equal(pending.external, true); assert.equal(pending.max_vcpu, 0.5); assert.equal(pending.region, "eastus");
   assert.equal(reads, readsBeforePending);
 });

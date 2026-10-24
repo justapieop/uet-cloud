@@ -21,7 +21,10 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
   if (!text("min_scaling") || !text("max_scaling") || !Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < 1 || min > max) return { error: "Minimum replicas must be zero or more and cannot exceed maximum replicas. Maximum must be at least one." };
   const region: string = text("region");
   if (region && !/^[a-z][a-z0-9]{0,63}$/.test(region)) return { error: "Use an Azure region name without spaces, such as southeastasia." };
-  const data: DeploymentInput = { name, repo, target_port: targetPort, max_vcpu: cpu, max_memory: cpu * 2, min_scaling: min, max_scaling: max };
+  const containerAccess: string = text("external");
+  if (containerAccess && containerAccess !== "true" && containerAccess !== "false") return { error: "Choose public or internal container access." };
+  const containerExternal: boolean = containerAccess !== "false";
+  const data: DeploymentInput = { name, repo, target_port: targetPort, external: containerExternal, max_vcpu: cpu, max_memory: cpu * 2, min_scaling: min, max_scaling: max };
   const portTargets: FormDataEntryValue[] = form.getAll("additional_target_port");
   const portExposed: FormDataEntryValue[] = form.getAll("additional_exposed_port");
   const portExternal: FormDataEntryValue[] = form.getAll("additional_external");
@@ -43,6 +46,7 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
     if (externalValue !== "true" && externalValue !== "false") return { error: `TCP port ${index + 1}: choose internal or external access.` };
     if (targets.has(target) || exposed.has(exposedPort)) return { error: `TCP port ${index + 1}: target and exposed ports must be unique. Targets must differ from the main application port.` };
     const external: boolean = externalValue === "true";
+    if (external && !containerExternal) return { error: `TCP port ${index + 1}: external ports require a public container. Choose public container access or make this port internal.` };
     if (external && (exposedPort === 80 || exposedPort === 443)) return { error: `TCP port ${index + 1}: external access cannot expose port 80 or 443.` };
     targets.add(target);
     exposed.add(exposedPort);

@@ -14,7 +14,7 @@ export class AdditionalDeploymentPortDto {
   @IsInt() @Min(1) @Max(65535)
   public exposed_port?: number;
 
-  @ApiPropertyOptional({ default: false, description: "Expose outside the environment; requires VNet integration" })
+  @ApiPropertyOptional({ example: false, description: "Defaults to false. Expose outside the environment; requires an external container and VNet integration." })
   @ValidateIf((_input: AdditionalDeploymentPortDto, value: unknown): boolean => value !== undefined)
   @IsBoolean()
   public external?: boolean;
@@ -60,6 +60,11 @@ export class CreateDeploymentDto {
   @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
   @IsArray() @ArrayMaxSize(5) @ValidateNested({ each: true }) @Type(() => AdditionalDeploymentPortDto)
   public additional_ports?: AdditionalDeploymentPortDto[];
+
+  @ApiPropertyOptional({ example: true, description: "Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the same environment." })
+  @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
+  @IsBoolean()
+  public external?: boolean;
 
   @ApiProperty({ example: 0.5, description: "vCPU allocated per replica, in increments of 0.25" })
   @IsNumber()
@@ -112,6 +117,7 @@ export class DeploymentResponseDto {
   @Expose() @ApiProperty() public readonly name: string;
   @Expose({ name: "target_port" }) @ApiProperty({ name: "target_port", type: Number, nullable: true }) public readonly targetPort: number | null;
   @Expose({ name: "additional_ports" }) @ApiProperty({ name: "additional_ports", type: [AdditionalDeploymentPortResponseDto] }) public readonly additionalPorts: AdditionalDeploymentPortResponseDto[];
+  @Expose() @ApiProperty({ type: Boolean, nullable: true, description: "Whether ingress is external; applied Azure value for provisioned deployment reads" }) public readonly external: boolean | null;
   @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
   @Expose() @ApiProperty({ type: String, nullable: true }) public readonly image: string | null;
   @Expose({ name: "build_id" }) @ApiProperty({ name: "build_id", type: String, nullable: true }) public readonly buildId: string | null;
@@ -130,6 +136,7 @@ export class DeploymentResponseDto {
     this.id = deployment.id;
     this.name = deployment.name;
     this.targetPort = configuration ? configuration.targetPort : deployment.spec?.targetPort ?? null;
+    this.external = configuration ? configuration.external : deployment.spec ? deployment.spec.external ?? true : null;
     this.additionalPorts = (configuration ? configuration.additionalPorts : deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
     this.status = deployment.status;
     this.image = configuration ? configuration.image : deployment.image;

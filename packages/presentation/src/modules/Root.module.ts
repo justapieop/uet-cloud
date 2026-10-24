@@ -13,6 +13,7 @@ import { MonitoringModule } from "./Monitoring.module.js";
 import { PermissionsModule } from "./Permissions.module.js";
 import { PlanModule } from "./Plan.module.js";
 import { RoleModule } from "./Role.module.js";
+import { RegionsModule } from "./Regions.module.js";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { RoleModule } from "./Role.module.js";
     StripeModule,
     PlanModule,
     RoleModule,
+    RegionsModule,
   ],
 })
 export class RootModule { }

@@ -7,7 +7,7 @@ import { GetDeploymentCase } from "../dist/use-cases/deployment/GetDeployment.ca
 import { emptyRepositories } from "./support/repositories.ts";
 
 const SPEC: DeploymentSpec = { repo: "https://github.com/owner/repo", region: "eastus", targetPort: 80, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 1 };
-const APPLIED: DeploymentConfiguration = { region: "japaneast", maxVcpu: 2, maxMemory: 4, minScaling: 1, maxScaling: 5, targetPort: 8080, additionalPorts: [], image: "registry/app:v2", fqdn: "live.example.com" };
+const APPLIED: DeploymentConfiguration = { region: "japaneast", maxVcpu: 2, maxMemory: 4, minScaling: 1, maxScaling: 5, targetPort: 8080, external: true, additionalPorts: [], image: "registry/app:v2", fqdn: "live.example.com" };
 
 test("deployment reads preserve saved intent and resolve applied configuration only after ownership lookup", async (): Promise<void> => {
   let calls: number = 0;

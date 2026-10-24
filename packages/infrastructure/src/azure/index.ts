@@ -10,3 +10,4 @@ export * from "./deployment-worker.js";
 export * from "./monitoring.js";
 export * from "./deployment-configuration.js";
 export * from "./container-lifecycle.js";
+export * from "./deployment-regions.js";

@@ -29,6 +29,7 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
   dockerFilePath?: string;
   ref?: string;
   targetPort: number;
+  external?: boolean;
   additionalPorts?: readonly DeploymentPortMapping[];
   resources?: ContainerResources;
   envVars?: Readonly<Record<string, string>>;
@@ -175,7 +176,7 @@ export class AzureProvider implements DeploymentProvisioner {
   }
 
   public async createDeployment(input: AzureDeploymentCreateInput): Promise<ContainerApp> {
-    const portError: InvalidDomainParams | null = validateDeploymentPorts(input.targetPort, input.additionalPorts);
+    const portError: InvalidDomainParams | null = validateDeploymentPorts(input.targetPort, input.additionalPorts, input.external);
     if (portError) throw portError;
     const rgName: string = this.userResourceGroup(input.userId);
     if (!/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(input.name)) {
@@ -261,7 +262,7 @@ export class AzureProvider implements DeploymentProvisioner {
       configuration: {
         activeRevisionsMode: "Single",
         ingress: {
-          external: true, targetPort: input.targetPort, allowInsecure: false,
+          external: input.external ?? true, targetPort: input.targetPort, allowInsecure: false,
           additionalPortMappings: input.additionalPorts?.map((port: DeploymentPortMapping) => ({
             targetPort: port.targetPort, exposedPort: port.exposedPort ?? port.targetPort, external: port.external ?? false,
           })),

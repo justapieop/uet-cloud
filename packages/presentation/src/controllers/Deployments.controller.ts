@@ -65,7 +65,7 @@ export class DeploymentsController {
         spec: {
           region: input.region,
           repo: input.repo, imageName: input.image_name, dockerFilePath: input.dockerfile_path,
-          ref: input.ref, targetPort: input.target_port, maxVcpu: input.max_vcpu, maxMemory: input.max_memory,
+          ref: input.ref, targetPort: input.target_port, external: input.external, maxVcpu: input.max_vcpu, maxMemory: input.max_memory,
           additionalPorts: input.additional_ports?.map((port: AdditionalDeploymentPortDto): DeploymentPortMapping => ({
             targetPort: port.target_port, exposedPort: port.exposed_port, external: port.external,
           })),

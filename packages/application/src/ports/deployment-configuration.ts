@@ -7,6 +7,7 @@ export interface DeploymentConfiguration {
   readonly minScaling: number | null;
   readonly maxScaling: number | null;
   readonly targetPort: number | null;
+  readonly external: boolean | null;
   readonly additionalPorts: readonly DeploymentPortMapping[];
   readonly image: string | null;
   readonly fqdn: string | null;

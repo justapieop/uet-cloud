@@ -1,6 +1,6 @@
 # Applied deployment configuration
 
-`GET /deployments/:id` and `GET /deployments` read applied CPU, RAM, minimum/maximum replicas, primary/additional ports, region, image, and FQDN from Azure Container Apps for deployments with an Azure resource ID. Database request values are not substituted for missing Azure fields or failed Azure reads. Missing optional Azure fields return null (or an empty additional-ports list). RAM is normalized to GiB and Azure location names to lowercase without whitespace.
+`GET /deployments/:id` and `GET /deployments` read applied CPU, RAM, minimum/maximum replicas, primary/additional ports, ingress visibility (`external`), region, image, and FQDN from Azure Container Apps for deployments with an Azure resource ID. Database request values are not substituted for missing Azure fields or failed Azure reads. Missing optional Azure fields return null (or an empty additional-ports list). RAM is normalized to GiB and Azure location names to lowercase without whitespace.
 
 The database continues to hold the creation request for durable queuing, provisioning, and quota reservations. Identity, ownership, build ID, Azure resource ID, workflow status, timestamps, and workflow errors remain database-backed. Existing image/FQDN columns are historical workflow snapshots; provisioned GET responses use Azure's values. This change introduces no destructive migration or removal of persisted requests.
 

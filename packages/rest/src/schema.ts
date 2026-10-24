@@ -452,6 +452,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List deployment regions in the configured Azure subscription
+         * @description Subscription locations intersected with advertised Container Apps, managed-environment, and VNet support. Does not guarantee quota, capacity, policy eligibility, or compatibility with an existing user's shared environment. No client-supplied subscription is used.
+         */
+        get: operations["RegionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -496,10 +516,10 @@ export interface components {
              */
             exposed_port?: number;
             /**
-             * @description Expose outside the environment; requires VNet integration
-             * @default false
+             * @description Defaults to false. Expose outside the environment; requires an external container and VNet integration.
+             * @example false
              */
-            external: boolean;
+            external?: boolean;
         };
         CreateDeploymentDto: {
             /**
@@ -512,6 +532,11 @@ export interface components {
             target_port: number;
             /** @description Up to five additional TCP port mappings */
             additional_ports?: components["schemas"]["AdditionalDeploymentPortDto"][];
+            /**
+             * @description Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the same environment.
+             * @example true
+             */
+            external?: boolean;
             /**
              * @description vCPU allocated per replica, in increments of 0.25
              * @example 0.5
@@ -546,6 +571,8 @@ export interface components {
             name: string;
             target_port: number | null;
             additional_ports: components["schemas"]["AdditionalDeploymentPortResponseDto"][];
+            /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
+            external: boolean | null;
             /** @enum {string} */
             status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
             image: string | null;
@@ -758,6 +785,15 @@ export interface components {
         UserRoleWriteDto: {
             /** @description Exact replacement set of role IDs */
             role_ids: string[];
+        };
+        DeploymentRegionResponseDto: {
+            /**
+             * @description Value accepted by deployment creation's region field
+             * @example japaneast
+             */
+            name: string;
+            /** @example Japan East */
+            display_name: string;
         };
     };
     responses: never;
@@ -2146,6 +2182,46 @@ export interface operations {
             };
             /** @description An inactive role was selected */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RegionsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentRegionResponseDto"][];
+                };
+            };
+            /** @description Query parameters, including subscription selectors, are not accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended authenticated user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure region lookup is unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

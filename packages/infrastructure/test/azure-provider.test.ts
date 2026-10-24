@@ -203,6 +203,7 @@ test("missing resources are created in order and the app waits for build success
     "build-PENDING", "build-PREPARING", "build-RUNNING", "build-SUCCEEDED", "app-create", "app-ready",
   ]);
   assert.equal(app.environmentId, ENVIRONMENT_ID);
+  assert.equal(app.configuration?.ingress?.external, true);
   assert.equal(app.template?.containers?.[0]?.image, "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   assert.deepEqual(app.template?.containers?.[0]?.env, [{ name: "NODE_ENV", value: "production" }]);
   assert.deepEqual(app.configuration?.registries, [{ server: "registry.azurecr.io", identity: PULL_IDENTITY }]);
@@ -281,6 +282,16 @@ test("new VNet-connected environments support external additional TCP ports", as
     additionalPorts: [{ targetPort: 9090, exposedPort: 9091, external: true }],
   });
   assert.deepEqual(app.configuration?.ingress?.additionalPortMappings, [{ targetPort: 9090, exposedPort: 9091, external: true }]);
+  assert.equal(app.configuration?.ingress?.external, true);
+});
+
+test("internal containers configure internal ingress and reject external additional ports before Azure access", async (): Promise<void> => {
+  const setup: Fixture = fixture();
+  await assert.rejects(setup.provider.createDeployment({ ...INPUT, external: false, additionalPorts: [{ targetPort: 9090, external: true }] }), /require an external container/);
+  assert.deepEqual(setup.events, []);
+  const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT, external: false, additionalPorts: [{ targetPort: 9090 }] });
+  assert.equal(app.configuration?.ingress?.external, false);
+  assert.deepEqual(app.configuration?.ingress?.additionalPortMappings, [{ targetPort: 9090, exposedPort: 9090, external: false }]);
 });
 
 test("legacy environments without VNet are preserved and external ports fail before building", async (): Promise<void> => {

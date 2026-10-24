@@ -51,6 +51,8 @@ test("each invalid specification fails for its intended validation rule", (): vo
     { patch: { additionalPorts: [{ targetPort: 8080 }] }, message: /unique/ },
     { patch: { additionalPorts: [{ targetPort: 36985 }] }, message: /reserved port/ },
     { patch: { additionalPorts: [{ targetPort: 9000, exposedPort: 443, external: true }] }, message: /HTTP ingress/ },
+    { patch: { external: "false" as unknown as boolean }, message: /external must be a boolean/ },
+    { patch: { external: false, additionalPorts: [{ targetPort: 9000, external: true }] }, message: /require an external container/ },
   ];
   cases.forEach((item: { patch: Partial<DeploymentSpec>; message: RegExp }): void => {
     assert.throws((): Deployment => new Deployment({ ...DETAILS, spec: { ...SPEC, ...item.patch } }),

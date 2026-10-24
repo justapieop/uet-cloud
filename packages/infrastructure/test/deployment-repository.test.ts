@@ -13,7 +13,7 @@ test("deployment repository round-trips creation input and progress in the deplo
     findOneBy: async (): Promise<InfraDeployment | null> => stored,
   };
   const adapter: InfraDeploymentRepository = new InfraDeploymentRepository(orm as Repository<InfraDeployment>);
-  const spec: DeploymentSpec = { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2, region: "japaneast", envVars: { NODE_ENV: "production" } };
+  const spec: DeploymentSpec = { repo: "https://github.com/owner/repo", targetPort: 8080, external: false, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2, region: "japaneast", envVars: { NODE_ENV: "production" } };
   const deployment: Deployment = new Deployment({ id: "deployment", userId: "123", name: "sample-app", spec, status: "RUNNING", image: "registry/app:v1", buildId: "build", resourceId: "/azure/app", fqdn: "app.example.com" });
   await adapter.save(deployment);
   assert.deepEqual((await adapter.findById(deployment.id))?.getDetails(), deployment.getDetails());

@@ -34,6 +34,7 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
       ?? (containers.length === 1 ? containers[0] : undefined);
     if (!container) throw new DeploymentConfigurationReadError("invalid");
     const ingress: Ingress | undefined = app.configuration?.ingress;
+    if (ingress?.external !== undefined && typeof ingress.external !== "boolean") throw new DeploymentConfigurationReadError("invalid");
     return {
       region: normalizeAzureRegion(app.location),
       maxVcpu: this.number(container.resources?.cpu),
@@ -41,6 +42,7 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
       minScaling: this.number(app.template?.scale?.minReplicas),
       maxScaling: this.number(app.template?.scale?.maxReplicas),
       targetPort: this.number(ingress?.targetPort),
+      external: ingress?.external ?? null,
       additionalPorts: (ingress?.additionalPortMappings ?? []).map((port: IngressPortMapping): DeploymentPortMapping => ({
         targetPort: port.targetPort, exposedPort: port.exposedPort ?? port.targetPort, external: port.external ?? false,
       })),
