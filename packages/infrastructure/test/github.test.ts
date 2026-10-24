@@ -98,6 +98,98 @@ test("installation URL rejects malformed app responses and upstream failures", a
   }
 });
 
+test("repository listing uses only the session account installation and filters foreign owners across pages", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  const requests: string[] = [];
+  const own: Record<string, unknown> = { id: 1, name: "private-app", full_name: "alice/private-app", private: true,
+    default_branch: "main", owner: { id: 123, login: "alice", type: "User" }, secret: "must-not-return" };
+  context.mock.method(globalThis, "fetch", async (url: string, init: RequestInit): Promise<Response> => {
+    requests.push(url);
+    const headers: Headers = new Headers(init.headers);
+    if (url === "https://api.github.com/user/123") {
+      assert.equal(headers.has("Authorization"), false);
+      return Response.json({ id: 123, login: "alice", type: "User" });
+    }
+    if (url === "https://api.github.com/users/alice/installation") {
+      return Response.json({ id: 456, account: { id: 123, type: "User" }, suspended_at: null });
+    }
+    if (url === "https://api.github.com/app/installations/456/access_tokens") {
+      assert.equal(init.method, "POST");
+      assert.deepEqual(JSON.parse(init.body as string), { permissions: { metadata: "read" } });
+      return Response.json({ token: "owned-installation-token", expires_at: new Date(Date.now() + 60_000).toISOString() });
+    }
+    assert.equal(headers.get("Authorization"), "Bearer owned-installation-token");
+    if (url === "https://api.github.com/installation/repositories?per_page=3&page=1") {
+      return Response.json({ total_count: 4, repositories: [own,
+        { ...own, id: 2, full_name: "bob/private-app", owner: { id: 999, login: "bob", type: "User" } },
+        { ...own, id: 3, full_name: "org/private-app", owner: { id: 888, login: "org", type: "Organization" } },
+      ] });
+    }
+    assert.equal(url, "https://api.github.com/installation/repositories?per_page=3&page=2");
+    return Response.json({ total_count: 4, repositories: [{ ...own, id: 4, private: false, default_branch: null }] });
+  });
+  assert.deepEqual(await provider.listOwnInstalledRepositories("123", 1, 3), {
+    repositories: [{ id: 1, name: "private-app", fullName: "alice/private-app", private: true, defaultBranch: "main" }],
+    page: 1, perPage: 3, hasNextPage: true,
+  });
+  assert.deepEqual(await provider.listOwnInstalledRepositories("123", 2, 3), {
+    repositories: [{ id: 4, name: "private-app", fullName: "alice/private-app", private: false, defaultBranch: null }],
+    page: 2, perPage: 3, hasNextPage: false,
+  });
+  assert.equal(requests.some((url: string): boolean => url.includes("/app/installations?")), false);
+});
+
+test("foreign installations and mismatched account lookups fail before minting a repository token", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  let mismatchedProfile: boolean = false;
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    if (url === "https://api.github.com/user/123") {
+      return Response.json({ id: mismatchedProfile ? 999 : 123, login: "alice", type: "User" });
+    }
+    assert.equal(url, "https://api.github.com/users/alice/installation");
+    return Response.json({ id: 456, account: { id: 999, type: "User" } });
+  });
+  await assert.rejects(provider.listOwnInstalledRepositories("123", 1, 30), /outside the current account/);
+  mismatchedProfile = true;
+  await assert.rejects(provider.listOwnInstalledRepositories("123", 1, 30), /invalid account response/);
+});
+
+test("missing or suspended personal installations return empty without a token request; provider failures do not", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  let status: number = 404;
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    if (url.endsWith("/user/123")) return Response.json({ id: 123, login: "alice", type: "User" });
+    assert.equal(url, "https://api.github.com/users/alice/installation");
+    return status === 200 ? Response.json({ id: 456, account: { id: 123, type: "User" }, suspended_at: "2026-10-24" })
+      : new Response("sensitive-upstream", { status });
+  });
+  assert.deepEqual((await provider.listOwnInstalledRepositories("123", 1, 30)).repositories, []);
+  status = 200;
+  assert.deepEqual((await provider.listOwnInstalledRepositories("123", 1, 30)).repositories, []);
+  status = 403;
+  await assert.rejects(provider.listOwnInstalledRepositories("123", 1, 30), { message: "GitHub installation lookup failed: HTTP 403" });
+  status = 429;
+  await assert.rejects(provider.listOwnInstalledRepositories("123", 1, 30), /HTTP 429/);
+});
+
+test("malformed repository ownership and metadata fail closed", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  const valid: Record<string, unknown> = { id: 1, name: "app", full_name: "alice/app", private: true, default_branch: "main", owner: { id: 123, login: "alice", type: "User" } };
+  const invalid: unknown[] = [null, { ...valid, owner: {} }, { ...valid, full_name: "bob/app" }, { ...valid, private: "true" }];
+  let repository: unknown;
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    if (url.endsWith("/user/123")) return Response.json({ id: 123, login: "alice", type: "User" });
+    if (url.endsWith("/users/alice/installation")) return Response.json({ id: 456, account: { id: 123, type: "User" } });
+    if (url.endsWith("/access_tokens")) return Response.json({ token: "token", expires_at: new Date(Date.now() + 60_000).toISOString() });
+    assert.equal(url, "https://api.github.com/installation/repositories?per_page=30&page=1");
+    return Response.json({ total_count: 1, repositories: [repository] });
+  });
+  for (let index: number = 0; index < invalid.length; index++) {
+    repository = invalid[index];
+    await assert.rejects(provider.listOwnInstalledRepositories("123", 1, 30), /invalid repository/);
+  }
+});
+
 test("invalid repository names never reach GitHub", async (context: TestContext): Promise<void> => {
   const provider: GitHubProvider = createProvider(context);
   context.mock.method(globalThis, "fetch", async (): Promise<Response> => {

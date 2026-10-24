@@ -41,6 +41,8 @@ Application settings are loaded at startup; changes in Azure require an API rest
 
 ### GitHub App installation redirect
 
+Signed-in users can list their own personally owned repositories granted to the app through `GET /auth/github/repositories`. This endpoint uses the existing app credentials and no additional configuration. See [installed GitHub repositories](github-repositories.md) for ownership restrictions, pagination, and response fields.
+
 No additional app-name configuration is required. The backend calls GitHub's authenticated `GET /app` endpoint using a JWT signed with the existing app client ID and Key Vault signing key, then constructs the installation URL from the returned app slug.
 
 Navigate the browser to `GET /auth/github/install` with the existing Kumo session cookie. An authenticated, active, unsuspended user receives HTTP 302 to `https://github.com/apps/<resolved-app-slug>/installations/new`, where GitHub handles account and repository selection. Existing installations can be configured through GitHub's installation flow to grant access to additional repositories. No deployment permission or subscription is required. Responses use `private, no-store`; ineligible sessions return 403 and failed app discovery or an invalid GitHub response returns 503. The endpoint accepts no client-controlled redirect destination and does not create an installation or grant repository access itself.

@@ -1,10 +1,12 @@
-import { Controller, ForbiddenException, Get, Header, Post, Req, Res, ServiceUnavailableException, UseGuards } from "@nestjs/common";
+import { Controller, ForbiddenException, Get, Header, Post, Query, Req, Res, ServiceUnavailableException, UseGuards, ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { ApiCookieAuth, ApiCreatedResponse, ApiForbiddenResponse, ApiOperation, ApiResponse, ApiServiceUnavailableResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBadRequestResponse, ApiCookieAuth, ApiCreatedResponse, ApiForbiddenResponse, ApiOkResponse, ApiOperation, ApiResponse, ApiServiceUnavailableResponse, ApiTags } from "@nestjs/swagger";
 import type { User } from "@kumo/domain";
 import { GitHubProvider } from "@kumo/infrastructure";
 import { type Request, type Response } from "express";
 import { GitHubAuthGuard, LoggedInGuard } from "../common/Auth.guard.js";
+import { GitHubRepositoriesQueryDto, GitHubRepositoriesResponseDto } from "../dto/GitHubRepositories.dto.js";
+import type { GitHubRepositoryPage } from "@kumo/application";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -53,6 +55,30 @@ export class AuthController {
       throw new ServiceUnavailableException("GitHub App installation lookup is unavailable");
     }
     response.redirect(302, installationUrl);
+  }
+
+  @Get("github/repositories")
+  @Header("Cache-Control", "private, no-store")
+  @UseGuards(LoggedInGuard)
+  @ApiCookieAuth("session")
+  @ApiOperation({ summary: "List the current account's installed GitHub repositories", description: "Only personal repositories owned by the session's GitHub account and granted to this app. Excludes other users and organizations; accepts no account or installation selector." })
+  @ApiOkResponse({ type: GitHubRepositoriesResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid pagination or unsupported query parameters" })
+  @ApiForbiddenResponse({ description: "An active, unsuspended authenticated user is required" })
+  @ApiServiceUnavailableResponse({ description: "GitHub repository lookup is unavailable" })
+  public async listGitHubRepositories(
+    @Req() request: Request,
+    @Query(new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true })) query: GitHubRepositoriesQueryDto,
+  ): Promise<GitHubRepositoriesResponseDto> {
+    const user: User = request.user as User;
+    if (!user.active) throw new ForbiddenException("An active user is required");
+    let result: GitHubRepositoryPage;
+    try {
+      result = await this.github.listOwnInstalledRepositories(user.id, query.page, query.per_page);
+    } catch {
+      throw new ServiceUnavailableException("GitHub repository lookup is unavailable");
+    }
+    return new GitHubRepositoriesResponseDto(result);
   }
 
   @Get("callback")

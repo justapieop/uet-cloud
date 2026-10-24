@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/github/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current account's installed GitHub repositories
+         * @description Only personal repositories owned by the session's GitHub account and granted to this app. Excludes other users and organizations; accepts no account or installation selector.
+         */
+        get: operations["AuthController_listGitHubRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/callback": {
         parameters: {
             query?: never;
@@ -436,6 +456,20 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        GitHubRepositoryResponseDto: {
+            id: number;
+            name: string;
+            full_name: string;
+            private: boolean;
+            default_branch: string | null;
+            html_url: string;
+        };
+        GitHubRepositoriesResponseDto: {
+            repositories: components["schemas"]["GitHubRepositoryResponseDto"][];
+            page: number;
+            per_page: number;
+            has_next_page: boolean;
+        };
         UserResponseDto: {
             id: string;
             display_name: string;
@@ -780,6 +814,49 @@ export interface operations {
                 content?: never;
             };
             /** @description GitHub App installation lookup is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AuthController_listGitHubRepositories: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepositoriesResponseDto"];
+                };
+            };
+            /** @description Invalid pagination or unsupported query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended authenticated user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub repository lookup is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
