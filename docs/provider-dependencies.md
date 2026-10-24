@@ -8,7 +8,7 @@ Nest module factories construct external clients and pass them to infrastructure
 | --- | --- | --- |
 | GitHubModule | KeyClient | KmsProvider, used by GitHubProvider |
 | BuildModule | Injected credential and HTTP transport | AzurePipelinesProvider |
-| DeploymentModule | ResourceManagementClient and ContainerAppsAPIClient | AzureProvider (provisioning), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
+| DeploymentModule | ResourceManagementClient, NetworkManagementClient, and ContainerAppsAPIClient | AzureProvider (provisioning), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
 | MonitoringModule | MonitorClient | AzureMonitorMetricsReader |
 | AcrModule | ContainerRegistryTasksManagementClient | AcrProvider |
 

@@ -33,6 +33,7 @@
     "lightningcss-linux-x64-gnu": "^1.33.0"
   },
   "dependencies": {
+    "@azure/arm-network": "^39.1.0",
     "@azure/core-rest-pipeline": "^1.25.0",
     "@nestjs/idempotency": "^0.0.2",
     "@nestjs/resilience": "^0.0.2"

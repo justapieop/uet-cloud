@@ -1,6 +1,7 @@
 import { ResilienceService } from "@nestjs/resilience";
 import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import { ResourceManagementClient } from "@azure/arm-resources";
+import { NetworkManagementClient } from "@azure/arm-network";
 import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
@@ -33,6 +34,12 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
   ],
   providers: [
     DeploymentWorker,
+    {
+      provide: NetworkManagementClient,
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): NetworkManagementClient =>
+        new NetworkManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }] }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
+    },
     {
       provide: ResourceManagementClient,
       useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): ResourceManagementClient =>
@@ -80,15 +87,16 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
       provide: AzureProvider,
       useFactory: (
         config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase,
-        resources: ResourceManagementClient, apps: ContainerAppsAPIClient,
+        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, network: NetworkManagementClient,
       ): AzureProvider => {
         const clients: AzureProviderClients = {
           resources: resources.resources, resourceGroups: resources.resourceGroups,
           managedEnvironments: apps.managedEnvironments, containerApps: apps.containerApps,
+          virtualNetworks: network.virtualNetworks,
         };
         return new AzureProvider(config, triggerBuild, getBuild, clients);
       },
-      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient],
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, NetworkManagementClient],
     },
     {
       provide: CreateDeploymentCase,

@@ -1,5 +1,6 @@
 import type { ContainerAppsAPIClient, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, WorkloadProfile } from "@azure/arm-appcontainers";
 import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
+import type { Delegation, NetworkManagementClient, Subnet, VirtualNetwork } from "@azure/arm-network";
 import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
 import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
@@ -10,6 +11,8 @@ import { describeBuildFailure, runBuildStep } from "../build-errors.js";
 import { userWorkloadResourceGroup } from "./workload-scope.js";
 
 const ACA_ENV_PREFIX: string = "user-aca-env-";
+const VNET_PREFIX: string = "user-vnet-";
+const ACA_SUBNET_NAME: string = "aca-infrastructure";
 
 export interface AzureRgInput {
   userId: string;
@@ -40,6 +43,7 @@ export interface AzureProviderClients {
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get" | "createOrUpdate">;
   containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate">;
+  virtualNetworks: Pick<NetworkManagementClient["virtualNetworks"], "get" | "createOrUpdate">;
 }
 
 @Injectable()
@@ -88,10 +92,13 @@ export class AzureProvider implements DeploymentProvisioner {
       environment = await this.clients.managedEnvironments.get(rgName, acaEnvName, { abortSignal: signal });
     } catch (error: unknown) {
       if (!this.isNotFound(error)) throw new BuildProviderError(`Managed environment lookup failed (${describeBuildFailure(error)})`, { cause: error });
+      const location: string = input.region ?? normalizeAzureRegion(rg.location);
+      const subnetId: string = await this.getUserInfrastructureSubnet(input.userId, location, signal);
       environment = await runBuildStep("Managed environment creation", () => this.clients.managedEnvironments.createOrUpdate(rgName, acaEnvName, {
-        location: input.region ?? normalizeAzureRegion(rg.location),
+        location,
         environmentMode: "WorkloadProfiles",
         workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+        vnetConfiguration: { infrastructureSubnetId: subnetId, internal: false },
       }, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }));
     }
     if (input.region && normalizeAzureRegion(environment.location) !== normalizeAzureRegion(input.region)) {
@@ -111,6 +118,46 @@ export class AzureProvider implements DeploymentProvisioner {
       throw new BuildProviderError("Managed environment is missing its resource ID");
     }
     return environment;
+  }
+
+  private async getUserInfrastructureSubnet(userId: string, location: string, signal: AbortSignal): Promise<string> {
+    const rgName: string = this.userResourceGroup(userId);
+    const vnetName: string = `${VNET_PREFIX}${userId}`;
+    const vnetId: string = `/subscriptions/${this.requiredSetting("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${rgName}/providers/Microsoft.Network/virtualNetworks/${vnetName}`;
+    const subnetId: string = `${vnetId}/subnets/${ACA_SUBNET_NAME}`;
+    let network: VirtualNetwork;
+    try {
+      network = await this.clients.virtualNetworks.get(rgName, vnetName, { abortSignal: signal });
+    } catch (error: unknown) {
+      if (!this.isNotFound(error)) throw new BuildProviderError(`Virtual network lookup failed (${describeBuildFailure(error)})`, { cause: error });
+      network = await runBuildStep("Virtual network creation", () => this.clients.virtualNetworks.createOrUpdate(rgName, vnetName, {
+        location,
+        addressSpace: { addressPrefixes: ["10.0.0.0/16"] },
+        subnets: [{ name: ACA_SUBNET_NAME, addressPrefix: "10.0.0.0/24",
+          delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] }],
+      }, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }));
+    }
+    if (network.id?.toLowerCase() !== vnetId.toLowerCase() || typeof network.location !== "string" || normalizeAzureRegion(network.location) !== location) {
+      throw new BuildProviderError("The user's virtual network identity or region does not match the requested workload scope");
+    }
+    while (network.provisioningState !== "Succeeded") {
+      if (!network.provisioningState || ["Failed", "Canceled", "Deleting"].includes(network.provisioningState)) {
+        throw new BuildProviderError(`Virtual network ${vnetName} is not ready: ${network.provisioningState ?? "unknown state"}`);
+      }
+      await delay(this.pollIntervalMs, undefined, { signal });
+      network = await runBuildStep("Virtual network readiness check", () => this.clients.virtualNetworks.get(rgName, vnetName, { abortSignal: signal }));
+    }
+    const subnet: Subnet | undefined = network.subnets?.find((candidate: Subnet): boolean => candidate.name === ACA_SUBNET_NAME);
+    const prefix: string | undefined = subnet?.addressPrefix ?? (subnet?.addressPrefixes?.length === 1 ? subnet.addressPrefixes[0] : undefined);
+    const prefixLength: number = Number(prefix?.split("/")[1]);
+    if (network.id?.toLowerCase() !== vnetId.toLowerCase() || typeof network.location !== "string" || normalizeAzureRegion(network.location) !== location ||
+      subnet?.id?.toLowerCase() !== subnetId.toLowerCase() || subnet.provisioningState !== "Succeeded" ||
+      !prefix || !/^(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(prefix) || prefixLength < 0 || prefixLength > 27 ||
+      !subnet.delegations?.some((delegation: Delegation): boolean => delegation.serviceName?.toLowerCase() === "microsoft.app/environments")) {
+      throw new BuildProviderError("The user's virtual network requires a ready dedicated aca-infrastructure subnet (/27 or larger) delegated to Microsoft.App/environments; existing networking was not modified");
+    }
+    signal.throwIfAborted();
+    return subnetId;
   }
 
   public async provisionDeployment(input: DeploymentProvisionInput, onBuildAccepted: (id: string, image: string) => Promise<void>): Promise<DeploymentProvisionResult> {

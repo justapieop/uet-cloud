@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import type { ContainerApp, ManagedEnvironment } from "@azure/arm-appcontainers";
+import type { VirtualNetwork } from "@azure/arm-network";
 import type { GetBuildCase, TriggerBuildCase, TriggerBuildInput, TriggerBuildResult } from "@kumo/application";
 import type { BuildDetails, BuildStatus } from "@kumo/domain";
 import { AzureProvider, type AzureDeploymentCreateInput, type AzureProviderClients } from "../dist/azure/provider.js";
 
 const ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/managedEnvironments/user-aca-env-123";
 const PULL_IDENTITY: string = "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.ManagedIdentity/userAssignedIdentities/acr-pull";
+const VNET_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.Network/virtualNetworks/user-vnet-123";
+const SUBNET_ID: string = `${VNET_ID}/subnets/aca-infrastructure`;
 const INPUT: AzureDeploymentCreateInput = { name: "my-app", userId: "123", repo: "https://github.com/owner/repo", targetPort: 8080 };
 
 interface FixtureOptions {
@@ -23,6 +26,13 @@ interface FixtureOptions {
   anonymousPullEnabled?: boolean;
   pullIdentityName?: string;
   onBuildRead?: () => void;
+  existingNetwork?: boolean;
+  network?: VirtualNetwork;
+  networkError?: unknown;
+  networkCreateError?: unknown;
+  networkStates?: readonly string[];
+  region?: string;
+  environmentVnet?: boolean;
 }
 
 interface Fixture {
@@ -38,9 +48,41 @@ function fixture(options: FixtureOptions = {}): Fixture {
   let environmentExists: boolean = options.existingResources ?? false;
   let environmentReads: number = 0;
   let buildReads: number = 0;
-  const environment: ManagedEnvironment = { id: ENVIRONMENT_ID, location: "southeastasia", provisioningState: "Succeeded" };
+  let networkExists: boolean = options.existingNetwork ?? false;
+  let networkReads: number = 0;
+  const environment: ManagedEnvironment = { id: ENVIRONMENT_ID, location: options.region ?? "southeastasia", provisioningState: "Succeeded",
+    ...(options.environmentVnet ? { vnetConfiguration: { infrastructureSubnetId: SUBNET_ID } } : {}) };
+  const network: VirtualNetwork = options.network ?? { id: VNET_ID, location: environment.location, provisioningState: "Succeeded",
+    subnets: [{ id: SUBNET_ID, name: "aca-infrastructure", provisioningState: "Succeeded", addressPrefix: "10.0.0.0/24",
+      delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] }] };
   if (options.existingApp) apps.set(INPUT.name, { location: environment.location, environmentId: ENVIRONMENT_ID });
   const clients: AzureProviderClients = {
+    virtualNetworks: {
+      get: async (rg: string, name: string): Promise<VirtualNetwork> => {
+        assert.equal(rg, "user-rg-123");
+        assert.equal(name, "user-vnet-123");
+        events.push("vnet-get");
+        if (options.networkError) throw options.networkError;
+        if (!networkExists) throw { statusCode: 404 };
+        const states: readonly string[] = options.networkStates ?? [network.provisioningState ?? "Succeeded"];
+        return { ...network, provisioningState: states[Math.min(networkReads++, states.length - 1)]! };
+      },
+      createOrUpdate: (rg: string, name: string, envelope: VirtualNetwork): ReturnType<AzureProviderClients["virtualNetworks"]["createOrUpdate"]> => {
+        assert.equal(rg, "user-rg-123");
+        assert.equal(name, "user-vnet-123");
+        assert.equal(envelope.location, (options.region ?? "southeastasia").replace(/\s/g, "").toLowerCase());
+        assert.deepEqual(envelope.addressSpace, { addressPrefixes: ["10.0.0.0/16"] });
+        assert.deepEqual(envelope.subnets, [{ name: "aca-infrastructure", addressPrefix: "10.0.0.0/24",
+          delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] }]);
+        events.push("vnet-create");
+        return { pollUntilDone: async (): Promise<VirtualNetwork> => {
+          if (options.networkCreateError) throw options.networkCreateError;
+          events.push("vnet-ready");
+          networkExists = true;
+          return network;
+        } } as ReturnType<AzureProviderClients["virtualNetworks"]["createOrUpdate"]>;
+      },
+    },
     resources: {
       getById: async () => {
         events.push("registry-check");
@@ -81,11 +123,14 @@ function fixture(options: FixtureOptions = {}): Fixture {
         assert.equal(name, "user-aca-env-123");
         assert.equal(envelope.environmentMode, "WorkloadProfiles");
         assert.deepEqual(envelope.workloadProfiles, [{ name: "Consumption", workloadProfileType: "Consumption" }]);
+        assert.deepEqual(envelope.vnetConfiguration, { infrastructureSubnetId: SUBNET_ID, internal: false });
+        assert.ok(events.includes("vnet-ready") || options.existingNetwork);
         events.push("env-create");
         return {
           pollUntilDone: async (): Promise<ManagedEnvironment> => {
             events.push("env-ready");
             environmentExists = true;
+            environment.vnetConfiguration = envelope.vnetConfiguration;
             return environment;
           },
         } as ReturnType<AzureProviderClients["managedEnvironments"]["createOrUpdate"]>;
@@ -154,7 +199,7 @@ test("missing resources are created in order and the app waits for build success
   const setup: Fixture = fixture();
   const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT, envVars: { NODE_ENV: "production" } });
   assert.deepEqual(setup.events, [
-    "rg-check", "rg-create", "env-get", "env-create", "env-ready", "app-get", "registry-check", "build-trigger",
+    "rg-check", "rg-create", "env-get", "vnet-get", "vnet-create", "vnet-ready", "env-create", "env-ready", "app-get", "registry-check", "build-trigger",
     "build-PENDING", "build-PREPARING", "build-RUNNING", "build-SUCCEEDED", "app-create", "app-ready",
   ]);
   assert.equal(app.environmentId, ENVIRONMENT_ID);
@@ -171,6 +216,7 @@ test("multiple apps reuse their user's resource group and managed environment", 
   await setup.provider.createDeployment({ ...INPUT, name: "second-app" });
   assert.equal(setup.events.filter((event: string): boolean => event === "rg-create").length, 1);
   assert.equal(setup.events.filter((event: string): boolean => event === "env-create").length, 1);
+  assert.equal(setup.events.filter((event: string): boolean => event === "vnet-create").length, 1);
   assert.equal(setup.apps.get("my-app")?.environmentId, setup.apps.get("second-app")?.environmentId);
 });
 
@@ -178,6 +224,75 @@ test("an existing app is reused without rebuilding or updating the environment",
   const setup: Fixture = fixture({ existingResources: true, existingApp: true });
   await setup.provider.createDeployment(INPUT);
   assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get", "app-get"]);
+});
+
+test("a ready existing user VNet is reused before creating the managed environment", async (): Promise<void> => {
+  const setup: Fixture = fixture({ existingNetwork: true });
+  await setup.provider.createDeployment(INPUT);
+  assert.equal(setup.events.includes("vnet-create"), false);
+  assert.ok(setup.events.indexOf("vnet-get") < setup.events.indexOf("env-create"));
+});
+
+test("VNet provisioning is awaited before environment creation", async (): Promise<void> => {
+  const setup: Fixture = fixture({ existingNetwork: true, networkStates: ["Updating", "Succeeded"] });
+  await setup.provider.createDeployment(INPUT);
+  assert.deepEqual(setup.events.slice(0, 6), ["rg-check", "rg-create", "env-get", "vnet-get", "vnet-get", "env-create"]);
+});
+
+test("VNet read and creation failures stop before environment creation and building", async (): Promise<void> => {
+  const failure: Error & { statusCode: number } = Object.assign(new Error("Forbidden"), { statusCode: 403 });
+  const denied: Fixture = fixture({ networkError: failure });
+  await assert.rejects(denied.provider.createDeployment(INPUT), (error: unknown): boolean => error instanceof Error && error.cause === failure);
+  assert.equal(denied.events.includes("vnet-create"), false);
+  assert.equal(denied.events.includes("env-create"), false);
+  const failed: Fixture = fixture({ networkCreateError: failure });
+  await assert.rejects(failed.provider.createDeployment(INPUT), /Virtual network creation failed/);
+  assert.equal(failed.events.includes("env-create"), false);
+  assert.equal(failed.events.includes("build-trigger"), false);
+});
+
+test("incompatible existing VNets fail without rewriting resources or building", async (): Promise<void> => {
+  const valid: VirtualNetwork = { id: VNET_ID, location: "southeastasia", provisioningState: "Succeeded", subnets: [
+    { id: SUBNET_ID, name: "aca-infrastructure", provisioningState: "Succeeded", addressPrefix: "10.0.0.0/24",
+      delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] },
+  ] };
+  const cases: { network: VirtualNetwork; error: RegExp }[] = [
+    { network: { ...valid, id: VNET_ID.replace("user-rg-123", "platform") }, error: /identity or region/ },
+    { network: { ...valid, location: "eastus" }, error: /identity or region/ },
+    { network: { ...valid, provisioningState: "Failed" }, error: /not ready: Failed/ },
+    { network: { ...valid, subnets: [] }, error: /dedicated aca-infrastructure subnet/ },
+    { network: { ...valid, subnets: [{ ...valid.subnets![0]!, delegations: [] }] }, error: /delegated/ },
+    { network: { ...valid, subnets: [{ ...valid.subnets![0]!, addressPrefix: "10.0.0.0/28" }] }, error: /27 or larger/ },
+    { network: { ...valid, subnets: [{ ...valid.subnets![0]!, id: `${VNET_ID}/subnets/foreign` }] }, error: /dedicated/ },
+  ];
+  for (let index: number = 0; index < cases.length; index++) {
+    const entry: typeof cases[number] = cases[index]!;
+    const setup: Fixture = fixture({ existingNetwork: true, network: entry.network });
+    await assert.rejects(setup.provider.createDeployment(INPUT), entry.error);
+    assert.equal(setup.events.includes("vnet-create"), false);
+    assert.equal(setup.events.includes("env-create"), false);
+    assert.equal(setup.events.includes("build-trigger"), false);
+  }
+});
+
+test("new VNet-connected environments support external additional TCP ports", async (): Promise<void> => {
+  const setup: Fixture = fixture();
+  const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT,
+    additionalPorts: [{ targetPort: 9090, exposedPort: 9091, external: true }],
+  });
+  assert.deepEqual(app.configuration?.ingress?.additionalPortMappings, [{ targetPort: 9090, exposedPort: 9091, external: true }]);
+});
+
+test("legacy environments without VNet are preserved and external ports fail before building", async (): Promise<void> => {
+  const setup: Fixture = fixture({ existingResources: true });
+  await assert.rejects(setup.provider.createDeployment({ ...INPUT, additionalPorts: [{ targetPort: 9090, external: true }] }), /virtual network/);
+  assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get"]);
+});
+
+test("network and environment creation use the requested normalized region", async (): Promise<void> => {
+  const setup: Fixture = fixture({ region: "Japan East" });
+  const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT, region: "japaneast" });
+  assert.equal(app.location, "japaneast");
 });
 
 const FAILED_STATUSES: readonly BuildStatus[] = ["FAILED", "CANCELED"];
