@@ -17,21 +17,21 @@ export function InfrastructureMetaCard({ deployment }: InfrastructureMetaCardPro
     <section aria-labelledby="infra-heading" className="rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6">
       <div className="flex items-center justify-between border-b border-surface-border pb-4">
         <div>
-          <h2 id="infra-heading" className="text-sm font-medium text-foreground">Azure & Build Infrastructure</h2>
-          <p className="mt-0.5 text-xs text-muted-text">Cloud resource coordinates and artifact provenance</p>
+          <h2 id="infra-heading" className="text-sm font-medium text-foreground">Build & Environment Metadata</h2>
+          <p className="mt-0.5 text-xs text-muted-text">Artifact provenance and regional deployment details</p>
         </div>
         <span className="rounded-md border border-surface-border bg-white/[0.02] px-2 py-0.5 font-mono text-[11px] text-muted-text">
-          ARM Metadata
+          Metadata
         </span>
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="rounded-lg border border-surface-border bg-background/50 p-4">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-text">Azure Location</span>
+          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-text">Region</span>
           <p className="mt-1.5 font-mono text-sm font-medium text-foreground">
             {deployment.region ?? "Default (southeastasia)"}
           </p>
-          <p className="mt-1 text-[11px] text-muted-dark">User managed environment region</p>
+          <p className="mt-1 text-[11px] text-muted-dark">Deployment workload region</p>
         </div>
 
         <div className="rounded-lg border border-surface-border bg-background/50 p-4">
@@ -48,14 +48,6 @@ export function InfrastructureMetaCard({ deployment }: InfrastructureMetaCardPro
             {deployment.image ?? "Pending image build resolution"}
           </p>
           <p className="mt-1 text-[11px] text-muted-dark">Resolved registry address and commit tag</p>
-        </div>
-
-        <div className="rounded-lg border border-surface-border bg-background/50 p-4 sm:col-span-2">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-text">Azure Resource ID</span>
-          <p className="mt-1.5 break-all font-mono text-[11px] leading-5 text-muted-text">
-            {deployment.resource_id ?? "Not provisioned yet"}
-          </p>
-          <p className="mt-1 text-[11px] text-muted-dark">Azure Container App ARM resource path</p>
         </div>
 
         <div className="rounded-lg border border-surface-border bg-background/50 p-4">

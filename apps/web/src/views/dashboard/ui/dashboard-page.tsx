@@ -92,7 +92,7 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
                         <td className="px-6 py-5">
                           <div className="flex min-w-0 items-start gap-3">
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium" title={deployment.name}>{deployment.name}</p>
+                              <a href={`/dashboard/deployments/${deployment.id}`} className="block truncate text-[13px] font-medium text-foreground transition-colors hover:text-blue-300" title={`Mission Control for ${deployment.name}`}>{deployment.name}</a>
                               {deployment.fqdn && /^[a-zA-Z0-9.-]+$/.test(deployment.fqdn) ? <a href={`https://${deployment.fqdn}`} target="_blank" rel="noopener noreferrer" className="mt-1 block truncate text-xs text-muted-text transition-colors hover:text-blue-300" title={deployment.fqdn}>{deployment.fqdn}</a> : <p className="mt-1 text-xs text-muted-dark">No public endpoint</p>}
                               {deployment.image && <p className="mt-1 truncate font-mono text-[10px] text-muted-dark" title={deployment.image}>{deployment.image}</p>}
                               {deployment.error && <details className="mt-2 text-xs"><summary className="w-fit cursor-pointer text-red-300 transition-colors hover:text-red-200">View error</summary><p className="mt-2 break-words rounded-md border border-red-400/15 bg-red-400/5 p-3 leading-5 text-red-200/80">{deployment.error}</p></details>}
