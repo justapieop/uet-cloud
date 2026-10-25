@@ -1,0 +1,25 @@
+# Local dependencies and outputs must never replace clean container builds.
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+**/.next
+**/coverage
+**/.cache
+**/*.log
+
+# Credentials, repository metadata, and local tooling are not build inputs.
+**/.env
+**/.env.*
+**/.npmrc
+**/*.pem
+**/*.key
+.git
+.github
+.agents
+.codex
+.aws
+.azure
+.heroui-docs
+.idea
+.vscode
+docs

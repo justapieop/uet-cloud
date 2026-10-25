@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- The backend API image uses a multi-stage build with a non-root distroless Node 24 runtime. Build it from the repository root with `apps/api/Dockerfile`; keep workspace manifests and production dependencies with compiled backend output, and inject configuration at runtime. See [API Docker image](../api-docker.md).
+
 - `POST /github/webhook` verifies GitHub JSON deliveries with `GITHUB_WEBHOOK_SECRET`. Branch pushes rebuild matching deployments owned by the repository's personal account after live repository/installation ownership, permission, subscription, and quota checks. Accepted rebuilds use the existing durable deployment queue and transactional receipts to deduplicate signed push payloads per deployment. Non-push events return 400. Unlinked branches and ineligible/busy apps are acknowledged without rebuilding. See [GitHub webhooks](../github-webhooks.md).
 
 - `POST /deployments/:id/redeploy` rebuilds and updates a user's existing app through Kumo. It uses DeploymentUpdate, a required idempotency key, fresh billing/quota checks, and the existing durable deployment queue. The worker waits for the SHA-tagged image build/push to succeed before patching the owned app's image, preserving its applied configuration. The shared Azure Pipeline remains build/push only; no fixed app target or GitHub-push trigger is introduced. See [redeployment](../redeployment.md).
