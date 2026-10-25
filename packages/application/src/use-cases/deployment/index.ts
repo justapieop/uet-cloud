@@ -11,3 +11,4 @@ export * from "./GetDeploymentMetrics.case.js";
 export * from "./StartDeployment.case.js";
 export * from "./StopDeployment.case.js";
 export * from "./RedeployDeployment.case.js";
+export * from "./ProcessGitHubPush.case.js";

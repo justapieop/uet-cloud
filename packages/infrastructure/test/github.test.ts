@@ -4,6 +4,7 @@ import { test, type TestContext } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import { KmsProvider, type KeyOperationInput } from "../dist/azure/kms.js";
 import { GitHubProvider } from "../dist/github/provider.js";
+import type { GitHubPush } from "@kumo/application";
 
 function createProvider(context: TestContext): GitHubProvider {
   const kms: KmsProvider = Object.create(KmsProvider.prototype) as KmsProvider;
@@ -14,6 +15,53 @@ function createProvider(context: TestContext): GitHubProvider {
   });
   return new GitHubProvider(kms, config, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
 }
+
+test("webhook ownership checks the live app installation and immutable personal repository owner before rebuild", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  const push: GitHubPush = { repositoryId: 789, installationId: 456, ownerId: "123", owner: "owner", name: "repo", ref: "refs/heads/main", after: "a".repeat(40) };
+  const validInstallation: Record<string, unknown> = { id: 456, account: { id: 123, type: "User" }, suspended_at: null };
+  const validRepository: Record<string, unknown> = { id: 789, owner: { id: 123, login: "owner", type: "User" }, name: "repo", default_branch: "main" };
+  let installation: Record<string, unknown> = validInstallation;
+  let repository: Record<string, unknown> = validRepository;
+  let status: number = 200;
+  let tokens: number = 0;
+  context.mock.method(globalThis, "fetch", async (url: string, init: RequestInit): Promise<Response> => {
+    if (url.endsWith("/installation")) return status === 200 ? Response.json(installation) : new Response("private GitHub error", { status });
+    if (url.endsWith("/access_tokens")) {
+      tokens++;
+      assert.equal(url, "https://api.github.com/app/installations/456/access_tokens");
+      assert.deepEqual(JSON.parse(String(init.body)), { repositories: ["repo"], permissions: { contents: "read" } });
+      return Response.json({ token: "scoped-token", expires_at: "2099-01-01T00:00:00Z" });
+    }
+    assert.equal(url, "https://api.github.com/repos/owner/repo");
+    assert.equal((init.headers as Record<string, string>).Authorization, "Bearer scoped-token");
+    return Response.json(repository);
+  });
+  assert.deepEqual(await provider.inspectPushRepository(push), { defaultBranch: "main" });
+  const invalidInstallations: Record<string, unknown>[] = [
+    { ...validInstallation, id: 999 }, { ...validInstallation, account: { id: 999, type: "User" } },
+    { ...validInstallation, account: { id: 123, type: "Organization" } }, { ...validInstallation, suspended_at: "2026-01-01" },
+  ];
+  for (let index: number = 0; index < invalidInstallations.length; index++) {
+    installation = invalidInstallations[index]!;
+    assert.equal(await provider.inspectPushRepository(push), null);
+    assert.equal(tokens, 1, "No token may be minted for an unowned or suspended installation");
+  }
+  installation = validInstallation;
+  const invalidRepositories: Record<string, unknown>[] = [
+    { ...validRepository, id: 999 }, { ...validRepository, owner: { id: 999, login: "owner", type: "User" } },
+    { ...validRepository, owner: { id: 123, login: "owner", type: "Organization" } },
+    { ...validRepository, owner: { id: 123, login: "renamed", type: "User" } }, { ...validRepository, name: "other" },
+  ];
+  for (let index: number = 0; index < invalidRepositories.length; index++) {
+    repository = invalidRepositories[index]!;
+    assert.equal(await provider.inspectPushRepository(push), null);
+  }
+  status = 404;
+  assert.equal(await provider.inspectPushRepository(push), null);
+  status = 503;
+  await assert.rejects(provider.inspectPushRepository(push), /installation lookup failed/);
+});
 
 test("installation token uses a KMS-signed JWT and repository-limited read permissions", async (context: TestContext): Promise<void> => {
   const kms: KmsProvider = Object.create(KmsProvider.prototype) as KmsProvider;

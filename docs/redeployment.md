@@ -16,6 +16,6 @@ Conditional owner-scoped SQL status transitions serialize redeploy acceptance ag
 
 No migration or new `.env`/pipeline variables are required: queue status and resource IDs already exist in SQL, and the backend's existing ARM identity performs the update. It needs Container App update permission, as it already does for provisioning. The build pipeline service connection retains its ACR push scope; no fixed app names/resource groups are added to it.
 
-This adds rebuild/update through Kumo, not a GitHub-push webhook. A frontend button or API caller initiates redeployment. Repository push subscriptions and webhook signature/replay validation remain separate future work.
+A frontend button or API caller can initiate redeployment. Verified branch pushes to `POST /github/webhook` also reuse this use case for matching owner-scoped deployments after live GitHub ownership and permission checks. Signed-payload fingerprint keys deduplicate accepted rebuilds per deployment. See [GitHub webhooks](github-webhooks.md) for branch matching, eligibility, and busy-app limitations.
 
 Validation: `npm run test:api` includes application receipt/eligibility/rollback tests, HTTP permission and replay tests, Azure ownership/build-gating/configuration-preservation tests, and lifecycle tests. The separate `npm run test:db` suite includes competing redeploy/stop status transitions on real SQL Server; run it only with dedicated test credentials. Neither suite deploys to live Azure.

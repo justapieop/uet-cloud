@@ -14,6 +14,7 @@ import { PermissionsModule } from "./Permissions.module.js";
 import { PlanModule } from "./Plan.module.js";
 import { RoleModule } from "./Role.module.js";
 import { RegionsModule } from "./Regions.module.js";
+import { GitHubWebhookModule } from "./GitHubWebhook.module.js";
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { RegionsModule } from "./Regions.module.js";
         const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production"));
         return {
           pinoHttp: {
-            redact: ["req.headers.authorization", "req.headers.cookie", "res.headers['set-cookie']"],
+            redact: ["req.headers.authorization", "req.headers.cookie", "req.headers['x-hub-signature-256']", "res.headers['set-cookie']"],
             level: devMode ? "debug" : "info",
             quietReqLogger: devMode,
             quietResLogger: devMode,
@@ -49,6 +50,7 @@ import { RegionsModule } from "./Regions.module.js";
     PlanModule,
     RoleModule,
     RegionsModule,
+    GitHubWebhookModule,
   ],
 })
 export class RootModule { }

@@ -143,6 +143,7 @@ import { RedeploymentsController } from "../controllers/Redeployments.controller
     },
   ],
   exports: [
+    RedeployDeploymentCase,
     AzureProvider,
     CreateDeploymentCase,
     GetDeploymentCase,
