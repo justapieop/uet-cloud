@@ -6,12 +6,13 @@ import { parseGitHubRepository, type GitHubRepository } from "./repository.js";
 import { runBuildStep } from "../build-errors.js";
 import type { HttpTransport } from "../external-clients.js";
 import type { GitHubRepositoryPage, InstalledGitHubRepository } from "@kumo/application";
+import type { GitHubPush, GitHubWebhookRepositoryGateway } from "@kumo/application";
 
 const GITHUB_API_VERSION: string = "2026-03-10";
 const REQUEST_TIMEOUT_MS: number = 30_000;
 
 @Injectable()
-export class GitHubProvider implements RepositoryBuildSourcePort {
+export class GitHubProvider implements RepositoryBuildSourcePort, GitHubWebhookRepositoryGateway {
   private readonly clientId: string;
   private readonly keyName: string;
 
@@ -95,6 +96,27 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
           private: repository.private, defaultBranch: repository.default_branch });
       }
       return { repositories, page, perPage, hasNextPage: page * perPage < result.total_count };
+    });
+  }
+
+  public async inspectPushRepository(push: GitHubPush): Promise<{ readonly defaultBranch: string } | null> {
+    return runBuildStep("GitHub webhook repository ownership", async (): Promise<{ readonly defaultBranch: string } | null> => {
+      const jwt: string = await this.createAppJwt();
+      const path: string = `/repos/${encodeURIComponent(push.owner)}/${encodeURIComponent(push.name)}`;
+      const response: Response = await this.githubRequest(`${path}/installation`, jwt);
+      if (response.status === 404) return null;
+      if (!response.ok) throw new BuildProviderError("GitHub webhook installation lookup failed");
+      const installation: unknown = await response.json();
+      if (!isRecord(installation) || installation.id !== push.installationId || !isRecord(installation.account)
+        || String(installation.account.id) !== push.ownerId || installation.account.type !== "User" || installation.suspended_at != null) return null;
+      const token: string = await this.createInstallationToken(push.installationId, jwt, [push.name]);
+      const repository: unknown = await this.getJson(path, token);
+      if (!isRecord(repository) || repository.id !== push.repositoryId || !isRecord(repository.owner)
+        || String(repository.owner.id) !== push.ownerId || repository.owner.type !== "User"
+        || typeof repository.owner.login !== "string" || repository.owner.login.toLowerCase() !== push.owner.toLowerCase()
+        || typeof repository.name !== "string" || repository.name.toLowerCase() !== push.name.toLowerCase()
+        || typeof repository.default_branch !== "string" || !repository.default_branch) return null;
+      return { defaultBranch: repository.default_branch };
     });
   }
 

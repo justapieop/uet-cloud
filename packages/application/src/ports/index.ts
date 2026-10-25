@@ -14,4 +14,5 @@ export * from "./plan.js";
 export * from "./plan-subscription.js";
 export * from "./admin-billing.js";
 export * from "./github-repositories.js";
+export * from "./github-webhook.js";
 export * from "./deployment-regions.js";

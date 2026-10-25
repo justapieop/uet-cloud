@@ -1,7 +1,7 @@
 import { ResilienceService } from "@nestjs/resilience";
 import { KeyClient } from "@azure/keyvault-keys";
 import {
-  createAzureResiliencePolicy, AZURE_CREDENTIAL, HTTP_TRANSPORT, KmsProvider, GitHubProvider,
+  createAzureResiliencePolicy, AZURE_CREDENTIAL, HTTP_TRANSPORT, KmsProvider, GitHubProvider, GitHubWebhookVerifier,
   type AzureCredential, type HttpTransport,
 } from "@kumo/infrastructure";
 import { Module } from "@nestjs/common";
@@ -12,6 +12,7 @@ import { ExternalClientsModule } from "./ExternalClients.module.js";
 @Module({
   imports: [AppConfigModule, ExternalClientsModule],
   providers: [
+    GitHubWebhookVerifier,
     {
       provide: KeyClient,
       useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): KeyClient => {
@@ -32,6 +33,6 @@ import { ExternalClientsModule } from "./ExternalClients.module.js";
       inject: [KmsProvider, ConfigService, HTTP_TRANSPORT],
     },
   ],
-  exports: [GitHubProvider],
+  exports: [GitHubProvider, GitHubWebhookVerifier],
 })
 export class GitHubModule {}

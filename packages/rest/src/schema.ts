@@ -492,6 +492,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/github/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive a signed GitHub push webhook
+         * @description Accepts only push events and verifies HMAC-SHA256 with GITHUB_WEBHOOK_SECRET. Pushes enqueue rebuilds for deployments matching the repository owner and branch after current GitHub installation/ownership, permission, and subscription checks. Repeated signed payloads are deduplicated persistently per deployment. Other event types return 400. No session required.
+         */
+        post: operations["GitHubWebhookController_receive"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2310,6 +2330,77 @@ export interface operations {
                 content?: never;
             };
             /** @description Subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GitHubWebhookController_receive: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description GitHub delivery GUID */
+                "X-GitHub-Delivery": string;
+                /** @description Only push is supported */
+                "X-GitHub-Event": "push";
+                /** @description sha256= followed by the payload HMAC hex digest */
+                "X-Hub-Signature-256": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Verified delivery acknowledged */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        received: true;
+                    };
+                };
+            };
+            /** @description Unsupported event type, malformed JSON/push payload, or missing/invalid event or delivery headers */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing, malformed, or incorrect SHA-256 signature */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Payload exceeds the default 100 KiB JSON parser limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Content-Type must be application/json */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Webhook secret is not configured or GitHub, billing, or queue acceptance is unavailable; redelivery is safe */
             503: {
                 headers: {
                     [name: string]: unknown;

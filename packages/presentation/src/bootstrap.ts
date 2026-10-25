@@ -14,6 +14,7 @@ import { createOpenApiConfig } from "./common/OpenApi.js";
 export async function bootstrap(): Promise<void> {
   const app: INestApplication = await NestFactory.create(RootModule, {
     bufferLogs: true,
+    rawBody: true,
   });
   const config: ConfigService = app.get(ConfigService);
   const port: number = Number(config.get<string>("PORT", "3000"));

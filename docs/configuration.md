@@ -37,6 +37,10 @@ Set `GITHUB_OAUTH2_CLIENT_ID`, `GITHUB_OAUTH2_SECRET`, and `GITHUB_OAUTH2_REDIRE
 
 Application settings are loaded at startup; changes in Azure require an API restart to take effect. Feature flags are loaded at startup by a separate module and polled from Azure App Configuration every 12 hours. Consumers of the `FEATURE_FLAGS` provider read its current `feature_flags` property to get the latest snapshot. If a poll fails, the last known flags remain available until a later poll succeeds. With `CONFIG_SOURCE=local`, the provider supplies an empty flag list and does not poll.
 
+## GitHub webhooks
+
+Set `GITHUB_WEBHOOK_SECRET` to the same secret configured on the GitHub App webhook. Use `POST /github/webhook` as the webhook URL with JSON content. Missing or blank configuration disables receipt with HTTP 503; incorrect signatures return 401. See [GitHub webhook setup and verification](github-webhooks.md).
+
 ## GitHub installation tokens
 
 ### GitHub App installation redirect
