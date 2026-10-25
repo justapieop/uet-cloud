@@ -21,10 +21,11 @@ import { UserRolesController } from "../dist/controllers/UserRoles.controller.js
 import { RegionsController } from "../dist/controllers/Regions.controller.js";
 import { RedeploymentsController } from "../dist/controllers/Redeployments.controller.js";
 import { GitHubWebhookController } from "../dist/controllers/GitHubWebhook.controller.js";
+import { RootController } from "../dist/controllers/Root.controller.js";
 import { createOpenApiConfig } from "../dist/common/OpenApi.js";
 
 test("OpenAPI covers controller operations, session authentication, and generated client paths", async (context: TestContext): Promise<void> => {
-  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController, GitHubWebhookController];
+  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController, GitHubWebhookController, RootController];
   // Resolve controllers without starting SQL, sessions, workers, or cloud clients.
   const tokens: Set<Type<object> | string | symbol> = new Set([
     CheckPermissionsCase, CACHE_MANAGER,
@@ -55,7 +56,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 34);
+  assert.equal(count, 35);
   const webhook: OperationObject = document.paths["/github/webhook"]!.post!;
   assert.ok(webhook.responses["200"]);
   assert.ok(webhook.responses["401"]);

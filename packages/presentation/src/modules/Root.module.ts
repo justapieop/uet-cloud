@@ -15,8 +15,10 @@ import { PlanModule } from "./Plan.module.js";
 import { RoleModule } from "./Role.module.js";
 import { RegionsModule } from "./Regions.module.js";
 import { GitHubWebhookModule } from "./GitHubWebhook.module.js";
+import { RootController } from "../controllers/Root.controller.js";
 
 @Module({
+  controllers: [RootController],
   imports: [
     AppConfigModule,
     AppIdempotencyModule,
