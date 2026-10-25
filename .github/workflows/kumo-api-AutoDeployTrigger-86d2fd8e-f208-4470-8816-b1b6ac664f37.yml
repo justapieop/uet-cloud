@@ -37,12 +37,12 @@ jobs:
           appSourcePath: ${{ github.workspace }}
           _dockerfilePathKey_: _dockerfilePath_
           _targetLabelKey_: _targetLabel_
-          registryUrl: kumoreg.azurecr.io
+          registryUrl: ${{ secrets.KUMOAPI_REGISTRY_URL }}
           registryUsername: ${{ secrets.KUMOAPI_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.KUMOAPI_REGISTRY_PASSWORD }}
-          containerAppName: kumo-api
-          resourceGroup: kumo-rg
-          imageToBuild: kumoreg.azurecr.io/kumo-api:${{ github.sha }}
+          containerAppName: ${{ secrets.KUMOAPI_CONTAINER_APP_NAME }}
+          resourceGroup: ${{ secrets.KUMOAPI_RG_NAME }}
+          imageToBuild: ${{ secrets.KUMOAPI_REGISTRY_URL }}/${{ secrets.KUMOAPI_CONTAINER_APP_NAME }}:${{ github.sha }}
           _buildArgumentsKey_: |
             _buildArgumentsValues_
 
