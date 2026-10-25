@@ -1,0 +1,103 @@
+name: Build and push API image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/api-image.yml
+      - .dockerignore
+      - package.json
+      - package-lock.json
+      - tsconfig.json
+      - apps/api/**
+      - packages/domain/**
+      - packages/contracts/**
+      - packages/application/**
+      - packages/infrastructure/**
+      - packages/presentation/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: api-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      IMAGE_NAME: ${{ vars.ACR_REPOSITORY || 'kumo-api' }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Validate registry configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$ACR_NAME" =~ ^[a-zA-Z0-9]{5,50}$ ]]; then
+            echo "::error::Set repository variable ACR_NAME to the registry resource name, without .azurecr.io."
+            exit 1
+          fi
+          if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
+            echo "::error::ACR_REPOSITORY must be a lowercase image repository path."
+            exit 1
+          fi
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to ACR
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          login_server="$(az acr show --name "$ACR_NAME" --query loginServer --output tsv)"
+          if [[ -z "$login_server" || "$login_server" == *[[:space:]]* || "$login_server" == *'/'* ]]; then
+            echo "::error::Azure returned an invalid registry login server."
+            exit 1
+          fi
+          az acr login --name "$ACR_NAME"
+          echo "login-server=$login_server" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push API image
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.registry.outputs.login-server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=kumo-api
+          cache-to: type=gha,mode=max,scope=kumo-api
+
+      - name: Report published image
+        env:
+          IMAGE: ${{ steps.registry.outputs.login-server }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          printf 'Published API image: `%s`\n\nDigest: `%s`\n' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"

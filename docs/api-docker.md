@@ -29,3 +29,23 @@ docker run --rm --name kumo-api -p 3000:3000 \
 ```
 
 Database, Redis, and MongoDB addresses must be reachable from inside the container; container-local `localhost` does not refer to the host. The container user can write temporary build-source archives to `/tmp`. Application code and installed dependencies remain owned by root. No HTTP healthcheck is invented by the image; configure deployment probes according to the API's available routes and dependency startup time. The API runs migrations at startup, so its database identity retains the existing migration permission requirement.
+
+## Publish to ACR with GitHub Actions
+
+`.github/workflows/api-image.yml` builds this Dockerfile and pushes the platform API image on relevant backend changes to `main`, or through **Actions > Build and push API image > Run workflow** with `main` selected. Other branches cannot publish through this workflow. It builds `linux/amd64` from the repository-root context, keeps a GitHub Actions build cache, and tags the image `<login-server>/<repository>:<full-git-commit-sha>`. The default image repository is `kumo-api`. The run summary includes the published reference and digest.
+
+Configure these GitHub repository settings under **Settings > Secrets and variables > Actions**:
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `ACR_NAME` | Azure registry resource name, such as `kumoreg`, without a hostname suffix |
+| Variable (optional) | `ACR_REPOSITORY` | Image repository path; defaults to `kumo-api` |
+| Secret | `AZURE_CLIENT_ID` | Client ID of the publishing Entra application or user-assigned managed identity |
+| Secret | `AZURE_TENANT_ID` | Microsoft Entra tenant ID |
+| Secret | `AZURE_SUBSCRIPTION_ID` | Subscription containing the registry |
+
+Configure an Azure [OIDC federated credential](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect) on that identity with issuer `https://token.actions.githubusercontent.com`, audience `api://AzureADTokenExchange`, and subject `repo:<github-owner>/<github-repository>:ref:refs/heads/main`. These values assume GitHub's default OIDC subject format. The job requests `id-token: write`; no Azure client secret or registry admin password is needed.
+
+Grant the identity registry-scoped `AcrPush` for a registry using RBAC-only permissions. For an ABAC-enabled registry, use `Container Registry Repository Writer`, optionally restricted to the chosen repository, and registry-scoped `Reader` so `az acr show` can resolve the login server. See [ACR's RBAC/ABAC roles](https://learn.microsoft.com/en-us/azure/container-registry/container-registry-rbac-abac-repository-permissions). The runner must be able to reach the registry; a registry available only on a private network needs a runner with network access.
+
+GitHub repository secrets/variables configure publishing independently from the API's `.env` and Azure App Configuration. This workflow publishes the platform API image only. It does not update an Azure Container App; select the published image reference in the platform's deployment process. The Azure Pipelines workflow for users' applications remains separate.
