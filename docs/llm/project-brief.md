@@ -14,6 +14,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 ## Confirmed direction
 
 - The backend API image uses a multi-stage build with a non-root distroless Node 24 runtime. Build it from the repository root with `apps/api/Dockerfile`; keep workspace manifests and production dependencies with compiled backend output, and inject configuration at runtime. See [API Docker image](../api-docker.md).
+- The Azure-generated GitHub workflow keeps its `KUMOAPI_*` secrets, explicitly builds `apps/api/Dockerfile` from the repository root, pushes its commit-SHA image, and updates the existing platform API app to that published digest. It uses image-only Azure CLI updates, not an automatic resource-provisioning action, and waits for a ready revision in Single revision mode. See [API image CI/CD](../api-docker.md#publish-to-acr-with-github-actions).
 
 - `POST /github/webhook` verifies GitHub JSON deliveries with `GITHUB_WEBHOOK_SECRET`. Branch pushes rebuild matching deployments owned by the repository's personal account after live repository/installation ownership, permission, subscription, and quota checks. Accepted rebuilds use the existing durable deployment queue and transactional receipts to deduplicate signed push payloads per deployment. Non-push events return 400. Unlinked branches and ineligible/busy apps are acknowledged without rebuilding. See [GitHub webhooks](../github-webhooks.md).
 
