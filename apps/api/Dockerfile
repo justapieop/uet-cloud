@@ -1,6 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # Build from the repository root: docker build -f apps/api/Dockerfile -t kumo-api .
+# The final '.' is the build context: apps/api alone excludes the root lockfile
+# and shared packages. Azure Actions must use appSourcePath: github.workspace
+# with dockerfilePath: apps/api/Dockerfile.
 FROM node:24-trixie-slim AS manifests
 WORKDIR /app
 

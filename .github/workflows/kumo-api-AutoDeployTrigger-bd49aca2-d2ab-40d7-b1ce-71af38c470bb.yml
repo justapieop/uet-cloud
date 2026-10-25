@@ -34,16 +34,14 @@ jobs:
       - name: Build and push container image to registry
         uses: azure/container-apps-deploy-action@v2
         with:
-          appSourcePath: ${{ github.workspace }}/apps/api
-          _dockerfilePathKey_: _dockerfilePath_
-          _targetLabelKey_: _targetLabel_
+          # COPY sources are relative to the monorepo root, not apps/api.
+          appSourcePath: ${{ github.workspace }}
+          dockerfilePath: apps/api/Dockerfile
           registryUrl: kumoreg.azurecr.io
           registryUsername: ${{ secrets.KUMOAPI_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.KUMOAPI_REGISTRY_PASSWORD }}
           containerAppName: kumo-api
           resourceGroup: kumo-rg
           imageToBuild: kumoreg.azurecr.io/kumo-api:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
 
 
