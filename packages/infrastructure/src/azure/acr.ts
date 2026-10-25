@@ -1,32 +1,35 @@
-import { ContainerRegistryTasksManagementClient, type DockerBuildRequest, type Run, type SourceUploadDefinition } from "@azure/arm-containerregistrytasks";
-import { DefaultAzureCredential } from "@azure/identity";
+import type { ContainerRegistryTasksManagementClient, DockerBuildRequest, Run, SourceUploadDefinition } from "@azure/arm-containerregistrytasks";
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { BuildProviderError, type BuildRun, type BuildTriggerInput, type ContainerBuildPort } from "@kumo/application";
 import { prepareBuildContext } from "./build-context.js";
 import { runBuildStep } from "../build-errors.js";
+import type { HttpTransport } from "../external-clients.js";
 
 export { extractGitRepositoryName } from "../github/repository.js";
 
+export interface AcrClient {
+  readonly registries: Pick<ContainerRegistryTasksManagementClient["registries"], "getBuildSourceUploadUrl" | "scheduleRun">;
+}
+
 @Injectable()
 export class AcrProvider implements ContainerBuildPort {
-  private readonly acrManager: ContainerRegistryTasksManagementClient;
   private readonly registryServer: string;
   private readonly registryName: string;
   private readonly rgName: string;
 
-  public constructor(config: ConfigService) {
-    const credentials: DefaultAzureCredential = new DefaultAzureCredential();
+  public constructor(
+    config: ConfigService,
+    private readonly acrManager: AcrClient,
+    private readonly http: HttpTransport,
+  ) {
     this.registryName = config.getOrThrow<string>("AZURE_CONTAINER_REGISTRY_NAME");
     this.registryServer = config.getOrThrow<string>("AZURE_CONTAINER_REGISTRY_SERVER");
     this.rgName = config.getOrThrow<string>("AZURE_RG_NAME");
-    this.acrManager = new ContainerRegistryTasksManagementClient(
-      credentials,
-      config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"),
-    );
   }
 
   public async triggerBuild(input: BuildTriggerInput): Promise<BuildRun> {
+    if (!/^[a-f0-9]{40}$/i.test(input.commitSha)) throw new BuildProviderError("Invalid resolved Git commit SHA");
     const context: Buffer = await runBuildStep("Source archive preparation", () => prepareBuildContext(input.archive, input.dockerFilePath));
     const upload: SourceUploadDefinition = await runBuildStep("ACR build source upload URL request", () =>
       this.acrManager.registries.getBuildSourceUploadUrl(this.rgName, this.registryName),
@@ -35,7 +38,7 @@ export class AcrProvider implements ContainerBuildPort {
       throw new BuildProviderError("Azure did not return a build source upload location");
     }
     const uploadUrl: string = upload.uploadUrl;
-    const uploaded: Response = await runBuildStep("ACR source upload", () => fetch(uploadUrl, {
+    const uploaded: Response = await runBuildStep("ACR source upload", () => this.http(uploadUrl, {
       method: "PUT",
       headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": "application/octet-stream" },
       body: Uint8Array.from(context).buffer,
@@ -45,7 +48,7 @@ export class AcrProvider implements ContainerBuildPort {
     if (!uploaded.ok) {
       throw new BuildProviderError(`ACR source upload failed: HTTP ${uploaded.status}`);
     }
-    const image: string = `${this.registryServer}/${input.imageName}:${input.tag}`;
+    const image: string = `${this.registryServer}/${input.imageName}:${input.commitSha.toLowerCase()}`;
     const request: DockerBuildRequest = {
       type: "DockerBuildRequest",
       sourceLocation: upload.relativePath,

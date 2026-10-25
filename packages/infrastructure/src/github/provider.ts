@@ -1,9 +1,11 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { KmsProvider } from "../azure/kms.js";
+import type { KmsProvider } from "../azure/kms.js";
 import { BuildAccessDenied, BuildProviderError, InvalidBuildInput, type BuildSource, type BuildSourceInput, type RepositoryBuildSourcePort } from "@kumo/application";
 import { parseGitHubRepository, type GitHubRepository } from "./repository.js";
 import { runBuildStep } from "../build-errors.js";
+import type { HttpTransport } from "../external-clients.js";
+import type { GitHubRepositoryPage, InstalledGitHubRepository } from "@kumo/application";
 
 const GITHUB_API_VERSION: string = "2026-03-10";
 const REQUEST_TIMEOUT_MS: number = 30_000;
@@ -14,8 +16,9 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
   private readonly keyName: string;
 
   public constructor(
-    private readonly kmsClient: KmsProvider,
+    private readonly kmsClient: Pick<KmsProvider, "sign">,
     configService: ConfigService,
+    private readonly http: HttpTransport,
   ) {
     this.clientId = configService.get<string>("GITHUB_APP_CLIENT_ID")
       ?? configService.getOrThrow<string>("GITHUB_OAUTH2_CLIENT_ID");
@@ -29,6 +32,72 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     return runBuildStep("GitHub installation token request", () => this.requestRepositoryAccessToken(owner, repo));
   }
 
+  public async getInstallationUrl(): Promise<string> {
+    return runBuildStep("GitHub App lookup", async (): Promise<string> => {
+      const jwt: string = await this.createAppJwt();
+      const app: unknown = await this.getJson("/app", jwt);
+      if (typeof app !== "object" || app === null || !("slug" in app) ||
+        typeof app.slug !== "string" || app.slug.length > 100 ||
+        !/^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*$/.test(app.slug)) {
+        throw new BuildProviderError("GitHub returned an invalid app response");
+      }
+      return `https://github.com/apps/${app.slug}/installations/new`;
+    });
+  }
+
+  public async listOwnInstalledRepositories(userId: string, page: number, perPage: number): Promise<GitHubRepositoryPage> {
+    return runBuildStep("GitHub installed repository lookup", async (): Promise<GitHubRepositoryPage> => {
+      if (!/^[1-9][0-9]*$/.test(userId) || !Number.isSafeInteger(page) || page < 1 || page > 1_000_000 ||
+        !Number.isSafeInteger(perPage) || perPage < 1 || perPage > 100) {
+        throw new InvalidBuildInput("Invalid GitHub account or pagination");
+      }
+      const empty: GitHubRepositoryPage = { repositories: [], page, perPage, hasNextPage: false };
+      // Resolve the immutable OAuth account ID rather than a client-supplied login.
+      const user: unknown = await this.getJson(`/user/${userId}`);
+      if (!isRecord(user) || !isGitHubId(user.id) || String(user.id) !== userId ||
+        user.type !== "User" || typeof user.login !== "string" ||
+        !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(user.login)) {
+        throw new BuildProviderError("GitHub returned an invalid account response");
+      }
+      const jwt: string = await this.createAppJwt();
+      const response: Response = await this.githubRequest(`/users/${encodeURIComponent(user.login)}/installation`, jwt);
+      if (response.status === 404) return empty;
+      if (!response.ok) throw new BuildProviderError(`GitHub installation lookup failed: HTTP ${response.status}`);
+      const installation: unknown = await response.json();
+      // Never mint a token until the installation's immutable owner matches the session.
+      if (!isRecord(installation) || !isGitHubId(installation.id) || !isRecord(installation.account) ||
+        !isGitHubId(installation.account.id) || String(installation.account.id) !== userId ||
+        installation.account.type !== "User") {
+        throw new BuildProviderError("GitHub returned an installation outside the current account");
+      }
+      if (installation.suspended_at != null) return empty;
+      const token: string = await this.createInstallationToken(installation.id, jwt);
+      const result: unknown = await this.getJson(`/installation/repositories?per_page=${perPage}&page=${page}`, token);
+      if (!isRecord(result) || !Array.isArray(result.repositories) || result.repositories.length > perPage ||
+        typeof result.total_count !== "number" || !Number.isSafeInteger(result.total_count) || result.total_count < 0) {
+        throw new BuildProviderError("GitHub returned an invalid repository page");
+      }
+      const repositories: InstalledGitHubRepository[] = [];
+      for (let index: number = 0; index < result.repositories.length; index++) {
+        const repository: unknown = result.repositories[index];
+        if (!isRecord(repository) || !isRecord(repository.owner) || !isGitHubId(repository.owner.id)) {
+          throw new BuildProviderError("GitHub returned invalid repository ownership");
+        }
+        if (String(repository.owner.id) !== userId || repository.owner.type !== "User") continue;
+        if (!isGitHubId(repository.id) || typeof repository.name !== "string" ||
+          !/^[a-zA-Z0-9._-]{1,100}$/.test(repository.name) || repository.name === "." || repository.name === ".." ||
+          typeof repository.owner.login !== "string" || repository.owner.login.toLowerCase() !== user.login.toLowerCase() ||
+          repository.full_name !== `${repository.owner.login}/${repository.name}` || typeof repository.private !== "boolean" ||
+          (repository.default_branch !== null && typeof repository.default_branch !== "string")) {
+          throw new BuildProviderError("GitHub returned invalid repository metadata");
+        }
+        repositories.push({ id: repository.id, name: repository.name, fullName: repository.full_name as string,
+          private: repository.private, defaultBranch: repository.default_branch });
+      }
+      return { repositories, page, perPage, hasNextPage: page * perPage < result.total_count };
+    });
+  }
+
   private async requestRepositoryAccessToken(owner: string, repo: string): Promise<string> {
     if (
       !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(owner) ||
@@ -37,21 +106,9 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
       throw new InvalidBuildInput("Provide a valid GitHub repository owner and name");
     }
 
-    const now: number = Math.floor(Date.now() / 1000);
-    const header: string = Buffer.from(
-      JSON.stringify({ alg: "RS256", typ: "JWT" }),
-    ).toString("base64url");
-    const payload: string = Buffer.from(
-      JSON.stringify({ iss: this.clientId, iat: now - 60, exp: now + 540 }),
-    ).toString("base64url");
-    const signingInput: string = `${header}.${payload}`;
-    const signature: string = await this.kmsClient.sign({
-      data: signingInput,
-      keyName: this.keyName,
-    });
-    const jwt: string = `${signingInput}.${signature}`;
+    const jwt: string = await this.createAppJwt();
 
-    const installationResponse: Response = await fetch(
+    const installationResponse: Response = await this.http(
       `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/installation`,
       {
         method: "GET",
@@ -86,7 +143,11 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     }
     const installationId: number = installation.id;
 
-    const response: Response = await fetch(
+    return this.createInstallationToken(installationId, jwt, [repo]);
+  }
+
+  private async createInstallationToken(installationId: number, jwt: string, repositories?: string[]): Promise<string> {
+    const response: Response = await this.http(
       `https://api.github.com/app/installations/${installationId}/access_tokens`,
       {
         method: "POST",
@@ -98,8 +159,8 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
           "X-GitHub-Api-Version": GITHUB_API_VERSION,
         },
         body: JSON.stringify({
-          repositories: [repo],
-          permissions: { contents: "read" },
+          repositories,
+          permissions: repositories ? { contents: "read" } : { metadata: "read" },
         }),
         redirect: "error",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -177,7 +238,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
       throw new BuildProviderError("GitHub returned an unexpected archive download location");
     }
     // Do not forward the GitHub token to the redirected archive host.
-    const response: Response = await fetch(downloadUrl, {
+    const response: Response = await this.http(downloadUrl, {
       redirect: "error",
       signal: AbortSignal.timeout(120_000),
     });
@@ -204,10 +265,21 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     return { archive: Buffer.concat(chunks), commitSha: source.commitSha };
   }
 
-  private githubRequest(path: string, token: string): Promise<Response> {
-    return fetch(`https://api.github.com${path}`, {
+  private async createAppJwt(): Promise<string> {
+    const now: number = Math.floor(Date.now() / 1000);
+    const header: string = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+    const payload: string = Buffer.from(
+      JSON.stringify({ iss: this.clientId, iat: now - 60, exp: now + 540 }),
+    ).toString("base64url");
+    const signingInput: string = `${header}.${payload}`;
+    const signature: string = await this.kmsClient.sign({ data: signingInput, keyName: this.keyName });
+    return `${signingInput}.${signature}`;
+  }
+
+  private githubRequest(path: string, token?: string): Promise<Response> {
+    return this.http(`https://api.github.com${path}`, {
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: "application/vnd.github+json",
         "User-Agent": "kumo",
         "X-GitHub-Api-Version": GITHUB_API_VERSION,
@@ -217,7 +289,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
     });
   }
 
-  private async getJson(path: string, token: string): Promise<unknown> {
+  private async getJson(path: string, token?: string): Promise<unknown> {
     const response: Response = await this.githubRequest(path, token);
     if (!response.ok) {
       throw new BuildProviderError(`GitHub source request failed: HTTP ${response.status}`);
@@ -228,4 +300,12 @@ export class GitHubProvider implements RepositoryBuildSourcePort {
       throw new BuildProviderError("GitHub returned an invalid source response");
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isGitHubId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }

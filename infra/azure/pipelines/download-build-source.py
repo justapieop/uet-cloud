@@ -35,8 +35,11 @@ def validate_manifest(manifest, build_id):
         raise DownloadError("Manifest does not belong to the assigned build")
     image = manifest["image"]
     dockerfile = manifest["dockerfile_path"]
+    commit = manifest.get("commit_sha")
     if not isinstance(image, str) or not re.fullmatch(r"[a-zA-Z0-9.-]+/[a-z0-9]+(?:[._-][a-z0-9]+)*:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", image):
         raise DownloadError("Invalid build image in manifest")
+    if not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit) or image.rsplit(":", 1)[-1] != commit:
+        raise DownloadError("Image tag must match the resolved Git commit SHA")
     if not isinstance(dockerfile, str) or not dockerfile or dockerfile.startswith("/") or ".." in dockerfile.split("/") or "\\" in dockerfile or ":" in dockerfile:
         raise DownloadError("Invalid Dockerfile path in manifest")
 

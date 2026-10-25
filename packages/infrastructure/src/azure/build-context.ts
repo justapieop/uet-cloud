@@ -32,7 +32,9 @@ export async function prepareBuildContext(archive: Uint8Array, dockerFilePath: s
     } catch {
       throw new InvalidBuildInput("Dockerfile was not found at the specified path");
     }
-    const relativePath: string = relative(source, dockerfile);
+    // Canonicalize both sides: Windows runners can expose TEMP through a junction.
+    const sourceRoot: string = await realpath(source);
+    const relativePath: string = relative(sourceRoot, dockerfile);
     if (isAbsolute(relativePath) || relativePath === ".." || relativePath.startsWith(`..${sep}`) || !(await stat(dockerfile)).isFile()) {
       throw new InvalidBuildInput("Dockerfile must be a file inside the repository");
     }

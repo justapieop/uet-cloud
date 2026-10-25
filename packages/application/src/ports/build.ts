@@ -18,7 +18,7 @@ export interface BuildTriggerInput {
   readonly dockerFilePath: string;
   readonly imageName: string;
   readonly userId: string;
-  readonly tag: string;
+  readonly commitSha: string;
 }
 
 export interface BuildRun {
@@ -52,7 +52,7 @@ export interface PipelineRun {
 }
 
 export interface PipelineBuildPort {
-  getImageAddress(imageName: string, tag: string): string;
+  getImageAddress(imageName: string): string;
   startBuild(buildId: string, sourceToken: string): Promise<PipelineRun>;
   getRun(runId: string): Promise<PipelineRun>;
 }
@@ -62,7 +62,13 @@ export interface BuildRepository {
   save(build: Build): Promise<void>;
 }
 
-export interface BuildQueueRepository extends BuildRepository {
+export interface BuildWriteRepository extends BuildRepository {
+  insert(build: Build): Promise<void>;
+  update(build: Build): Promise<void>;
+  updateRun(id: string, userId: string, expectedStatus: BuildStatus, run: PipelineRun): Promise<void>;
+}
+
+export interface BuildQueueRepository extends BuildWriteRepository {
   claimNextPending(): Promise<Build | null>;
   failStalePreparations(before: Date): Promise<void>;
 }

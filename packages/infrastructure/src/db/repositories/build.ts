@@ -1,8 +1,8 @@
 import { Build, type BuildDetails, type BuildStatus } from "@kumo/domain";
-import type { BuildQueueRepository } from "@kumo/application";
+import type { BuildQueueRepository, PipelineRun } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Column, Entity, PrimaryColumn, Repository, type UpdateResult } from "typeorm";
+import { Column, Entity, PrimaryColumn, Repository } from "typeorm";
 
 @Entity({ name: "builds" })
 export class InfraBuild implements BuildDetails {
@@ -35,16 +35,36 @@ export class InfraBuildRepository implements BuildQueueRepository {
     await this.repository.save(this.repository.create(build.getDetails()));
   }
 
+  public async insert(build: Build): Promise<void> { await this.repository.insert(build.getDetails()); }
+
+  public async update(build: Build): Promise<void> {
+    const details: BuildDetails = build.getDetails();
+    await this.repository.update({ id: details.id, userId: details.userId }, {
+      commitSha: details.commitSha, image: details.image, sourceTokenHash: details.sourceTokenHash, sourceExpiresAt: details.sourceExpiresAt,
+      status: details.status, error: details.error, runId: details.runId, runUrl: details.runUrl, updatedAt: details.updatedAt,
+    });
+  }
+
+  public async updateRun(id: string, userId: string, expectedStatus: BuildStatus, run: PipelineRun): Promise<void> {
+    await this.repository.createQueryBuilder().update(InfraBuild)
+      .set({ status: run.status, runId: run.runId, runUrl: run.runUrl, updatedAt: new Date() })
+      .where("id = :id AND user_id = :userId AND status = :expectedStatus AND run_id = :runId", { id, userId, expectedStatus, runId: run.runId })
+      .andWhere("status NOT IN (:...terminal)", { terminal: ["SUCCEEDED", "FAILED", "CANCELED"] }).execute();
+  }
+
   public async claimNextPending(): Promise<Build | null> {
-    const record: InfraBuild | null = await this.repository.createQueryBuilder("build")
-      .where("build.status = :status", { status: "PENDING" })
-      .orderBy("build.createdAt", "ASC").addOrderBy("build.id", "ASC").getOne();
-    if (!record) return null;
-    const result: UpdateResult = await this.repository.createQueryBuilder().update(InfraBuild)
-      .set({ status: "PREPARING", updatedAt: new Date() })
-      .where("id = :id AND status = :status", { id: record.id, status: "PENDING" }).execute();
-    // Only the worker that won the conditional update may schedule this build.
-    return result.affected === 1 ? this.findById(record.id) : null;
+    const records: InfraBuild[] = await this.repository.query(`
+      ;WITH candidate AS (
+        SELECT TOP (1) * FROM builds WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK)
+        WHERE status = 'PENDING' ORDER BY created_at, id
+      )
+      UPDATE candidate SET status = 'PREPARING', updated_at = SYSUTCDATETIME()
+      OUTPUT inserted.id, inserted.user_id AS userId, inserted.repo, inserted.ref, inserted.error,
+        inserted.commit_sha AS commitSha, inserted.dockerfile_path AS dockerFilePath, inserted.image, inserted.status,
+        inserted.source_token_hash AS sourceTokenHash, inserted.source_expires_at AS sourceExpiresAt,
+        inserted.run_id AS runId, inserted.run_url AS runUrl, inserted.created_at AS createdAt, inserted.updated_at AS updatedAt;
+    `);
+    return records[0] ? new Build(records[0]) : null;
   }
 
   public async failStalePreparations(before: Date): Promise<void> {

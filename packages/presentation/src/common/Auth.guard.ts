@@ -1,6 +1,7 @@
 import { Injectable, type CanActivate } from "@nestjs/common";
 import type { ExecutionContext } from "@nestjs/common";
 import { AuthGuard } from "@nestjs/passport";
+import type { User } from "@kumo/domain";
 import type { Request } from "express";
 
 @Injectable()
@@ -20,6 +21,7 @@ export class LoggedInGuard implements CanActivate {
   public canActivate(context: ExecutionContext): boolean {
     const req: Request = context.switchToHttp().getRequest();
 
-    return req.isAuthenticated();
+    const user: User | undefined = req.user as User | undefined;
+    return req.isAuthenticated() && Boolean(user && !user.suspended);
   }
 }

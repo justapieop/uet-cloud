@@ -1,11 +1,17 @@
+import type { DeploymentRequestRepository } from "./deployment-request.js";
 import type { DeploymentRepository } from "./deployment.js";
 import type { RoleRepository } from "./role.js";
+import type { UserRoleRepository } from "./user-role.js";
 import type { UserRepository } from "./user.js";
+import type { PlanRepository } from "./plan.js";
 
 export interface UnitOfWorkRepositories {
   users: UserRepository;
   roles: RoleRepository;
+  userRoles: UserRoleRepository;
   deployment: DeploymentRepository;
+  deploymentRequests: DeploymentRequestRepository;
+  plans: PlanRepository;
 }
 
 export interface UnitOfWork {

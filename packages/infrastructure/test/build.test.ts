@@ -1,14 +1,18 @@
 import "reflect-metadata";
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { c, t, type ReadEntry } from "tar";
+import type { DockerBuildRequest, RunRequestUnion } from "@azure/arm-containerregistrytasks";
 import { ConfigService } from "@nestjs/config";
 import { BuildAccessDenied, InvalidBuildInput, TriggerBuildCase, type BuildRepository, type PipelineBuildPort } from "@kumo/application";
 import { Build } from "@kumo/domain";
-import { AcrProvider } from "../dist/azure/acr.js";
+import { AcrProvider, type AcrClient } from "../dist/azure/acr.js";
 import { GitHubProvider } from "../dist/github/provider.js";
 import { KmsProvider } from "../dist/azure/kms.js";
 import { parseGitHubRepository } from "../dist/github/repository.js";
@@ -30,6 +34,23 @@ async function sourceArchive(): Promise<Buffer> {
   }
 }
 
+test("build context accepts a temporary directory reached through a junction or symlink", async (): Promise<void> => {
+  const folder: string = await mkdtemp(join(tmpdir(), "kumo-junction-fixture-"));
+  try {
+    const realTemporary: string = join(folder, "real-temp");
+    const linkedTemporary: string = join(folder, "linked-temp");
+    await mkdir(realTemporary);
+    await symlink(realTemporary, linkedTemporary, process.platform === "win32" ? "junction" : "dir");
+    const archiveFile: string = join(folder, "source.tar.gz");
+    await writeFile(archiveFile, await sourceArchive());
+    const modulePath: string = fileURLToPath(new URL("../dist/azure/build-context.js", import.meta.url));
+    const script: string = "import { readFile } from 'node:fs/promises'; import { pathToFileURL } from 'node:url'; const { prepareBuildContext } = await import(pathToFileURL(process.argv[1]).href); await prepareBuildContext(await readFile(process.argv[2]), 'Dockerfile');";
+    await promisify(execFile)(process.execPath, ["--input-type=module", "-e", script, modulePath, archiveFile], {
+      env: { ...process.env, TEMP: linkedTemporary, TMP: linkedTemporary, TMPDIR: linkedTemporary },
+    });
+  } finally { await rm(folder, { recursive: true, force: true }); }
+});
+
 test("build context removes GitHub's archive prefix and rejects a missing Dockerfile", async (): Promise<void> => {
   const source: Buffer = await sourceArchive();
   const context: Buffer = await prepareBuildContext(source, "Dockerfile");
@@ -47,14 +68,14 @@ test("build context removes GitHub's archive prefix and rejects a missing Docker
 });
 
 test("quick build uploads source then schedules a push without creating a task", async (context: TestContext): Promise<void> => {
-  const provider: AcrProvider = new AcrProvider(new ConfigService({
+  const config: ConfigService = new ConfigService({
     AZURE_SUBSCRIPTION_ID: "00000000-0000-0000-0000-000000000000",
     AZURE_CONTAINER_REGISTRY_NAME: "registry",
     AZURE_CONTAINER_REGISTRY_SERVER: "registry.azurecr.io",
     AZURE_RG_NAME: "platform-rg",
-  }));
+  });
   const calls: string[] = [];
-  Object.defineProperty(provider, "acrManager", { value: {
+  const client: AcrClient = {
     registries: {
       getBuildSourceUploadUrl: async (rg: string, registry: string): Promise<{ uploadUrl: string; relativePath: string }> => {
         assert.equal(rg, "platform-rg");
@@ -62,12 +83,13 @@ test("quick build uploads source then schedules a push without creating a task",
         calls.push("upload-location");
         return { uploadUrl: "https://storage.example/source?sig=secret", relativePath: "context/source.tar.gz" };
       },
-      scheduleRun: async (_rg: string, _registry: string, request: { type: string; sourceLocation: string; isPushEnabled: boolean; imageNames: string[] }): Promise<{ properties: { runId: string; status: string } }> => {
+      scheduleRun: async (_rg: string, _registry: string, runRequest: RunRequestUnion): Promise<{ properties: { runId: string; status: string } }> => {
+        const request: DockerBuildRequest = runRequest as DockerBuildRequest;
         calls.push("schedule");
         assert.equal(request.type, "DockerBuildRequest");
         assert.equal(request.sourceLocation, "context/source.tar.gz");
         assert.equal(request.isPushEnabled, true);
-        assert.deepEqual(request.imageNames, ["registry.azurecr.io/app:unique-tag"]);
+        assert.deepEqual(request.imageNames, ["registry.azurecr.io/app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]);
         assert.ok(!("contextAccessToken" in request));
         assert.deepEqual((request as unknown as { credentials: unknown }).credentials, {
           sourceRegistry: { identity: "[caller]", loginMode: "Default" },
@@ -75,7 +97,7 @@ test("quick build uploads source then schedules a push without creating a task",
         return { properties: { runId: "ca1", status: "Queued" } };
       },
     },
-  } });
+  };
   context.mock.method(globalThis, "fetch", async (_url: string, options: RequestInit): Promise<Response> => {
     calls.push("upload");
     assert.equal(options.method, "PUT");
@@ -83,41 +105,40 @@ test("quick build uploads source then schedules a push without creating a task",
     assert.ok(options.body instanceof ArrayBuffer);
     return new Response(null, { status: 201 });
   });
+  const provider: AcrProvider = new AcrProvider(config, client, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   const result: unknown = await provider.triggerBuild({
-    archive: await sourceArchive(), dockerFilePath: "Dockerfile", imageName: "app", userId: "123", tag: "unique-tag",
+    archive: await sourceArchive(), dockerFilePath: "Dockerfile", imageName: "app", userId: "123", commitSha: "a".repeat(40),
   });
-  assert.deepEqual(result, { runId: "ca1", status: "Queued", image: "registry.azurecr.io/app:unique-tag" });
+  assert.deepEqual(result, { runId: "ca1", status: "Queued", image: "registry.azurecr.io/app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
   assert.deepEqual(calls, ["upload-location", "upload", "schedule"]);
 });
 
-test("use case preserves the requested tag and gives each build a unique tracking ID", async (): Promise<void> => {
-  const tags: string[] = [];
+test("queued builds defer the image tag until source resolution and have unique tracking IDs", async (): Promise<void> => {
+  const names: string[] = [];
   const records: Map<string, Build> = new Map<string, Build>();
-  const repository: BuildRepository = {
+  const repository: BuildRepository & { insert(build: Build): Promise<void> } = {
     findById: async (id: string): Promise<Build | null> => records.get(id) ?? null,
     save: async (build: Build): Promise<void> => { records.set(build.getDetails().id, build); },
+    insert: async (build: Build): Promise<void> => { records.set(build.getDetails().id, build); },
   };
   const builder: PipelineBuildPort = {
-    getImageAddress: (_imageName: string, tag: string): string => { tags.push(tag); return `registry/app:${tag}`; },
+    getImageAddress: (imageName: string): string => { names.push(imageName); return `registry/${imageName}`; },
     startBuild: async (): Promise<never> => { assert.fail("Pending builds are scheduled by the worker"); },
     getRun: async () => ({ runId: "123", status: "QUEUED" as const, runUrl: "https://dev.azure.com/run/123" }),
   };
   const useCase: TriggerBuildCase = new TriggerBuildCase(builder, repository);
-  const input: { userId: string; repo: string; imageName: string; tag: string } = { userId: "123", repo: "https://github.com/owner/repo", imageName: "app", tag: "Release_1.2.3" };
-  assert.equal((await useCase.exec(input)).image, "registry/app:Release_1.2.3");
+  const input: { userId: string; repo: string; imageName: string } = { userId: "123", repo: "https://github.com/owner/repo", imageName: "app" };
+  assert.equal((await useCase.exec(input)).image, "registry/app");
   await useCase.exec(input);
-  assert.deepEqual(tags, [input.tag, input.tag]);
+  assert.deepEqual(names, [input.imageName, input.imageName]);
   assert.equal(records.size, 2);
   assert.ok(Array.from(records.values()).every((build: Build): boolean => build.getDetails().commitSha === null && build.getDetails().status === "PENDING"));
-  await Promise.all(["", "bad tag", "bad/tag", ":bad", "a".repeat(129)].map(
-    (tag: string): Promise<void> => assert.rejects(useCase.exec({ ...input, tag }), InvalidBuildInput),
-  ));
   await assert.rejects(useCase.exec({ ...input, dockerFilePath: "../Dockerfile" }), InvalidBuildInput);
 });
 
 test("source download denies another user's repository before reading its source", async (context: TestContext): Promise<void> => {
   const kms: KmsProvider = Object.create(KmsProvider.prototype) as KmsProvider;
-  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }));
+  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }), (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   context.mock.method(github, "getRepositoryAccessToken", async (): Promise<string> => "installation-token");
   const calls: string[] = [];
   context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
@@ -132,7 +153,7 @@ test("source download denies another user's repository before reading its source
 
 test("source download pins the commit and keeps the token off the archive redirect", async (context: TestContext): Promise<void> => {
   const kms: KmsProvider = Object.create(KmsProvider.prototype) as KmsProvider;
-  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }));
+  const github: GitHubProvider = new GitHubProvider(kms, new ConfigService({ GITHUB_OAUTH2_CLIENT_ID: "app", GITHUB_APP_PRIVATE_KEY_NAME: "key" }), (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
   context.mock.method(github, "getRepositoryAccessToken", async (): Promise<string> => "installation-token");
   const sha: string = "a".repeat(40);
   context.mock.method(globalThis, "fetch", async (value: string | URL, options: RequestInit): Promise<Response> => {

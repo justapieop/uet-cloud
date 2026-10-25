@@ -1,4 +1,5 @@
 import type { Deployment, DeploymentPortMapping, DeploymentStatus } from "@kumo/domain";
+import type { DeploymentConfiguration } from "@kumo/application";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Exclude, Expose, Type } from "class-transformer";
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsNumber, IsObject, ValidateIf, ValidateNested, IsString, Matches, Max, MaxLength, Min } from "class-validator";
@@ -13,7 +14,7 @@ export class AdditionalDeploymentPortDto {
   @IsInt() @Min(1) @Max(65535)
   public exposed_port?: number;
 
-  @ApiPropertyOptional({ default: false, description: "Expose outside the environment; requires VNet integration" })
+  @ApiPropertyOptional({ example: false, description: "Defaults to false. Expose outside the environment; requires an external container and VNet integration." })
   @ValidateIf((_input: AdditionalDeploymentPortDto, value: unknown): boolean => value !== undefined)
   @IsBoolean()
   public external?: boolean;
@@ -33,6 +34,12 @@ export class AdditionalDeploymentPortResponseDto {
 }
 
 export class CreateDeploymentDto {
+  @ApiPropertyOptional({ example: "japaneast", description: "Region for the shared user environment; must match it if already created" })
+  @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
+  @IsString()
+  @Matches(/^[a-z][a-z0-9]{0,63}$/)
+  public region?: string;
+
   @ApiProperty()
   @IsString()
   @Matches(/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/)
@@ -44,11 +51,6 @@ export class CreateDeploymentDto {
   public repo!: string;
 
   @ApiProperty()
-  @IsString()
-  @Matches(/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/)
-  public tag!: string;
-
-  @ApiProperty()
   @IsInt()
   @Min(1)
   @Max(65535)
@@ -58,6 +60,11 @@ export class CreateDeploymentDto {
   @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
   @IsArray() @ArrayMaxSize(5) @ValidateNested({ each: true }) @Type(() => AdditionalDeploymentPortDto)
   public additional_ports?: AdditionalDeploymentPortDto[];
+
+  @ApiPropertyOptional({ example: true, description: "Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the same environment." })
+  @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
+  @IsBoolean()
+  public external?: boolean;
 
   @ApiProperty({ example: 0.5, description: "vCPU allocated per replica, in increments of 0.25" })
   @IsNumber()
@@ -105,11 +112,13 @@ export class CreateDeploymentDto {
 
 @Exclude()
 export class DeploymentResponseDto {
+  @Expose() @ApiProperty({ type: String, nullable: true, description: "Requested region, or null when omitted" }) public readonly region: string | null;
   @Expose() @ApiProperty({ format: "uuid" }) public readonly id: string;
   @Expose() @ApiProperty() public readonly name: string;
   @Expose({ name: "target_port" }) @ApiProperty({ name: "target_port", type: Number, nullable: true }) public readonly targetPort: number | null;
   @Expose({ name: "additional_ports" }) @ApiProperty({ name: "additional_ports", type: [AdditionalDeploymentPortResponseDto] }) public readonly additionalPorts: AdditionalDeploymentPortResponseDto[];
-  @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
+  @Expose() @ApiProperty({ type: Boolean, nullable: true, description: "Whether ingress is external; applied Azure value for provisioned deployment reads" }) public readonly external: boolean | null;
+  @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
   @Expose() @ApiProperty({ type: String, nullable: true }) public readonly image: string | null;
   @Expose({ name: "build_id" }) @ApiProperty({ name: "build_id", type: String, nullable: true }) public readonly buildId: string | null;
   @Expose({ name: "resource_id" }) @ApiProperty({ name: "resource_id", type: String, nullable: true }) public readonly resourceId: string | null;
@@ -122,21 +131,23 @@ export class DeploymentResponseDto {
   @Expose({ name: "created_at" }) @ApiProperty({ name: "created_at", type: Date }) public readonly createdAt: Date;
   @Expose({ name: "updated_at" }) @ApiProperty({ name: "updated_at", type: Date }) public readonly updatedAt: Date;
 
-  public constructor(deployment: Deployment) {
+  public constructor(deployment: Deployment, configuration?: DeploymentConfiguration | null) {
+    this.region = configuration ? configuration.region : deployment.spec?.region ?? null;
     this.id = deployment.id;
     this.name = deployment.name;
-    this.targetPort = deployment.spec?.targetPort ?? null;
-    this.additionalPorts = (deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
+    this.targetPort = configuration ? configuration.targetPort : deployment.spec?.targetPort ?? null;
+    this.external = configuration ? configuration.external : deployment.spec ? deployment.spec.external ?? true : null;
+    this.additionalPorts = (configuration ? configuration.additionalPorts : deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
     this.status = deployment.status;
-    this.image = deployment.image;
+    this.image = configuration ? configuration.image : deployment.image;
     this.buildId = deployment.buildId;
     this.resourceId = deployment.resourceId;
-    this.fqdn = deployment.fqdn;
+    this.fqdn = configuration ? configuration.fqdn : deployment.fqdn;
     this.error = deployment.error;
-    this.maxVcpu = deployment.spec?.maxVcpu ?? null;
-    this.maxMemory = deployment.spec?.maxMemory ?? null;
-    this.minScaling = deployment.spec?.minScaling ?? null;
-    this.maxScaling = deployment.spec?.maxScaling ?? null;
+    this.maxVcpu = configuration ? configuration.maxVcpu : deployment.spec?.maxVcpu ?? null;
+    this.maxMemory = configuration ? configuration.maxMemory : deployment.spec?.maxMemory ?? null;
+    this.minScaling = configuration ? configuration.minScaling : deployment.spec?.minScaling ?? null;
+    this.maxScaling = configuration ? configuration.maxScaling : deployment.spec?.maxScaling ?? null;
     this.createdAt = deployment.createdAt;
     this.updatedAt = deployment.updatedAt;
   }

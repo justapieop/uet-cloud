@@ -1,10 +1,12 @@
-import { DeploymentAlreadyExists, type DeploymentQueueRepository } from "@kumo/application";
+import { DeploymentAlreadyExists, type DeploymentListFilters, type DeploymentQueueRepository } from "@kumo/application";
 import { Deployment, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Column, Entity, PrimaryColumn, Repository, type UpdateResult } from "typeorm";
+import { Column, Entity, Index, PrimaryColumn, Repository, type SelectQueryBuilder } from "typeorm";
 
 @Entity({ name: "deployments" })
+@Index("UQ_deployments_name", ["name"], { unique: true })
+@Index("IDX_deployments_pending_order", ["status", "createdAt", "id"], { where: "creation_request IS NOT NULL" })
 export class InfraDeployment {
   @PrimaryColumn({ type: "nvarchar", length: 255 }) public readonly id!: string;
   @Column({ type: "nvarchar", length: 255, name: "user_id" }) public readonly userId!: string;
@@ -34,8 +36,17 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
     return record ? this.toDomain(record) : null;
   }
 
-  public async findByUserId(userId: string): Promise<Deployment[]> {
-    const records: InfraDeployment[] = await this.repository.find({ where: { userId }, order: { createdAt: "DESC", id: "DESC" } });
+  public async findByUserId(userId: string, filters: DeploymentListFilters = {}): Promise<Deployment[]> {
+    const query: SelectQueryBuilder<InfraDeployment> = this.repository.createQueryBuilder("deployment")
+      .where("deployment.userId = :userId", { userId });
+    if (filters.status !== undefined) query.andWhere("deployment.status = :status", { status: filters.status });
+    if (filters.name !== undefined) {
+      query.andWhere("CHARINDEX(LOWER(:name), LOWER(deployment.name)) > 0", { name: filters.name });
+    }
+    if (filters.region !== undefined) {
+      query.andWhere("JSON_VALUE(deployment.creation_request, '$.region') = :region", { region: filters.region });
+    }
+    const records: InfraDeployment[] = await query.orderBy("deployment.createdAt", "DESC").addOrderBy("deployment.id", "DESC").getMany();
     return records.map((record: InfraDeployment): Deployment => this.toDomain(record));
   }
 
@@ -45,10 +56,37 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
     } catch (error: unknown) { throw this.translateError(error); }
   }
 
+  public async insert(deployment: Deployment): Promise<void> {
+    try { await this.repository.insert(this.toRecord(deployment)); }
+    catch (error: unknown) { throw this.translateError(error); }
+  }
+
+  public countReservedByUserId(userId: string): Promise<number> {
+    return this.repository.createQueryBuilder("deployment").where("deployment.userId = :userId", { userId })
+      .andWhere("(deployment.status IN (:...statuses) OR (deployment.status = :failed AND deployment.azure_resource_id IS NOT NULL))", {
+        statuses: ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING"], failed: "FAILED",
+      }).getCount();
+  }
+
   public async update(deployment: Deployment): Promise<void> {
+    try { await this.repository.update({ id: deployment.id, userId: deployment.userId }, { name: deployment.name, updatedAt: deployment.updatedAt }); }
+    catch (error: unknown) { throw this.translateError(error); }
+  }
+
+  public async updateProgress(deployment: Deployment): Promise<void> {
     try {
-      await this.repository.update({ id: deployment.id, userId: deployment.userId }, this.toRecord(deployment));
+      await this.repository.update({ id: deployment.id, userId: deployment.userId }, {
+        status: deployment.status, image: deployment.image, buildId: deployment.buildId,
+        resourceId: deployment.resourceId, fqdn: deployment.fqdn, error: deployment.error, updatedAt: deployment.updatedAt,
+      });
     } catch (error: unknown) { throw this.translateError(error); }
+  }
+
+  public async transitionStatus(id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> {
+    const result: Awaited<ReturnType<Repository<InfraDeployment>["update"]>> = await this.repository.update(
+      { id, userId, status: from }, { status: to, updatedAt: new Date() },
+    );
+    return result.affected === 1;
   }
 
   public async delete(deploymentId: string, userId: string): Promise<void> {
@@ -56,15 +94,18 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
   }
 
   public async claimNextPending(): Promise<Deployment | null> {
-    const record: InfraDeployment | null = await this.repository.createQueryBuilder("deployment")
-      .where("deployment.status = :status", { status: "PENDING" })
-      .andWhere("deployment.creation_request IS NOT NULL")
-      .orderBy("deployment.createdAt", "ASC").addOrderBy("deployment.id", "ASC").getOne();
-    if (!record) return null;
-    const result: UpdateResult = await this.repository.createQueryBuilder().update(InfraDeployment)
-      .set({ status: "PROVISIONING", updatedAt: new Date(), error: null })
-      .where("id = :id AND user_id = :userId AND status = :status", { id: record.id, userId: record.userId, status: "PENDING" }).execute();
-    return result.affected === 1 ? this.findByIdAndUserId(record.id, record.userId) : null;
+    const records: InfraDeployment[] = await this.repository.query(`
+      ;WITH candidate AS (
+        SELECT TOP (1) * FROM deployments WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK)
+        WHERE status = 'PENDING' AND creation_request IS NOT NULL ORDER BY created_at, id
+      )
+      UPDATE candidate SET status = 'PROVISIONING', updated_at = SYSUTCDATETIME(), error_message = NULL
+      OUTPUT inserted.id, inserted.user_id AS userId, inserted.name, inserted.status,
+        inserted.creation_request AS requestJson, inserted.image, inserted.build_id AS buildId,
+        inserted.azure_resource_id AS resourceId, inserted.fqdn, inserted.error_message AS error,
+        inserted.created_at AS createdAt, inserted.updated_at AS updatedAt;
+    `);
+    return records[0] ? this.toDomain(records[0]) : null;
   }
 
   public async failStaleProvisioning(before: Date): Promise<void> {
@@ -94,7 +135,7 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
   private translateError(error: unknown): unknown {
     const driver: unknown = typeof error === "object" && error !== null && "driverError" in error ? error.driverError : error;
     if (typeof driver === "object" && driver !== null && "number" in driver && (driver.number === 2601 || driver.number === 2627)) {
-      return new DeploymentAlreadyExists("A deployment with this name already exists for the user");
+      return new DeploymentAlreadyExists("A deployment with this name already exists");
     }
     return error;
   }

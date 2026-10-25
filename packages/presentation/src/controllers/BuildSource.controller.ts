@@ -1,3 +1,4 @@
+import { ResilienceError } from "@nestjs/resilience";
 import { BuildAccessDenied, BuildProviderError, GetBuildSourceCase, InvalidBuildInput } from "@kumo/application";
 import { BadGatewayException, BadRequestException, Controller, Get, Header, Headers, Param, ParseUUIDPipe, StreamableFile, UnauthorizedException } from "@nestjs/common";
 import { ApiBadGatewayResponse, ApiBadRequestResponse, ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from "@nestjs/swagger";
@@ -42,6 +43,7 @@ export class BuildSourceController {
   }
 
   private toHttpError(error: unknown): Error {
+    if (error instanceof ResilienceError) return error;
     if (error instanceof UnauthorizedException) return error;
     if (error instanceof BuildAccessDenied) return new UnauthorizedException(error.message);
     if (error instanceof InvalidBuildInput) return new BadRequestException(error.message);

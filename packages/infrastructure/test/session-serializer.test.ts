@@ -1,27 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { User } from "@kumo/domain";
-import { FindUserByIdCase, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
 import { SessionSerializer } from "../dist/auth/serializer.js";
 
 function createSerializer(findById: (id: string) => Promise<User | null>): SessionSerializer {
-  const repositories: UnitOfWorkRepositories = {
-    users: {
-      findById,
-      save: async (): Promise<void> => { assert.fail("Session restoration must not save users"); },
-      exists: async (): Promise<boolean> => { assert.fail("Session restoration must only find users"); },
-    },
-    roles: {
-      findById: async (): Promise<null> => null,
-      save: async (): Promise<void> => {},
-    },
-  };
-  const unitOfWork: UnitOfWork = {
-    run<T>(work: (repositories: UnitOfWorkRepositories) => Promise<T>): Promise<T> {
-      return work(repositories);
-    },
-  };
-  return new SessionSerializer(new FindUserByIdCase(unitOfWork));
+  return new SessionSerializer({ read: async (id: string) => {
+    const user: User | null = await findById(id);
+    return user ? { user, permissionBits: 0n } : null;
+  } });
 }
 
 test("session serialization stores only the user ID", (): void => {

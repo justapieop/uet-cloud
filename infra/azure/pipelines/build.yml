@@ -1,5 +1,8 @@
 # Pipeline definition stays in Kumo's repository. Application repositories need
 # only a Dockerfile. Configure the three variables described in docs/configuration.md.
+# This shared pipeline only builds/pushes. After success, Kumo's deployment worker
+# creates a new app or updates the requesting user's existing app via redeploy.
+# Do not configure a fixed Container App target or grant this job tenant-wide writes.
 trigger: none
 pr: none
 

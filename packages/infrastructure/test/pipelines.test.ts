@@ -11,7 +11,7 @@ const SOURCE_TOKEN: string = "a".repeat(43);
 
 function buildDetails(id: string = "00000000-0000-4000-8000-000000000001"): BuildDetails {
   return {
-    id, userId: "123", repo: "https://github.com/owner/repo", commitSha: "a".repeat(40),
+    id, userId: "123", repo: "https://github.com/owner/repo", commitSha: "a".repeat(40), ref: null, error: null,
     dockerFilePath: "Dockerfile", image: "registry.azurecr.io/app:v1.2.3", status: "QUEUED",
     runId: "42", runUrl: "https://dev.azure.com/run/42",
     sourceTokenHash: createHash("sha256").update(SOURCE_TOKEN).digest("hex"),
@@ -23,8 +23,8 @@ test("pipeline scheduling passes only build ID and a secret scoped source token"
   const provider: AzurePipelinesProvider = new AzurePipelinesProvider(new ConfigService({
     AZURE_DEVOPS_ORGANIZATION: "kumo", AZURE_DEVOPS_PROJECT: "Build Platform", AZURE_DEVOPS_PIPELINE_ID: "7",
     AZURE_DEVOPS_PAT: "devops-credential", AZURE_CONTAINER_REGISTRY_SERVER: "registry.azurecr.io",
-  }));
-  assert.equal(provider.getImageAddress("my-app", "v1.2.3"), "registry.azurecr.io/my-app:v1.2.3");
+  }), { getToken: async (): Promise<never> => { throw new Error("PAT authentication must not request a token"); } }, (...args: Parameters<typeof fetch>): Promise<Response> => globalThis.fetch(...args));
+  assert.equal(provider.getImageAddress("my-app"), "registry.azurecr.io/my-app");
   context.mock.method(globalThis, "fetch", async (url: string, options: RequestInit): Promise<Response> => {
     assert.equal(url, "https://dev.azure.com/kumo/Build%20Platform/_apis/pipelines/7/runs?api-version=7.1");
     assert.equal(options.method, "POST");
@@ -65,6 +65,7 @@ test("authorized source delivery uses the persisted commit and Dockerfile", asyn
       assert.equal(input.ref, details.commitSha);
       assert.equal(input.repo, details.repo);
       assert.equal(input.userId, details.userId);
+      assert.ok(details.commitSha);
       return { archive: new Uint8Array([1, 2]), commitSha: details.commitSha };
     },
   }, {
@@ -85,7 +86,7 @@ test("status refresh is limited to the owner and persists pipeline completion", 
   };
   const useCase: GetBuildCase = new GetBuildCase({
     findById: async (): Promise<Build> => stored,
-    save: async (build: Build): Promise<void> => { stored = build; },
+    updateRun: async (_id, _userId, _status, run): Promise<void> => { stored = new Build({ ...stored.getDetails(), ...run }); },
   }, pipeline);
   await assert.rejects(useCase.exec(stored.getDetails().id, "other-user"), BuildNotFound);
   assert.equal(polls, 0);

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { UserRepository } from "@kumo/application";
 import { User } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
@@ -34,6 +35,12 @@ export class InfraUser {
     default: false,
   })
   public readonly suspended!: boolean;
+
+  @Column({ type: "bit", nullable: false, default: true })
+  public readonly active!: boolean;
+
+  @Column({ name: "stripe_customer_id", type: "varchar", length: 255, nullable: true, collation: "Latin1_General_100_BIN2" })
+  public readonly stripeCustomerId!: string | null;
 }
 
 @Injectable()
@@ -57,8 +64,22 @@ export class InfraUserRepository implements UserRepository {
     });
   }
 
+  public async findByIdForUpdate(id: string): Promise<User | null> {
+    const resource: string = `kumo:user-create:${createHash("sha256").update(id).digest("hex")}`;
+    const locks: { readonly result: number }[] = await this.userRepository.manager.query(`
+      DECLARE @result int;
+      EXEC @result = sys.sp_getapplock @Resource = @0, @LockMode = 'Exclusive',
+        @LockOwner = 'Transaction', @LockTimeout = 5000;
+      SELECT @result AS result;`, [resource]);
+    if (!locks[0] || locks[0].result < 0) throw new Error("User creation is already in progress; retry login");
+    return this.findById(id);
+  }
+
   public async save(user: User): Promise<void> {
-    const dbUser: InfraUser = this.userRepository.create(user);
+    // Linking owns stripe_customer_id. A stale domain instance must never clear or replace it.
+    const dbUser: InfraUser = this.userRepository.create({
+      id: user.id, displayName: user.displayName, createdAt: user.createdAt, suspended: user.suspended, active: user.active,
+    });
 
     await this.userRepository.save(dbUser);
   }

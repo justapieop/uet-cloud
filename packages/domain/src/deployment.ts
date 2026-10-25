@@ -1,7 +1,7 @@
 import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 
-export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "FAILED" | "DELETED";
+export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
 
 export interface DeploymentPortMapping {
   readonly targetPort: number;
@@ -9,7 +9,8 @@ export interface DeploymentPortMapping {
   readonly external?: boolean;
 }
 
-export function validateDeploymentPorts(targetPort: number, ports?: readonly DeploymentPortMapping[]): InvalidDomainParams | null {
+export function validateDeploymentPorts(targetPort: number, ports?: readonly DeploymentPortMapping[], external: boolean = true): InvalidDomainParams | null {
+  if (typeof external !== "boolean") return new InvalidDomainParams("Deployment external must be a boolean");
   if (ports === undefined) return null;
   if (!Array.isArray(ports) || ports.length > 5) return new InvalidDomainParams("At most five additional TCP ports are supported");
   const targets: Set<number> = new Set<number>([targetPort]);
@@ -26,6 +27,7 @@ export function validateDeploymentPorts(targetPort: number, ports?: readonly Dep
     }
     if (targets.has(port.targetPort) || exposed.has(publicPort)) return new InvalidDomainParams("Additional target and exposed ports must be unique; target ports must differ from the main target port");
     if (port.external && (publicPort === 80 || publicPort === 443)) return new InvalidDomainParams("External additional ports cannot expose HTTP ingress ports 80 or 443");
+    if (port.external && !external) return new InvalidDomainParams("External additional ports require an external container");
     targets.add(port.targetPort);
     exposed.add(publicPort);
   }
@@ -33,12 +35,13 @@ export function validateDeploymentPorts(targetPort: number, ports?: readonly Dep
 }
 
 export interface DeploymentSpec {
+  readonly region?: string;
   readonly repo: string;
-  readonly tag: string;
   readonly imageName?: string;
   readonly dockerFilePath?: string;
   readonly ref?: string;
   readonly targetPort: number;
+  readonly external?: boolean;
   readonly additionalPorts?: readonly DeploymentPortMapping[];
   readonly maxVcpu: number;
   readonly maxMemory: number;
@@ -95,6 +98,9 @@ export class Deployment extends Domain<DeploymentDetails> {
     }
     const spec: DeploymentSpec | null | undefined = this.details.spec;
     if (spec) {
+      if (spec.region !== undefined && (typeof spec.region !== "string" || !/^[a-z][a-z0-9]{0,63}$/.test(spec.region))) {
+        return new InvalidDomainParams("Region must be a lowercase Azure region name such as japaneast");
+      }
       if (!Number.isFinite(spec.maxVcpu) || spec.maxVcpu <= 0 || !Number.isInteger(spec.maxVcpu * 4) ||
         !Number.isFinite(spec.maxMemory) || spec.maxMemory !== spec.maxVcpu * 2) {
         return new InvalidDomainParams("Memory in GiB must be exactly twice vCPU; vCPU must be positive in increments of 0.25");
@@ -105,10 +111,10 @@ export class Deployment extends Domain<DeploymentDetails> {
       if (!Number.isInteger(spec.targetPort) || spec.targetPort < 1 || spec.targetPort > 65535) {
         return new InvalidDomainParams("Target port must be between 1 and 65535");
       }
-      const portError: InvalidDomainParams | null = validateDeploymentPorts(spec.targetPort, spec.additionalPorts);
+      const portError: InvalidDomainParams | null = validateDeploymentPorts(spec.targetPort, spec.additionalPorts, spec.external);
       if (portError) return portError;
-      if (typeof spec.repo !== "string" || isBlankStr(spec.repo) || spec.repo.length > 2048 || typeof spec.tag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(spec.tag)) {
-        return new InvalidDomainParams("A repository and a valid image tag are required");
+      if (typeof spec.repo !== "string" || isBlankStr(spec.repo) || spec.repo.length > 2048) {
+        return new InvalidDomainParams("A repository is required");
       }
       if (spec.imageName !== undefined && (typeof spec.imageName !== "string" || !/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/.test(spec.imageName) || spec.imageName.length > 128)) {
         return new InvalidDomainParams("Invalid image name");

@@ -1,7 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { PassportSerializer } from "@nestjs/passport";
 import type { User } from "@kumo/domain";
-import { FindUserByIdCase } from "@kumo/application";
+import { SESSION_AUTHORIZATION_READER, SESSION_PERMISSION_BITS, type SessionAuthorizationReader } from "@kumo/application";
 
 type SerializeDone = (error: unknown, id?: string) => void;
 type DeserializeDone = (error: unknown, user?: User | false) => void;
@@ -9,7 +9,7 @@ type DeserializeDone = (error: unknown, user?: User | false) => void;
 @Injectable()
 export class SessionSerializer extends PassportSerializer {
   public constructor(
-    private readonly findUserById: FindUserByIdCase
+    @Inject(SESSION_AUTHORIZATION_READER) private readonly authorization: SessionAuthorizationReader
   ) {
     super();
   }
@@ -24,14 +24,15 @@ export class SessionSerializer extends PassportSerializer {
       return;
     }
 
-    let user: User | null;
+    let result: Awaited<ReturnType<SessionAuthorizationReader["read"]>>;
     try {
-      user = await this.findUserById.exec(payload);
+      result = await this.authorization.read(payload);
     } catch (error: unknown) {
       done(error);
       return;
     }
 
-    done(null, user ?? false);
+    if (result) Object.defineProperty(result.user, SESSION_PERMISSION_BITS, { value: result.permissionBits, enumerable: false });
+    done(null, result?.user ?? false);
   }
 }

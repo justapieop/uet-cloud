@@ -9,6 +9,7 @@ export class Role extends Domain<RoleDetails> {
   public readonly name: string;
   private readonly permission: bigint;
   public readonly createdAt: Date;
+  public readonly active: boolean;
 
   public constructor(details: RoleDetails) {
     super(details);
@@ -17,9 +18,13 @@ export class Role extends Domain<RoleDetails> {
     this.name = details.name;
     this.permission = details.permission ?? 0n;
     this.createdAt = details.createdAt ?? new Date();
+    this.active = details.active ?? true;
   }
 
   public validate(): InvalidDomainParams | null {
+    if (this.details.active !== undefined && typeof this.details.active !== "boolean") {
+      return new InvalidDomainParams("Role.active must be a boolean");
+    }
     if (isBlankStr(this.details.id)) {
       return new InvalidDomainParams(`Role.id must not be blank`);
     }
@@ -58,6 +63,18 @@ export class Role extends Domain<RoleDetails> {
     );
   }
 
+  public getStoredPermissions(): PermissionDefinition[] {
+    return Object.values(Permission).filter((permission: Permission): boolean => {
+      if (!Number.isSafeInteger(permission.offset) || permission.offset < 0) {
+        return false;
+      }
+
+      const mask: bigint = 1n << BigInt(permission.offset);
+
+      return (this.permission & mask) === mask;
+    });
+  }
+
   public getPermissionBits(): bigint {
     return this.permission;
   }
@@ -68,4 +85,5 @@ export interface RoleDetails {
   name: string;
   permission?: bigint;
   createdAt?: Date;
+  active?: boolean;
 }

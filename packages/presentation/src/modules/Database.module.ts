@@ -14,7 +14,10 @@ import {
   InfraRole,
   InfraRoleRepository,
   InfraUser,
+  InfraUserRole,
+  InfraUserRoleRepository,
   InfraUserRepository,
+  InfraStripeCustomerLinkRepository,
   TypeOrmLoggerAdapter,
   TypeOrmUnitOfWork,
 } from "@kumo/infrastructure";
@@ -28,9 +31,18 @@ import { AppConfigModule } from "./AppConfig.module.js";
         const devMode: boolean = config.get<string>("NODE_ENV", "production").trim().toLowerCase() === "development";
         const enableEncryption: boolean = config.get<string>("DATABASE_ENABLE_ENCRYPTION", "true").trim().toLowerCase() === "true";
 
+        const connectionUrl: string | undefined = config.get<string>("DATABASE_CONNECTION_URL");
+        const connectionOptions: { url: string } | { host: string; port: number; database: string } = connectionUrl
+          ? { url: connectionUrl }
+          : {
+              host: config.getOrThrow<string>("DATABASE_URL"),
+              port: Number(config.getOrThrow<string>("DATABASE_PORT")),
+              database: config.getOrThrow<string>("DATABASE_NAME"),
+            };
+
         return {
           type: "mssql",
-          url: config.getOrThrow("DATABASE_CONNECTION_URL"),
+          ...connectionOptions,
           synchronize: false,
           autoLoadEntities: true,
           cache: true,
@@ -52,13 +64,15 @@ import { AppConfigModule } from "./AppConfig.module.js";
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraDeployment, InfraPlan]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan]),
   ],
   providers: [
     InfraUserRepository,
     InfraRoleRepository,
+    InfraUserRoleRepository,
     InfraDeploymentRepository,
     TypeOrmUnitOfWork,
+    InfraStripeCustomerLinkRepository,
     {
       provide: UNIT_OF_WORK,
       useExisting: TypeOrmUnitOfWork,
@@ -66,9 +80,11 @@ import { AppConfigModule } from "./AppConfig.module.js";
   ],
   exports: [
     UNIT_OF_WORK,
+    InfraStripeCustomerLinkRepository,
     InfraDeploymentRepository,
     InfraUserRepository,
     InfraRoleRepository,
+    InfraUserRoleRepository,
   ]
 })
 export class DatabaseModule { }

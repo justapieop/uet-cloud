@@ -1,38 +1,42 @@
-import { ContainerAppsAPIClient, type ContainerApp, type ContainerResources, type EnvironmentVar, type ManagedEnvironment } from "@azure/arm-appcontainers";
-import { ResourceManagementClient, type ResourceGroup } from "@azure/arm-resources";
-import { DefaultAzureCredential } from "@azure/identity";
+import type { ContainerAppsAPIClient, Container, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, WorkloadProfile } from "@azure/arm-appcontainers";
+import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
+import type { Delegation, NetworkManagementClient, Subnet, VirtualNetwork } from "@azure/arm-network";
 import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
 import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { setTimeout as delay } from "node:timers/promises";
-import { AzureRegions, DEFAULT_REGION } from "./region.js";
+import { DEFAULT_REGION, normalizeAzureRegion } from "./region.js";
+import { describeBuildFailure, runBuildStep } from "../build-errors.js";
+import { ownedContainerAppResource, userWorkloadResourceGroup } from "./workload-scope.js";
 
-const RG_PREFIX: string = "user-rg-";
 const ACA_ENV_PREFIX: string = "user-aca-env-";
+const VNET_PREFIX: string = "user-vnet-";
+const ACA_SUBNET_NAME: string = "aca-infrastructure";
 
 export interface AzureRgInput {
   userId: string;
-  region?: AzureRegions;
+  region?: string;
   abortSignal?: AbortSignal;
 }
 
-export interface AzureAcaEnvInput extends AzureRgInput {}
+export interface AzureAcaEnvInput extends AzureRgInput { requireExisting?: boolean; }
 
 export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
   name: string;
   repo: string;
   imageName?: string;
-  tag: string;
   dockerFilePath?: string;
   ref?: string;
   targetPort: number;
+  external?: boolean;
   additionalPorts?: readonly DeploymentPortMapping[];
   resources?: ContainerResources;
   envVars?: Readonly<Record<string, string>>;
   minReplicas?: number;
   maxReplicas?: number;
   deploymentId?: string;
+  resourceId?: string;
   onBuildAccepted?: (id: string, image: string) => Promise<void>;
 }
 
@@ -40,12 +44,12 @@ export interface AzureProviderClients {
   resources: Pick<ResourceManagementClient["resources"], "getById">;
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get" | "createOrUpdate">;
-  containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate">;
+  containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate" | "update">;
+  virtualNetworks: Pick<NetworkManagementClient["virtualNetworks"], "get" | "createOrUpdate">;
 }
 
 @Injectable()
 export class AzureProvider implements DeploymentProvisioner {
-  private readonly clients: AzureProviderClients;
   private readonly platformResourceGroup: string;
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
@@ -54,7 +58,7 @@ export class AzureProvider implements DeploymentProvisioner {
     private readonly config: ConfigService,
     private readonly triggerBuild: Pick<TriggerBuildCase, "exec">,
     private readonly getBuild: Pick<GetBuildCase, "exec">,
-    clients?: AzureProviderClients,
+    private readonly clients: AzureProviderClients,
   ) {
     this.platformResourceGroup = config.get<string>("AZURE_PLATFORM_RESOURCE_GROUP")
       ?? config.getOrThrow<string>("AZURE_RG_NAME");
@@ -62,37 +66,28 @@ export class AzureProvider implements DeploymentProvisioner {
     this.pollIntervalMs = Number(config.get<string>("AZURE_DEPLOYMENT_POLL_INTERVAL_MS", "5000"));
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs <= 0 || this.timeoutMs > 2_147_483_647 ||
       !Number.isSafeInteger(this.pollIntervalMs) || this.pollIntervalMs <= 0 || this.pollIntervalMs > this.timeoutMs) {
-      throw new Error("Deployment timeout and polling interval must be positive integers, with the interval no greater than the timeout");
-    }
-    if (clients) {
-      this.clients = clients;
-    } else {
-      const credentials: DefaultAzureCredential = new DefaultAzureCredential();
-      const subscriptionId: string = config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID");
-      const resourceManager: ResourceManagementClient = new ResourceManagementClient(credentials, subscriptionId);
-      const acaManager: ContainerAppsAPIClient = new ContainerAppsAPIClient(credentials, subscriptionId);
-      this.clients = {
-        resources: resourceManager.resources,
-        resourceGroups: resourceManager.resourceGroups,
-        managedEnvironments: acaManager.managedEnvironments,
-        containerApps: acaManager.containerApps,
-      };
+      throw new BuildProviderError("Deployment timeout and polling interval must be positive integers, with the interval no greater than the timeout");
     }
   }
 
   public async getUserRg(input: AzureRgInput): Promise<ResourceGroup> {
+    if (input.region !== undefined && (typeof input.region !== "string" || !/^[a-z][a-z0-9]{0,63}$/.test(input.region))) {
+      throw new BuildProviderError("Region must be a lowercase Azure region name such as japaneast");
+    }
     const rgName: string = this.userResourceGroup(input.userId);
-    const exists: boolean = (await this.clients.resourceGroups.checkExistence(rgName, { abortSignal: input.abortSignal })).body;
+    const exists: boolean = (await runBuildStep("Resource group existence check", () => this.clients.resourceGroups.checkExistence(rgName, { abortSignal: input.abortSignal }))).body;
 
     if (exists) {
-      return this.clients.resourceGroups.get(rgName, { abortSignal: input.abortSignal });
+      return runBuildStep("Resource group lookup", () => this.clients.resourceGroups.get(rgName, { abortSignal: input.abortSignal }));
     }
 
-    return this.clients.resourceGroups.createOrUpdate(rgName, { location: input.region ?? DEFAULT_REGION }, { abortSignal: input.abortSignal });
+    return runBuildStep("Resource group creation", () => this.clients.resourceGroups.createOrUpdate(rgName, { location: input.region ?? DEFAULT_REGION }, { abortSignal: input.abortSignal }));
   }
 
   public async getAcaEnvironment(input: AzureAcaEnvInput): Promise<ManagedEnvironment> {
-    const rg: ResourceGroup = await this.getUserRg(input);
+    const rg: ResourceGroup = input.requireExisting
+      ? await runBuildStep("Resource group lookup", () => this.clients.resourceGroups.get(this.userResourceGroup(input.userId), { abortSignal: input.abortSignal }))
+      : await this.getUserRg(input);
     const rgName: string = this.userResourceGroup(input.userId);
     const acaEnvName: string = `${ACA_ENV_PREFIX}${input.userId}`;
     const signal: AbortSignal = this.operationSignal(input.abortSignal);
@@ -100,49 +95,101 @@ export class AzureProvider implements DeploymentProvisioner {
     try {
       environment = await this.clients.managedEnvironments.get(rgName, acaEnvName, { abortSignal: signal });
     } catch (error: unknown) {
-      if (!this.isNotFound(error)) throw error;
-      environment = await this.clients.managedEnvironments.createOrUpdate(rgName, acaEnvName, {
-        location: input.region ?? rg.location,
-        workloadProfiles: [],
-      }, { abortSignal: signal }).pollUntilDone({ abortSignal: signal });
+      if (!this.isNotFound(error)) throw new BuildProviderError(`Managed environment lookup failed (${describeBuildFailure(error)})`, { cause: error });
+      if (input.requireExisting) throw new BuildProviderError("The existing managed environment is missing; redeployment will not recreate it");
+      const location: string = input.region ?? normalizeAzureRegion(rg.location);
+      const subnetId: string = await this.getUserInfrastructureSubnet(input.userId, location, signal);
+      environment = await runBuildStep("Managed environment creation", () => this.clients.managedEnvironments.createOrUpdate(rgName, acaEnvName, {
+        location,
+        environmentMode: "WorkloadProfiles",
+        workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
+        vnetConfiguration: { infrastructureSubnetId: subnetId, internal: false },
+      }, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }));
+    }
+    if (input.region && normalizeAzureRegion(environment.location) !== normalizeAzureRegion(input.region)) {
+      throw new BuildProviderError(`The user's shared managed environment is in ${environment.location}; requested region ${input.region} cannot be used`);
+    }
+    if (environment.environmentMode === "Express") {
+      throw new BuildProviderError("The user's shared managed environment uses Express mode. Kumo requires a standard Workload Profiles environment. Replace or migrate the environment before submitting another deployment; changing the app name does not change the shared environment");
     }
     while (environment.provisioningState !== "Succeeded") {
       if (!environment.provisioningState || ["Failed", "Canceled", "Deleting"].includes(environment.provisioningState)) {
-        throw new Error(`Managed environment ${acaEnvName} is not ready: ${environment.provisioningState ?? "unknown state"}`);
+        throw new BuildProviderError(`Managed environment ${acaEnvName} is not ready: ${environment.provisioningState ?? "unknown state"}`);
       }
       await delay(this.pollIntervalMs, undefined, { signal });
-      environment = await this.clients.managedEnvironments.get(rgName, acaEnvName, { abortSignal: signal });
+      environment = await runBuildStep("Managed environment readiness check", () => this.clients.managedEnvironments.get(rgName, acaEnvName, { abortSignal: signal }));
     }
-    if (!environment.id || (input.region && environment.location.toLowerCase() !== input.region.toLowerCase())) {
-      throw new Error("Managed environment is missing its resource ID or belongs to a different region");
+    if (!environment.id) {
+      throw new BuildProviderError("Managed environment is missing its resource ID");
     }
     return environment;
   }
 
+  private async getUserInfrastructureSubnet(userId: string, location: string, signal: AbortSignal): Promise<string> {
+    const rgName: string = this.userResourceGroup(userId);
+    const vnetName: string = `${VNET_PREFIX}${userId}`;
+    const vnetId: string = `/subscriptions/${this.requiredSetting("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${rgName}/providers/Microsoft.Network/virtualNetworks/${vnetName}`;
+    const subnetId: string = `${vnetId}/subnets/${ACA_SUBNET_NAME}`;
+    let network: VirtualNetwork;
+    try {
+      network = await this.clients.virtualNetworks.get(rgName, vnetName, { abortSignal: signal });
+    } catch (error: unknown) {
+      if (!this.isNotFound(error)) throw new BuildProviderError(`Virtual network lookup failed (${describeBuildFailure(error)})`, { cause: error });
+      network = await runBuildStep("Virtual network creation", () => this.clients.virtualNetworks.createOrUpdate(rgName, vnetName, {
+        location,
+        addressSpace: { addressPrefixes: ["10.0.0.0/16"] },
+        subnets: [{ name: ACA_SUBNET_NAME, addressPrefix: "10.0.0.0/24",
+          delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] }],
+      }, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }));
+    }
+    if (network.id?.toLowerCase() !== vnetId.toLowerCase() || typeof network.location !== "string" || normalizeAzureRegion(network.location) !== location) {
+      throw new BuildProviderError("The user's virtual network identity or region does not match the requested workload scope");
+    }
+    while (network.provisioningState !== "Succeeded") {
+      if (!network.provisioningState || ["Failed", "Canceled", "Deleting"].includes(network.provisioningState)) {
+        throw new BuildProviderError(`Virtual network ${vnetName} is not ready: ${network.provisioningState ?? "unknown state"}`);
+      }
+      await delay(this.pollIntervalMs, undefined, { signal });
+      network = await runBuildStep("Virtual network readiness check", () => this.clients.virtualNetworks.get(rgName, vnetName, { abortSignal: signal }));
+    }
+    const subnet: Subnet | undefined = network.subnets?.find((candidate: Subnet): boolean => candidate.name === ACA_SUBNET_NAME);
+    const prefix: string | undefined = subnet?.addressPrefix ?? (subnet?.addressPrefixes?.length === 1 ? subnet.addressPrefixes[0] : undefined);
+    const prefixLength: number = Number(prefix?.split("/")[1]);
+    if (network.id?.toLowerCase() !== vnetId.toLowerCase() || typeof network.location !== "string" || normalizeAzureRegion(network.location) !== location ||
+      subnet?.id?.toLowerCase() !== subnetId.toLowerCase() || subnet.provisioningState !== "Succeeded" ||
+      !prefix || !/^(?:\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/.test(prefix) || prefixLength < 0 || prefixLength > 27 ||
+      !subnet.delegations?.some((delegation: Delegation): boolean => delegation.serviceName?.toLowerCase() === "microsoft.app/environments")) {
+      throw new BuildProviderError("The user's virtual network requires a ready dedicated aca-infrastructure subnet (/27 or larger) delegated to Microsoft.App/environments; existing networking was not modified");
+    }
+    signal.throwIfAborted();
+    return subnetId;
+  }
+
   public async provisionDeployment(input: DeploymentProvisionInput, onBuildAccepted: (id: string, image: string) => Promise<void>): Promise<DeploymentProvisionResult> {
-    const app: ContainerApp = await this.createDeployment({
-      ...input.spec, name: input.name, userId: input.userId, deploymentId: input.id,
+    const app: ContainerApp = await runBuildStep("Deployment provisioning", () => this.createDeployment({
+      ...input.spec, name: input.name, userId: input.userId, deploymentId: input.id, resourceId: input.resourceId,
       resources: { cpu: input.spec.maxVcpu, memory: `${input.spec.maxMemory}Gi` },
       minReplicas: input.spec.minScaling, maxReplicas: input.spec.maxScaling, onBuildAccepted,
-    });
+    }));
     const buildId: string | undefined = app.tags?.["kumo-build-id"];
     const image: string | undefined = app.template?.containers?.[0]?.image;
     if (!app.id || !buildId || !image || app.provisioningState !== "Succeeded") {
-      throw new Error("Azure did not return a successfully provisioned app with build metadata");
+      throw new BuildProviderError("Azure did not return a successfully provisioned app with build metadata");
     }
     return { buildId, image, resourceId: app.id, fqdn: app.configuration?.ingress?.fqdn ?? null };
   }
 
   public async createDeployment(input: AzureDeploymentCreateInput): Promise<ContainerApp> {
-    const portError: InvalidDomainParams | null = validateDeploymentPorts(input.targetPort, input.additionalPorts);
+    const portError: InvalidDomainParams | null = validateDeploymentPorts(input.targetPort, input.additionalPorts, input.external);
     if (portError) throw portError;
     const rgName: string = this.userResourceGroup(input.userId);
+    if (input.resourceId && (!input.deploymentId || !ownedContainerAppResource({ resourceId: input.resourceId, userId: input.userId, appName: input.name }, this.requiredSetting("AZURE_SUBSCRIPTION_ID"), this.platformResourceGroup))) {
+      throw new BuildProviderError("Redeployment resource does not belong to this user");
+    }
     if (!/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(input.name)) {
-      throw new Error("Container App name must be 2-32 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit");
+      throw new BuildProviderError("Container App name must be 2-32 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit");
     }
-    if (typeof input.tag !== "string" || !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(input.tag)) {
-      throw new Error("Image tag must be 1-128 letters, digits, underscores, periods, or hyphens, starting with a letter, digit, or underscore");
-    }
+
     const minReplicas: number = input.minReplicas ?? 0;
     const maxReplicas: number = input.maxReplicas ?? 2;
     const resources: ContainerResources = input.resources ?? { cpu: 0.25, memory: "0.5Gi" };
@@ -150,21 +197,21 @@ export class AzureProvider implements DeploymentProvisioner {
       ? Number(resources.memory.slice(0, -2)) : NaN;
     if (typeof resources.cpu !== "number" || !Number.isFinite(resources.cpu) || resources.cpu <= 0 ||
       !Number.isInteger(resources.cpu * 4) || !Number.isFinite(memory) || memory !== resources.cpu * 2) {
-      throw new Error("Memory in GiB must be exactly twice vCPU; vCPU must be positive in increments of 0.25");
+      throw new BuildProviderError("Memory in GiB must be exactly twice vCPU; vCPU must be positive in increments of 0.25");
     }
     if (!Number.isInteger(input.targetPort) || input.targetPort < 1 || input.targetPort > 65535 ||
       !Number.isInteger(minReplicas) || minReplicas < 0 || !Number.isInteger(maxReplicas) || maxReplicas < 1 || maxReplicas < minReplicas) {
-      throw new Error("Invalid container port or replica limits");
+      throw new BuildProviderError("Invalid container port or replica limits");
     }
-    const registry: string = this.config.getOrThrow<string>("AZURE_CONTAINER_REGISTRY_SERVER");
-    const pullIdentityName: string = this.config.getOrThrow<string>("AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME");
+    const registry: string = this.requiredSetting("AZURE_CONTAINER_REGISTRY_SERVER");
+    const pullIdentityName: string = this.requiredSetting("AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME");
     if (!/^[a-z0-9.-]+$/i.test(registry) ||
       !/^[a-z0-9][a-z0-9_-]{2,127}$/i.test(pullIdentityName)) {
-      throw new Error("A private registry hostname and valid user-assigned ACR pull identity name are required");
+      throw new BuildProviderError("A private registry hostname and valid user-assigned ACR pull identity name are required");
     }
-    const pullIdentity: string = `/subscriptions/${this.config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${this.platformResourceGroup}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${pullIdentityName}`;
+    const pullIdentity: string = `/subscriptions/${this.requiredSetting("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${this.platformResourceGroup}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${pullIdentityName}`;
     const signal: AbortSignal = this.operationSignal(input.abortSignal);
-    const environment: ManagedEnvironment = await this.getAcaEnvironment({ ...input, abortSignal: signal });
+    const environment: ManagedEnvironment = await this.getAcaEnvironment({ ...input, requireExisting: Boolean(input.resourceId), abortSignal: signal });
     if (input.additionalPorts?.some((port: DeploymentPortMapping): boolean => port.external === true) && !environment.vnetConfiguration?.infrastructureSubnetId) {
       throw new BuildProviderError("External additional TCP ports require a managed environment connected to a virtual network");
     }
@@ -172,54 +219,75 @@ export class AzureProvider implements DeploymentProvisioner {
     try {
       existing = await this.clients.containerApps.get(rgName, input.name, { abortSignal: signal });
     } catch (error: unknown) {
-      if (!this.isNotFound(error)) throw error;
+      if (!this.isNotFound(error)) throw new BuildProviderError(`Container App lookup failed (${describeBuildFailure(error)})`, { cause: error });
     }
     if (existing) {
       if (input.deploymentId && existing.tags?.["kumo-deployment-id"] !== input.deploymentId) {
-        throw new Error("An unrelated Container App already uses this deployment name");
+        throw new BuildProviderError("An unrelated Container App already uses this deployment name");
       }
       if ((existing.environmentId ?? existing.managedEnvironmentId)?.toLowerCase() !== environment.id!.toLowerCase()) {
-        throw new Error("Existing Container App does not belong to the user's managed environment");
+        throw new BuildProviderError("Existing Container App does not belong to the user's managed environment");
       }
-      return existing;
+      if (input.resourceId && existing.id?.toLowerCase() !== input.resourceId.toLowerCase()) throw new BuildProviderError("Redeployment resource identity changed");
+      if (!input.resourceId) return existing;
     }
+    if (input.resourceId && !existing) throw new BuildProviderError("The existing Container App is missing; redeployment will not recreate it");
 
     const registryId: string = this.config.get<string>("AZURE_CONTAINER_REGISTRY_RESOURCE_ID")
-      ?? `/subscriptions/${this.config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${this.config.getOrThrow<string>("AZURE_RG_NAME")}/providers/Microsoft.ContainerRegistry/registries/${this.config.getOrThrow<string>("AZURE_CONTAINER_REGISTRY_NAME")}`;
+      ?? `/subscriptions/${this.requiredSetting("AZURE_SUBSCRIPTION_ID")}/resourceGroups/${this.requiredSetting("AZURE_RG_NAME")}/providers/Microsoft.ContainerRegistry/registries/${this.requiredSetting("AZURE_CONTAINER_REGISTRY_NAME")}`;
     if (!/^\/subscriptions\/[^/]+\/resourceGroups\/[^/]+\/providers\/Microsoft\.ContainerRegistry\/registries\/[^/]+$/i.test(registryId)) {
-      throw new Error("A valid ACR resource ID is required");
+      throw new BuildProviderError("A valid ACR resource ID is required");
     }
-    const registryResource: { properties?: unknown } = await this.clients.resources.getById(registryId, "2023-07-01", { abortSignal: signal });
+    const registryResource: { properties?: unknown } = await runBuildStep("Private registry lookup", () => this.clients.resources.getById(registryId, "2023-07-01", { abortSignal: signal }));
     const registryProperties: unknown = registryResource.properties;
     if (typeof registryProperties !== "object" || registryProperties === null ||
       !("loginServer" in registryProperties) || registryProperties.loginServer !== registry ||
       !("anonymousPullEnabled" in registryProperties) || registryProperties.anonymousPullEnabled !== false) {
-      throw new Error("The configured ACR must match the image hostname and have anonymous pull disabled before building user images");
+      throw new BuildProviderError("The configured ACR must match the image hostname and have anonymous pull disabled before building user images");
     }
 
     const buildInput: TriggerBuildInput = {
-      userId: input.userId, repo: input.repo, imageName: input.imageName ?? input.name, tag: input.tag,
+      userId: input.userId, repo: input.repo, imageName: input.imageName ?? input.name,
       dockerFilePath: input.dockerFilePath, ref: input.ref,
     };
     signal.throwIfAborted();
-    const build: TriggerBuildResult = await this.triggerBuild.exec(buildInput);
-    await input.onBuildAccepted?.(build.buildId, build.image);
-    const completed: BuildDetails = await this.waitForBuild(build.buildId, input.userId, signal);
+    const build: TriggerBuildResult = await runBuildStep("Build queue submission", () => this.triggerBuild.exec(buildInput));
+    if (input.onBuildAccepted) {
+      await runBuildStep("Deployment build reference persistence", () => input.onBuildAccepted!(build.buildId, build.image));
+    }
+    const completed: BuildDetails = await runBuildStep("Build completion wait", () => this.waitForBuild(build.buildId, input.userId, signal));
     if (!completed.image.startsWith(`${registry}/`)) {
-      throw new Error("Build image does not belong to the configured private registry");
+      throw new BuildProviderError("Build image does not belong to the configured private registry");
+    }
+    if (existing && input.resourceId) {
+      // Read again after the potentially long build so out-of-band settings are preserved.
+      const current: ContainerApp = await runBuildStep("Redeployment configuration lookup", () => this.clients.containerApps.get(rgName, input.name, { abortSignal: signal }));
+      if (current.id?.toLowerCase() !== input.resourceId.toLowerCase() || current.tags?.["kumo-deployment-id"] !== input.deploymentId ||
+        (current.environmentId ?? current.managedEnvironmentId)?.toLowerCase() !== environment.id!.toLowerCase()) throw new BuildProviderError("Redeployment ownership or environment changed");
+      const containers: NonNullable<NonNullable<ContainerApp["template"]>["containers"]> = current.template?.containers ?? [];
+      const target: string | undefined = containers.find((container: Container): boolean => container.name === input.name)?.name ?? (containers.length === 1 ? containers[0]?.name : undefined);
+      if (!target) throw new BuildProviderError("Redeployment main container could not be identified");
+      // PATCH only the revision template/tags; never round-trip masked secret values.
+      const updated: ContainerApp = { location: current.location,
+        tags: { ...current.tags, "kumo-build-id": build.buildId },
+        template: { ...current.template, revisionSuffix: `build-${build.buildId}`,
+          containers: containers.map((container: Container): Container => container.name === target ? { ...container, image: completed.image } : container) },
+      };
+      return runBuildStep("Container App image update", () => this.clients.containerApps.update(rgName, input.name, updated, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }));
     }
     const env: EnvironmentVar[] = Object.entries(input.envVars ?? {}).map(
       ([name, value]: [string, string]): EnvironmentVar => ({ name, value }),
     );
     const app: ContainerApp = {
       tags: { "kumo-build-id": build.buildId, ...(input.deploymentId ? { "kumo-deployment-id": input.deploymentId } : {}) },
-      location: environment.location,
+      location: normalizeAzureRegion(environment.location),
       environmentId: environment.id,
+      workloadProfileName: environment.workloadProfiles?.find((profile: WorkloadProfile): boolean => profile.workloadProfileType === "Consumption")?.name,
       identity: { type: "UserAssigned", userAssignedIdentities: { [pullIdentity]: {} } },
       configuration: {
         activeRevisionsMode: "Single",
         ingress: {
-          external: true, targetPort: input.targetPort, allowInsecure: false,
+          external: input.external ?? true, targetPort: input.targetPort, allowInsecure: false,
           additionalPortMappings: input.additionalPorts?.map((port: DeploymentPortMapping) => ({
             targetPort: port.targetPort, exposedPort: port.exposedPort ?? port.targetPort, external: port.external ?? false,
           })),
@@ -233,8 +301,8 @@ export class AzureProvider implements DeploymentProvisioner {
       },
     };
     signal.throwIfAborted();
-    return this.clients.containerApps.createOrUpdate(rgName, input.name, app, { abortSignal: signal })
-      .pollUntilDone({ abortSignal: signal });
+    return runBuildStep("Container App creation", () => this.clients.containerApps.createOrUpdate(rgName, input.name, app, { abortSignal: signal })
+      .pollUntilDone({ abortSignal: signal }));
   }
 
   private async waitForBuild(id: string, userId: string, signal: AbortSignal): Promise<BuildDetails> {
@@ -250,10 +318,10 @@ export class AzureProvider implements DeploymentProvisioner {
   }
 
   private userResourceGroup(userId: string): string {
-    if (!/^[0-9]{1,32}$/.test(userId)) throw new Error("A valid numeric GitHub user ID is required");
-    const name: string = `${RG_PREFIX}${userId}`;
-    if (name.toLowerCase() === this.platformResourceGroup.toLowerCase()) {
-      throw new Error("User workloads cannot target the platform resource group");
+    if (!/^[0-9]{1,32}$/.test(userId)) throw new BuildProviderError("A valid numeric GitHub user ID is required");
+    const name: string | null = userWorkloadResourceGroup(userId, this.platformResourceGroup);
+    if (!name) {
+      throw new BuildProviderError("User workloads cannot target the platform resource group");
     }
     return name;
   }
@@ -265,5 +333,11 @@ export class AzureProvider implements DeploymentProvisioner {
 
   private isNotFound(error: unknown): boolean {
     return typeof error === "object" && error !== null && "statusCode" in error && error.statusCode === 404;
+  }
+
+  private requiredSetting(name: string): string {
+    const value: unknown = this.config.get<unknown>(name);
+    if (typeof value !== "string" || !value.trim()) throw new BuildProviderError(`Missing required deployment setting: ${name}`);
+    return value.trim();
   }
 }

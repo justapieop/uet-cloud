@@ -4,11 +4,12 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { RootModule } from "./modules/Root.module.js";
 import { Logger } from "nestjs-pino";
-import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import { SwaggerModule } from "@nestjs/swagger";
 import session from "express-session";
 import passport from "passport";
 import MongoStore from "connect-mongo";
 import { createSessionCookieOptions } from "./common/Session.options.js";
+import { createOpenApiConfig } from "./common/OpenApi.js";
 
 export async function bootstrap(): Promise<void> {
   const app: INestApplication = await NestFactory.create(RootModule, {
@@ -23,13 +24,17 @@ export async function bootstrap(): Promise<void> {
   app.useLogger(logger);
   app.useGlobalPipes(new ValidationPipe());
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
+  const sessionSecret: string = config.get<string>("SESSION_SECRET") ?? "kumo-local-session-secret-key-development";
+  const mongoUrl: string = config.get<string>("MONGODB_CONNECTION_STRING") ?? "mongodb://127.0.0.1:27017/kumo-session";
+
   app.use(session({
     saveUninitialized: false,
-    resave: true,
-    secret: config.getOrThrow("SESSION_SECRET"),
+    resave: false,
+    secret: sessionSecret,
     cookie: createSessionCookieOptions(config.get<string>("NODE_ENV", "production")),
     store: MongoStore.create({
-      mongoUrl: config.getOrThrow("MONGODB_CONNECTION_STRING"),
+      mongoUrl,
+      touchAfter: 300,
     }),
   }));
   app.enableCsrfProtection();
@@ -41,24 +46,7 @@ export async function bootstrap(): Promise<void> {
   SwaggerModule.setup(
     "/api-docs",
     app,
-    () => SwaggerModule.createDocument(app,
-      new DocumentBuilder()
-        .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "opaque" }, "build-source")
-        .addOAuth2(
-          {
-            type: "oauth2",
-            flows: {
-              authorizationCode: {
-                authorizationUrl: "https://github.com/login/oauth/authorize",
-                tokenUrl: "https://github.com/login/oauth/access_token",
-                scopes: { "read:user": "Read your GitHub profile" },
-              },
-            },
-          },
-          "github",
-        )
-        .build()
-    )
+    () => SwaggerModule.createDocument(app, createOpenApiConfig())
   );
 
   const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production").trim().toLowerCase());

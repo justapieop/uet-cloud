@@ -11,7 +11,45 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Start GitHub authentication */
         get: operations["AuthController_login"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/github/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open GitHub App installation and repository selection */
+        get: operations["AuthController_installGitHubApp"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/github/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current account's installed GitHub repositories
+         * @description Only personal repositories owned by the session's GitHub account and granted to this app. Excludes other users and organizations; accepts no account or installation selector.
+         */
+        get: operations["AuthController_listGitHubRepositories"];
         put?: never;
         post?: never;
         delete?: never;
@@ -27,6 +65,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Complete GitHub authentication and establish a session */
         get: operations["AuthController_callback"];
         put?: never;
         post?: never;
@@ -45,6 +84,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Log out of the current session */
         post: operations["AuthController_logout"];
         delete?: never;
         options?: never;
@@ -59,7 +99,42 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Get the current authenticated user's profile */
         get: operations["UserController_getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/builds/{id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the manifest for a pipeline's assigned build */
+        get: operations["BuildSourceController_manifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/builds/{id}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the saved commit's Docker build context */
+        get: operations["BuildSourceController_download"];
         put?: never;
         post?: never;
         delete?: never;
@@ -75,10 +150,48 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** List owned deployments with optional status, name, and region filters */
+        get: operations["DeploymentsController_list"];
+        put?: never;
+        /**
+         * Queue a repository build and deploy its successful image
+         * @description The resolved Git commit SHA automatically determines the image tag. Do not supply a tag; ref selects the branch, Git tag, or commit to build.
+         */
+        post: operations["DeploymentsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         get?: never;
         put?: never;
-        /** Create and deploy a new container application */
-        post: operations["DeploymentMutationController_create"];
+        /** Start an owned stopped container deployment */
+        post: operations["DeploymentsController_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop an owned running container deployment */
+        post: operations["DeploymentsController_stop"];
         delete?: never;
         options?: never;
         head?: never;
@@ -92,18 +205,171 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get an owned deployment's provisioning status */
+        get: operations["DeploymentsController_get"];
         put?: never;
         post?: never;
-        /** Delete an existing container application */
-        delete: operations["DeploymentMutationController_delete"];
+        delete?: never;
         options?: never;
         head?: never;
-        /** Update an existing container application configuration */
-        patch: operations["DeploymentMutationController_update"];
+        patch?: never;
         trace?: never;
     };
-    "/deployments/resource-group/me": {
+    "/deployment/build/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an owned build and refresh its pipeline status */
+        get: operations["DeploymentController_getBuild"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Azure Monitor usage for an owned running Container App */
+        get: operations["DeploymentMetricsController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check whether the signed-in user has an active plan
+         * @description Verifies active Stripe subscriptions and matches active local plans. No linked customer or no matching active subscription returns has_plan=false. Stripe verification failures return 503, not false. Does not reserve quota or grant deployment access.
+         */
+        get: operations["UserPlansController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List active Stripe-linked plans
+         * @description Public catalog ordered by local price and ID. Does not verify Stripe availability; Checkout includes all active prices of the linked product.
+         */
+        get: operations["PlansController_list"];
+        put?: never;
+        /** Create a local plan; does not create Stripe products or prices */
+        post: operations["PlansController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all local plans, including inactive and unmapped plans */
+        get: operations["PlansController_listAll"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect a local plan */
+        get: operations["PlansController_get"];
+        /**
+         * Replace a local plan's configuration; ID stays unchanged
+         * @description Requires all configuration fields. Changes affect subsequent eligibility/quota checks. Does not edit Stripe prices or existing workloads.
+         */
+        put: operations["PlansController_replace"];
+        post?: never;
+        /**
+         * Deactivate a plan without deleting it or canceling Stripe subscriptions
+         * @description Sets active=false. This removes eligibility for subsequent deployment admissions through this plan.
+         */
+        delete: operations["PlansController_deactivate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/{id}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe-hosted subscription checkout for the signed-in user
+         * @description Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
+         */
+        post: operations["PlanSubscriptionsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/{userId}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a user's Stripe subscriptions in all statuses with cursor pagination */
+        get: operations["UserSubscriptionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/{userId}/subscriptions/{subscriptionId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -113,8 +379,114 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete the current user's resource group */
-        delete: operations["DeploymentMutationController_deleteResourceGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Schedule or undo cancellation at the end of the subscription period
+         * @description Only accepts cancel_at_period_end. Does not immediately cancel, reactivate an ended subscription, change prices, or remove metered items.
+         */
+        patch: operations["UserSubscriptionsController_setCancellation"];
+        trace?: never;
+    };
+    "/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List roles and the permission catalog
+         * @description Returns every role, including inactive roles, with its exact stored permission keys. The permission catalog is metadata only and does not assign grants.
+         */
+        get: operations["RolesController_list"];
+        put?: never;
+        /** Create a role */
+        post: operations["RolesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace a role */
+        put: operations["RolesController_replace"];
+        post?: never;
+        /**
+         * Deactivate a role
+         * @description Marks the role inactive. Existing assignments are retained but grant no permissions.
+         */
+        delete: operations["RolesController_deactivate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/{userId}/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a user's exact role assignments */
+        get: operations["UserRolesController_get"];
+        /**
+         * Replace a user's role assignments
+         * @description Applies the exact set of active role IDs. An empty array removes every assignment.
+         */
+        put: operations["UserRolesController_replace"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List deployment regions in the configured Azure subscription
+         * @description Subscription locations intersected with advertised Container Apps, managed-environment, and VNet support. Does not guarantee quota, capacity, policy eligibility, or compatibility with an existing user's shared environment. No client-supplied subscription is used.
+         */
+        get: operations["RegionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/redeploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rebuild and update an owned existing deployment
+         * @description Resolves the saved Git reference again, builds and pushes its commit-tagged image, then updates only the existing app's main-container image. No repository-push webhook is configured by this endpoint.
+         */
+        post: operations["RedeploymentsController_create"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -124,113 +496,324 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        ResourcesDto: {
-            /**
-             * @description CPU allocation (in cores, e.g. 0.25, 0.5, 1)
-             * @example 0.25
-             */
-            cpu?: number;
-            /**
-             * @description Memory allocation in GiB (e.g. 0.5, 1, 2)
-             * @example 0.5
-             */
-            memory?: number;
+        GitHubRepositoryResponseDto: {
+            id: number;
+            name: string;
+            full_name: string;
+            private: boolean;
+            default_branch: string | null;
+            html_url: string;
         };
-        ScalingDto: {
-            /**
-             * @description Min replicas (0 for scale-to-zero)
-             * @default 0
-             * @example 0
-             */
-            minReplicas: number;
-            /**
-             * @description Max replicas
-             * @default 2
-             * @example 2
-             */
-            maxReplicas: number;
+        GitHubRepositoriesResponseDto: {
+            repositories: components["schemas"]["GitHubRepositoryResponseDto"][];
+            page: number;
+            per_page: number;
+            has_next_page: boolean;
         };
-        CreateDeploymentSpecDto: {
-            /**
-             * @description Docker container image URI
-             * @example mcr.microsoft.com/k8se/quickstart:latest
-             */
+        UserResponseDto: {
+            id: string;
+            display_name: string;
+            /** Format: date-time */
+            created_at: string;
+            suspended: boolean;
+        };
+        BuildManifestDto: {
+            /** Format: uuid */
+            build_id: string;
+            dockerfile_path: string;
+            commit_sha: string;
             image: string;
+        };
+        AdditionalDeploymentPortDto: {
             /**
-             * @description Target container port to expose
-             * @example 80
+             * @description Additional TCP port the container listens on
+             * @example 8080
              */
-            targetPort: number;
-            resources?: components["schemas"]["ResourcesDto"];
-            scaling?: components["schemas"]["ScalingDto"];
+            target_port: number;
             /**
-             * @description Key-value environment variables
-             * @example {
-             *       "NODE_ENV": "production"
-             *     }
+             * @description Defaults to target_port
+             * @example 8080
              */
-            envVars?: Record<string, never>;
+            exposed_port?: number;
+            /**
+             * @description Defaults to false. Expose outside the environment; requires an external container and VNet integration.
+             * @example false
+             */
+            external?: boolean;
         };
         CreateDeploymentDto: {
             /**
-             * @description Application name (2-32 lowercase alphanumeric characters or hyphens)
-             * @example sample-app
+             * @description Region for the shared user environment; must match it if already created
+             * @example japaneast
              */
+            region?: string;
             name: string;
-            /** @description Container deployment specification */
-            spec: components["schemas"]["CreateDeploymentSpecDto"];
+            repo: string;
+            target_port: number;
+            /** @description Up to five additional TCP port mappings */
+            additional_ports?: components["schemas"]["AdditionalDeploymentPortDto"][];
+            /**
+             * @description Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the same environment.
+             * @example true
+             */
+            external?: boolean;
+            /**
+             * @description vCPU allocated per replica, in increments of 0.25
+             * @example 0.5
+             */
+            max_vcpu: number;
+            /**
+             * @description GiB allocated per replica; must equal max_vcpu * 2
+             * @example 1
+             */
+            max_memory: number;
+            /** @example 0 */
+            min_scaling: number;
+            /** @example 2 */
+            max_scaling: number;
+            image_name?: string;
+            dockerfile_path?: string;
+            ref?: string;
+            env_vars?: {
+                [key: string]: string;
+            };
+        };
+        AdditionalDeploymentPortResponseDto: {
+            target_port: number;
+            exposed_port: number;
+            external: boolean;
         };
         DeploymentResponseDto: {
-            /** @example d9e847c1-2f3b-4c5a-b6d7-123456789abc */
+            /** @description Requested region, or null when omitted */
+            region: string | null;
+            /** Format: uuid */
             id: string;
-            /** @example user-123 */
-            user_id: string;
-            /** @example sample-app */
             name: string;
-            /** @example RUNNING */
-            status: string;
-            /** @description Container deployment specification */
-            spec: components["schemas"]["CreateDeploymentSpecDto"];
-            /** @example https://sample-app.internal.azurecontainerapps.io */
-            fqdn?: Record<string, never>;
-            error_message?: Record<string, never>;
+            target_port: number | null;
+            additional_ports: components["schemas"]["AdditionalDeploymentPortResponseDto"][];
+            /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
+            external: boolean | null;
+            /** @enum {string} */
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
+            image: string | null;
+            build_id: string | null;
+            resource_id: string | null;
+            fqdn: string | null;
+            error: string | null;
+            max_vcpu: number | null;
+            max_memory: number | null;
+            min_scaling: number | null;
+            max_scaling: number | null;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
         };
-        UpdateDeploymentSpecDto: {
+        BuildResponseDto: {
+            /** Format: uuid */
+            build_id: string;
+            run_url: string | null;
+            /** @example 42 */
+            run_id: string | null;
             /**
-             * @description Updated container image URI
-             * @example mcr.microsoft.com/k8se/quickstart:latest
+             * @example PENDING
+             * @enum {string}
              */
-            image?: string;
+            status: "PENDING" | "PREPARING" | "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "CANCELED";
             /**
-             * @description Updated target container port
-             * @example 80
+             * @description Repository address until source resolution; then includes the full Git commit SHA as the image tag
+             * @example registry.azurecr.io/my-app:0123456789abcdef0123456789abcdef01234567
              */
-            targetPort?: number;
-            resources?: components["schemas"]["ResourcesDto"];
-            scaling?: components["schemas"]["ScalingDto"];
-            /**
-             * @description Updated environment variables
-             * @example {
-             *       "DEBUG": "false"
-             *     }
-             */
-            envVars?: Record<string, never>;
+            image: string;
+            commit_sha: string | null;
+            /** @description Preparation or scheduling failure; null when none has been recorded */
+            error: string | null;
         };
-        UpdateDeploymentDto: {
-            /** @description Updated container deployment specification */
-            spec?: components["schemas"]["UpdateDeploymentSpecDto"];
+        MetricPointDto: {
+            /**
+             * Format: date-time
+             * @description UTC timestamp
+             */
+            timestamp: string;
+            /** @description Null means Azure supplied no sample */
+            value: number | null;
         };
-        DeleteResourceGroupResponseDto: {
-            /** @example user-rg-dev01 */
-            resource_group_name: string;
-            /** @example DELETED */
+        MetricSeriesDto: {
+            revision_name: string | null;
+            /** @description Null for the revision-level replica count metric */
+            replica_name: string | null;
+            points: components["schemas"]["MetricPointDto"][];
+        };
+        DeploymentMetricsResponseDto: {
+            /** Format: uuid */
+            deployment_id: string;
+            /** @example 60 */
+            interval_seconds: number;
+            /**
+             * @description Mean within each one-minute bucket, for each revision/replica series
+             * @enum {string}
+             */
+            aggregation: "Average";
+            /** @enum {string} */
+            cpu_unit: "cores";
+            /** @enum {string} */
+            memory_unit: "MiB";
+            /** @description CPU used by each replica, in cores */
+            cpu: components["schemas"]["MetricSeriesDto"][];
+            /** @description Working set of each replica, in MiB */
+            memory: components["schemas"]["MetricSeriesDto"][];
+            /** @description Average active replica count per revision; zero is returned only when Azure emits zero */
+            replicas: components["schemas"]["MetricSeriesDto"][];
+        };
+        PlanResponseDto: {
+            id: string;
+            name: string;
+            /** @description Local catalog price; Checkout bills the linked Stripe product's configured default price */
+            price: number;
+            /** @description Maximum vCPU per deployment replica */
+            vcpu: number;
+            /** @description Maximum memory per deployment replica in GiB */
+            memory: number;
+            /** @description Maximum reserved deployment slots */
+            deployments: number;
+            /** @description Configured storage quota; enforced by the future storage-allocation flow */
+            disk: number;
+            /** @description Maximum replicas per deployment */
+            max_replicas: number;
+        };
+        UserPlansResponseDto: {
+            /** @description True when an active Stripe subscription maps to at least one active local plan; does not indicate remaining quota */
+            has_plan: boolean;
+            /** @description Active local plans matching the user's active Stripe subscriptions */
+            plans: components["schemas"]["PlanResponseDto"][];
+        };
+        AdminPlanResponseDto: {
+            id: string;
+            name: string;
+            /** @description Local catalog price; Checkout bills the linked Stripe product's configured default price */
+            price: number;
+            /** @description Maximum vCPU per deployment replica */
+            vcpu: number;
+            /** @description Maximum memory per deployment replica in GiB */
+            memory: number;
+            /** @description Maximum reserved deployment slots */
+            deployments: number;
+            /** @description Configured storage quota; enforced by the future storage-allocation flow */
+            disk: number;
+            /** @description Maximum replicas per deployment */
+            max_replicas: number;
+            active: boolean;
+            stripe_product_id: string | null;
+        };
+        AdminPlanPageDto: {
+            plans: components["schemas"]["AdminPlanResponseDto"][];
+            page: number;
+            per_page: number;
+            has_next_page: boolean;
+        };
+        AdminPlanCreateDto: {
+            name: string;
+            price: number;
+            vcpu: number;
+            memory: number;
+            deployments: number;
+            disk: number;
+            active: boolean;
+            stripe_product_id: string | null;
+            max_replicas: number;
+            id: string;
+        };
+        AdminPlanWriteDto: {
+            name: string;
+            price: number;
+            vcpu: number;
+            memory: number;
+            deployments: number;
+            disk: number;
+            active: boolean;
+            stripe_product_id: string | null;
+            max_replicas: number;
+        };
+        PlanSubscriptionResponseDto: {
+            checkout_session_id: string;
+            /**
+             * Format: uri
+             * @description Redirect the browser to this Stripe-hosted payment page
+             */
+            checkout_url: string;
+        };
+        AdminSubscriptionItemDto: {
+            price_id: string;
+            product_id: string;
+        };
+        AdminSubscriptionResponseDto: {
+            id: string;
             status: string;
-            /** @example 2 */
-            deployments_synchronized: number;
+            cancel_at_period_end: boolean;
+            /** @description Unix timestamp from Stripe */
+            cancel_at: number | null;
+            items: components["schemas"]["AdminSubscriptionItemDto"][];
+        };
+        AdminSubscriptionPageDto: {
+            subscriptions: components["schemas"]["AdminSubscriptionResponseDto"][];
+            has_more: boolean;
+            next_cursor: string | null;
+        };
+        AdminCancellationDto: {
+            /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
+            cancel_at_period_end: boolean;
+        };
+        RoleResponseDto: {
+            id: string;
+            name: string;
+            active: boolean;
+            /** @description Exact stored permission keys; Super does not expand into every permission */
+            permissions: string[];
+            /** Format: date-time */
+            created_at: string;
+        };
+        PermissionResponseDto: {
+            /** @description Stable permission key used by role write operations */
+            key: string;
+            name: string;
+            description: string;
+            /** @description Permission keys that should accompany this permission */
+            requires: string[];
+        };
+        RoleCatalogResponseDto: {
+            roles: components["schemas"]["RoleResponseDto"][];
+            permissions: components["schemas"]["PermissionResponseDto"][];
+        };
+        RoleCreateDto: {
+            name: string;
+            active: boolean;
+            /** @description Exact permission keys from the catalog. Unknown keys and duplicates are rejected. */
+            permissions: string[];
+            /** @description Stable role identifier */
+            id: string;
+        };
+        RoleWriteDto: {
+            name: string;
+            active: boolean;
+            /** @description Exact permission keys from the catalog. Unknown keys and duplicates are rejected. */
+            permissions: string[];
+        };
+        UserRolesResponseDto: {
+            user: components["schemas"]["UserResponseDto"];
+            roles: components["schemas"]["RoleResponseDto"][];
+        };
+        UserRoleWriteDto: {
+            /** @description Exact replacement set of role IDs */
+            role_ids: string[];
+        };
+        DeploymentRegionResponseDto: {
+            /**
+             * @description Value accepted by deployment creation's region field
+             * @example japaneast
+             */
+            name: string;
+            /** @example Japan East */
+            display_name: string;
         };
     };
     responses: never;
@@ -250,7 +833,87 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Redirects the user to GitHub for authentication */
+            302: {
+                headers: {
+                    /** @description GitHub authorization URL */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AuthController_installGitHubApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirects to GitHub to install the configured app or manage its repository access */
+            302: {
+                headers: {
+                    /** @description Configured GitHub App installation URL */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended authenticated user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub App installation lookup is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AuthController_listGitHubRepositories: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubRepositoriesResponseDto"];
+                };
+            };
+            /** @description Invalid pagination or unsupported query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended authenticated user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub repository lookup is unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -267,8 +930,11 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            /** @description Redirects the authenticated user to the frontend */
+            302: {
                 headers: {
+                    /** @description Configured frontend URL */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -284,6 +950,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Logout completed; response body is empty */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -301,7 +968,17 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Current user profile */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponseDto"];
+                };
+            };
+            /** @description The request has no authenticated session */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -309,10 +986,155 @@ export interface operations {
             };
         };
     };
-    DeploymentMutationController_create: {
+    BuildSourceController_manifest: {
         parameters: {
             query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildManifestDto"];
+                };
+            };
+            /** @description Invalid build ID or Dockerfile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired credential for this build */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub download or archive preparation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuildSourceController_download: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": string;
+                };
+            };
+            /** @description Invalid build ID or Dockerfile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired credential for this build */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub download or archive preparation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_list: {
+        parameters: {
+            query?: {
+                /** @description Filter by deployment status */
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
+                /** @description Case-insensitive literal substring of the deployment name */
+                name?: string;
+                /** @description Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource */
+                region?: string;
+            };
             header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"][];
+                };
+            };
+            /** @description Invalid or unknown query parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An Azure resource is missing, invalid, or inaccessible */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure configuration is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Unique key per deployment request; reuse it for retries (1-255 printable ASCII characters) */
+                "Idempotency-Key": string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -322,7 +1144,6 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Deployment has been initiated */
             202: {
                 headers: {
                     [name: string]: unknown;
@@ -331,21 +1152,54 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
+            /** @description Invalid deployment input; memory must equal twice vCPU */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description DeploymentCreate permission and an active Stripe subscription linked to an active Kumo plan are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment name already exists or plan quota exceeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key reused with a different request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription verification is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    DeploymentMutationController_delete: {
+    DeploymentsController_start: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Deployment ID */
                 id: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Container App was deleted and its deployment was synchronized */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -354,26 +1208,55 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is not in a stopped state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure failed to start the container app */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    DeploymentMutationController_update: {
+    DeploymentsController_stop: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Deployment ID */
                 id: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateDeploymentDto"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description Deployment update has been initiated */
-            202: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -381,9 +1264,214 @@ export interface operations {
                     "application/json": components["schemas"]["DeploymentResponseDto"];
                 };
             };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is not in a running state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure failed to stop the container app */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
-    DeploymentMutationController_deleteResourceGroup: {
+    DeploymentsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure resource is missing, invalid, or inaccessible */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure configuration is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentController_getBuild: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildResponseDto"];
+                };
+            };
+            /** @description Invalid build ID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or BuildRead permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Build not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Pipeline status request failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentMetricsController_get: {
+        parameters: {
+            query?: {
+                range?: "1h" | "6h" | "24h";
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentMetricsResponseDto"];
+                };
+            };
+            /** @description Invalid deployment UUID or range */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or DeploymentRead/DeploymentMetricsRead permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is not running or its stored Container App ID is invalid */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Monitor denied access or returned invalid metric data */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure Monitor is throttling or unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserPlansController_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -392,14 +1480,841 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Resource group and deployment records were synchronized */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeleteResourceGroupResponseDto"];
+                    "application/json": components["schemas"]["UserPlansResponseDto"];
                 };
+            };
+            /** @description Authenticated, active, unsuspended user required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanResponseDto"][];
+                };
+            };
+        };
+    };
+    PlansController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPlanCreateDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponseDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_listAll: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanPageDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponseDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPlanWriteDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPlanResponseDto"];
+                };
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlansController_deactivate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid plan data, quota ratio, or pagination */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description PlanManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan ID or Stripe product mapping already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlanSubscriptionsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Local Kumo plan ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description No body is needed. Only an empty object is accepted; pricing is selected by the server. */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid plan/key or nonempty request body; client price selection is forbidden */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended user with a linked Stripe customer is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan is missing, inactive, or not linked to Stripe */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserSubscriptionsController_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                starting_after?: string;
+            };
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionPageDto"];
+                };
+            };
+            /** @description Invalid query, payload, subscription ID, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SubscriptionManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User or user-owned subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription management unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserSubscriptionsController_setCancellation: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                userId: string;
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCancellationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid query, payload, subscription ID, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description SubscriptionManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User or user-owned subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription management unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleCatalogResponseDto"];
+                };
+            };
+            /** @description RoleManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleCreateDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponseDto"];
+                };
+            };
+            /** @description Invalid role name, ID, or permission keys */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description RoleManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A role with this ID already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleWriteDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponseDto"];
+                };
+            };
+            /** @description Invalid role name, ID, or permission keys */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The role would grant permissions the actor does not hold or remove the actor's role management access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Role not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The role ID cannot be changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RolesController_deactivate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role deactivated */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The role grants permissions the actor does not hold or removal would remove the actor's role management access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Role not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserRolesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exact Kumo user ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRolesResponseDto"];
+                };
+            };
+            /** @description RoleManage or Super permission required on an active, unsuspended account */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserRolesController_replace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exact Kumo user ID */
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserRoleWriteDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRolesResponseDto"];
+                };
+            };
+            /** @description Invalid or duplicate role IDs */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request would grant permissions the actor does not hold or remove the actor's role management access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An inactive role was selected */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RegionsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentRegionResponseDto"][];
+                };
+            };
+            /** @description Query parameters, including subscription selectors, are not accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended authenticated user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure region lookup is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RedeploymentsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description Invalid UUID/key or nonempty request body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active unsuspended user, DeploymentUpdate, and active eligible subscription required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not owned by the current user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is busy, stopped, unprovisioned, or over current plan quota */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key reused with a different request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

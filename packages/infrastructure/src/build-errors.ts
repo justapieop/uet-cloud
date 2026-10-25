@@ -1,3 +1,4 @@
+import { ResilienceError } from "@nestjs/resilience";
 import { BuildAccessDenied, BuildProviderError, InvalidBuildInput } from "@kumo/application";
 
 function safeLabel(value: unknown): string | undefined {
@@ -24,6 +25,7 @@ export async function runBuildStep<T>(stage: string, operation: () => Promise<T>
   try {
     return await operation();
   } catch (error: unknown) {
+    if (error instanceof ResilienceError) throw error;
     if (error instanceof InvalidBuildInput || error instanceof BuildAccessDenied || error instanceof BuildProviderError) throw error;
     throw new BuildProviderError(`${stage} failed (${describeBuildFailure(error)})`, { cause: error });
   }

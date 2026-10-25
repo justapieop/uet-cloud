@@ -1,8 +1,9 @@
-import { ProcessDeploymentCase } from "@kumo/application";
+import { ProcessDeploymentCase, type DeploymentQueueRepository } from "@kumo/application";
 import type { Deployment } from "@kumo/domain";
-import { Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InfraDeploymentRepository } from "../db/repositories/deployment.js";
+import { QueuePollingPolicy } from "./queue-polling.js";
 
 @Injectable()
 export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -11,10 +12,11 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
   private timer: ReturnType<typeof setInterval> | undefined;
   private active: Promise<void> | undefined;
   private stopping: boolean = false;
+  private readonly polling: QueuePollingPolicy = new QueuePollingPolicy();
 
   public constructor(
-    private readonly repository: InfraDeploymentRepository,
-    private readonly processDeployment: ProcessDeploymentCase,
+    @Inject(InfraDeploymentRepository) private readonly repository: DeploymentQueueRepository,
+    @Inject(ProcessDeploymentCase) private readonly processDeployment: Pick<ProcessDeploymentCase, "exec">,
     config: ConfigService,
   ) {
     this.staleAfterMs = Number(config.get<string>("AZURE_DEPLOYMENT_TIMEOUT_MS", "3600000")) + 60_000;
@@ -40,8 +42,14 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async drain(): Promise<void> {
-    await this.repository.failStaleProvisioning(new Date(Date.now() - this.staleAfterMs));
+    if (this.polling.shouldSweep(Date.now())) {
+      await this.repository.failStaleProvisioning(new Date(Date.now() - this.staleAfterMs));
+      this.polling.swept(Date.now());
+    }
+    if (this.stopping) return;
+    if (!this.polling.shouldPoll(Date.now())) return;
     const deployment: Deployment | null = await this.repository.claimNextPending();
-    if (deployment && !this.stopping) await this.processDeployment.exec(deployment);
+    if (deployment) await this.processDeployment.exec(deployment);
+    this.polling.polled(deployment !== null, Date.now());
   }
 }
