@@ -4,6 +4,8 @@ import { parse } from "dotenv";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { FEATURE_FLAG_REFRESH_INTERVAL_MS } from "../feature-flags/interval.js";
+import { configurationDiagnosticCredential, configurationDiagnosticsPolicy, type ConfigurationDiagnostic } from "./diagnostics.js";
+import type { AzureCredential } from "../external-clients.js";
 
 async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> {
   const endpoint: string | undefined = process.env.AZURE_APPCONFIG_ENDPOINT ?? bootstrapSettings.AZURE_APPCONFIG_ENDPOINT;
@@ -12,8 +14,12 @@ async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> 
     throw new Error("AZURE_APPCONFIG_ENDPOINT is required when using Azure configuration");
   }
 
-  const credential: DefaultAzureCredential = new DefaultAzureCredential();
+  const report: (event: ConfigurationDiagnostic) => void = (event: ConfigurationDiagnostic): void => {
+    console.error("Azure configuration diagnostic:", JSON.stringify(event));
+  };
+  const credential: AzureCredential = configurationDiagnosticCredential(new DefaultAzureCredential(), report);
   return load(endpoint, credential, {
+    clientOptions: { additionalPolicies: [{ policy: configurationDiagnosticsPolicy("app-configuration", report), position: "perCall" }] },
     selectors: [
       { keyFilter: "*", labelFilter: LabelFilter.Null },
       { keyFilter: "*", labelFilter: environment },
@@ -29,7 +35,10 @@ async function loadAzureConfigurationProvider(): Promise<AzureAppConfiguration> 
         refreshIntervalInMs: FEATURE_FLAG_REFRESH_INTERVAL_MS,
       },
     },
-    keyVaultOptions: { credential, },
+    keyVaultOptions: {
+      credential,
+      clientOptions: { additionalPolicies: [{ policy: configurationDiagnosticsPolicy("key-vault", report), position: "perCall" }] },
+    },
   });
 }
 
