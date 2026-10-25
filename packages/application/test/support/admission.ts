@@ -69,11 +69,16 @@ export class AdmissionFixture implements UnitOfWork, StripeSubscriptionGateway {
         },
         insert: async (deployment: Deployment): Promise<void> => { assert.equal(this.locked, true); this.deployments.push(deployment); },
         findById: async (): Promise<null> => null,
-        findByIdAndUserId: async (): Promise<null> => null,
+        findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> => this.deployments.find((item: Deployment): boolean => item.id === id && item.userId === userId) ?? null,
         findByUserId: async (): Promise<Deployment[]> => { assert.equal(this.locked, true); return this.deployments; },
         save: async (deployment: Deployment): Promise<void> => { assert.equal(this.locked, true); this.deployments.push(deployment); },
         update: async (): Promise<void> => {},
-        updateProgress: async (): Promise<void> => {},
+        updateProgress: async (deployment: Deployment): Promise<void> => { const index: number = this.deployments.findIndex((item: Deployment): boolean => item.id === deployment.id); this.deployments[index] = deployment; },
+        transitionStatus: async (id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> => {
+          const index: number = this.deployments.findIndex((item: Deployment): boolean => item.id === id && item.userId === userId && item.status === from);
+          if (index < 0) return false;
+          this.deployments[index] = new Deployment({ ...this.deployments[index]!.getDetails(), status: to }); return true;
+        },
         delete: async (): Promise<void> => {},
       },
     };

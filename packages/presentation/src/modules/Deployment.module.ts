@@ -5,6 +5,7 @@ import { NetworkManagementClient } from "@azure/arm-network";
 import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
+  RedeployDeploymentCase,
   DeleteDeploymentCase,
   GetBuildCase,
   GetDeploymentCase,
@@ -25,15 +26,22 @@ import { BuildModule } from "./Build.module.js";
 import { StripeModule } from "./Stripe.module.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
+import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
 
 @Module({
   imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule],
   controllers: [
     BuildSourceController,
     DeploymentsController,
+    RedeploymentsController,
   ],
   providers: [
     DeploymentWorker,
+    {
+      provide: RedeployDeploymentCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider): RedeployDeploymentCase => new RedeployDeploymentCase(uow, subscriptions),
+      inject: [UNIT_OF_WORK, StripeProvider],
+    },
     {
       provide: NetworkManagementClient,
       useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): NetworkManagementClient =>

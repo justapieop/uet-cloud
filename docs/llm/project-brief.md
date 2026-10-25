@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- `POST /deployments/:id/redeploy` rebuilds and updates a user's existing app through Kumo. It uses DeploymentUpdate, a required idempotency key, fresh billing/quota checks, and the existing durable deployment queue. The worker waits for the SHA-tagged image build/push to succeed before patching the owned app's image, preserving its applied configuration. The shared Azure Pipeline remains build/push only; no fixed app target or GitHub-push trigger is introduced. See [redeployment](../redeployment.md).
+
 - `GET /regions` lets an authenticated, active, unsuspended user list candidate deployment regions in Kumo's configured Azure subscription. It intersects subscription locations with Container Apps, managed-environment, and VNet support, returning canonical names and display labels. It does not guarantee deployment quotas, Azure Policy eligibility, capacity, or compatibility with an existing user's fixed shared-environment region. See [region discovery](../regions.md).
 
 - `GET /auth/github/repositories` lists only the signed-in user's personally owned repositories granted to the configured GitHub App. Scope comes from the session's GitHub ID; other users' and organization repositories are excluded. The endpoint supports pagination, requires an active unsuspended session, and exposes no installation credentials. See [installed repositories](../github-repositories.md).

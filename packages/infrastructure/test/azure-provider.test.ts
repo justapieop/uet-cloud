@@ -137,6 +137,15 @@ function fixture(options: FixtureOptions = {}): Fixture {
       },
     },
     containerApps: {
+      update: (rg: string, name: string, envelope: ContainerApp): ReturnType<AzureProviderClients["containerApps"]["update"]> => {
+        assert.equal(rg, "user-rg-123");
+        assert.equal(envelope.configuration, undefined);
+        assert.equal(envelope.identity, undefined);
+        events.push("app-update");
+        const result: ContainerApp = { ...apps.get(name)!, ...envelope };
+        apps.set(name, result);
+        return { pollUntilDone: async (): Promise<ContainerApp> => result } as ReturnType<AzureProviderClients["containerApps"]["update"]>;
+      },
       get: async (rg: string, name: string): Promise<ContainerApp> => {
         assert.equal(rg, "user-rg-123");
         events.push("app-get");
@@ -225,6 +234,40 @@ test("an existing app is reused without rebuilding or updating the environment",
   const setup: Fixture = fixture({ existingResources: true, existingApp: true });
   await setup.provider.createDeployment(INPUT);
   assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get", "app-get"]);
+});
+
+test("redeployment rebuilds then updates only its owned app image while preserving live settings", async (): Promise<void> => {
+  const setup: Fixture = fixture({ existingResources: true, existingApp: true });
+  const resourceId: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
+  const original: ContainerApp = { id: resourceId, location: "southeastasia", environmentId: ENVIRONMENT_ID, provisioningState: "Succeeded",
+    tags: { "kumo-deployment-id": "deployment", "kumo-build-id": "old-build", custom: "kept" },
+    configuration: { ingress: { external: false, targetPort: 8080, additionalPortMappings: [{ targetPort: 9000, external: false }] }, secrets: [{ name: "secret", value: "retained" }], activeRevisionsMode: "Single" },
+    template: { containers: [{ name: "my-app", image: "old-image", resources: { cpu: 1, memory: "2Gi" }, env: [{ name: "MY_VALUE", value: "kept" }], volumeMounts: [{ volumeName: "data", mountPath: "/data" }] }],
+      scale: { minReplicas: 1, maxReplicas: 3 }, volumes: [{ name: "data", storageType: "AzureFile", storageName: "share" }] },
+  };
+  setup.apps.set(INPUT.name, original);
+  const updated: ContainerApp = await setup.provider.createDeployment({ ...INPUT, resourceId, deploymentId: "deployment" });
+  assert.ok(setup.events.indexOf("build-SUCCEEDED") < setup.events.indexOf("app-update"));
+  assert.equal(updated.template?.containers?.[0]?.image, "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  assert.deepEqual(updated.configuration, original.configuration);
+  assert.deepEqual(updated.template?.volumes, original.template?.volumes);
+  assert.deepEqual(updated.template?.scale, original.template?.scale);
+  assert.deepEqual(updated.template?.containers?.[0]?.env, original.template?.containers?.[0]?.env);
+  assert.deepEqual(updated.template?.containers?.[0]?.resources, original.template?.containers?.[0]?.resources);
+  assert.equal(updated.tags?.custom, "kept");
+  assert.equal(updated.tags?.["kumo-build-id"], "build-id");
+});
+
+test("a failed redeployment build never updates the existing app and foreign resource IDs never reach Azure", async (): Promise<void> => {
+  const resourceId: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
+  const failed: Fixture = fixture({ existingResources: true, existingApp: true, statuses: ["FAILED"] });
+  failed.apps.set(INPUT.name, { id: resourceId, location: "southeastasia", environmentId: ENVIRONMENT_ID, tags: { "kumo-deployment-id": "deployment" } });
+  await assert.rejects(failed.provider.createDeployment({ ...INPUT, resourceId, deploymentId: "deployment" }), /Build build-id failed/);
+  assert.equal(failed.events.includes("app-create"), false);
+  assert.equal(failed.events.includes("app-update"), false);
+  const foreign: Fixture = fixture();
+  await assert.rejects(foreign.provider.createDeployment({ ...INPUT, resourceId: resourceId.replace("user-rg-123", "user-rg-456"), deploymentId: "deployment" }), /does not belong/);
+  assert.deepEqual(foreign.events, []);
 });
 
 test("a ready existing user VNet is reused before creating the managed environment", async (): Promise<void> => {

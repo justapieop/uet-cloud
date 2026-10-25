@@ -8,11 +8,11 @@ function trimQueryValue({ value }: TransformFnParams): unknown {
 }
 
 export class ListDeploymentsQueryDto {
-  @ApiPropertyOptional({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "FAILED", "DELETED"], description: "Filter by deployment status" })
+  @ApiPropertyOptional({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED", "DELETED"], description: "Filter by deployment status" })
   @ValidateIf((_input: ListDeploymentsQueryDto, value: unknown): boolean => value !== undefined)
   @Transform(trimQueryValue)
   @IsString()
-  @IsIn(["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "FAILED", "DELETED"])
+  @IsIn(["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED", "DELETED"])
   public status?: DeploymentStatus;
 
   @ApiPropertyOptional({ maxLength: 32, description: "Case-insensitive literal substring of the deployment name" })

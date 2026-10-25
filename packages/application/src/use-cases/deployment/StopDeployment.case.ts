@@ -24,7 +24,15 @@ export class StopDeploymentCase {
       throw new InvalidDeploymentStatusError(`Cannot stop deployment in status ${deployment.status}; must be RUNNING`);
     }
 
-    await this.lifecycleManager.stopApp(deployment.userId, deployment.name);
+    if (!await this.repository.transitionStatus(deployment.id, deployment.userId, "RUNNING", "STOPPING")) {
+      throw new InvalidDeploymentStatusError("Deployment changed before stop");
+    }
+    try {
+      await this.lifecycleManager.stopApp(deployment.userId, deployment.name);
+    } catch (error: unknown) {
+      await this.repository.transitionStatus(deployment.id, deployment.userId, "STOPPING", "RUNNING");
+      throw error;
+    }
 
     const updated: Deployment = new Deployment({
       ...deployment.getDetails(),
@@ -32,7 +40,7 @@ export class StopDeploymentCase {
       updatedAt: new Date(),
     });
 
-    await this.repository.updateProgress(updated);
+    if (!await this.repository.transitionStatus(deployment.id, deployment.userId, "STOPPING", "STOPPED")) throw new InvalidDeploymentStatusError("Deployment changed during stop");
     return updated;
   }
 }

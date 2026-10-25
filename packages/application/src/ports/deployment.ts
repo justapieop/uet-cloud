@@ -15,6 +15,7 @@ export interface DeploymentRepository {
   countReservedByUserId(userId: string): Promise<number>;
   update(deployment: Deployment): Promise<void>;
   updateProgress(deployment: Deployment): Promise<void>;
+  transitionStatus(id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean>;
   delete(deploymentId: string, userId: string): Promise<void>;
 }
 
@@ -30,6 +31,7 @@ export interface DeploymentProvisionInput {
   readonly userId: string;
   readonly name: string;
   readonly spec: DeploymentSpec;
+  readonly resourceId?: string;
 }
 
 export interface DeploymentProvisionResult {

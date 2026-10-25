@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deployment, type DeploymentDetails } from "@kumo/domain";
+import { Deployment, type DeploymentStatus, type DeploymentDetails } from "@kumo/domain";
 import type { DeploymentRepository, ContainerLifecycleManager } from "../dist/ports/index.js";
 import { DeploymentNotFoundError } from "../dist/ports/deployment.js";
 import { InvalidDeploymentStatusError } from "../dist/use-cases/exceptions/InvalidDeploymentStatus.exception.js";
@@ -26,8 +26,10 @@ test("StartDeploymentCase starts a stopped deployment and updates status to RUNN
     ...emptyRepositories().deployment,
     findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
       stored && stored.id === id && stored.userId === userId ? stored : null,
-    updateProgress: async (deployment: Deployment): Promise<void> => {
-      stored = deployment;
+    transitionStatus: async (_id: string, _userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> => {
+      if (!stored || stored.status !== from) return false;
+      stored = new Deployment({ ...stored.getDetails(), status: to });
+      return true;
     },
   };
 
@@ -94,8 +96,10 @@ test("StopDeploymentCase stops a running deployment and updates status to STOPPE
     ...emptyRepositories().deployment,
     findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
       stored && stored.id === id && stored.userId === userId ? stored : null,
-    updateProgress: async (deployment: Deployment): Promise<void> => {
-      stored = deployment;
+    transitionStatus: async (_id: string, _userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> => {
+      if (!stored || stored.status !== from) return false;
+      stored = new Deployment({ ...stored.getDetails(), status: to });
+      return true;
     },
   };
 

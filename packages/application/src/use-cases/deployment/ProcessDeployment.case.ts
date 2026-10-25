@@ -10,7 +10,7 @@ export class ProcessDeploymentCase {
     let details: DeploymentDetails = deployment.getDetails();
     try {
       const result: DeploymentProvisionResult = await this.provisioner.provisionDeployment({
-        id: deployment.id, userId: deployment.userId, name: deployment.name, spec: deployment.spec,
+        id: deployment.id, userId: deployment.userId, name: deployment.name, spec: deployment.spec, resourceId: deployment.resourceId ?? undefined,
       }, async (buildId: string, image: string): Promise<void> => {
         details = { ...details, buildId, image, updatedAt: new Date() };
         await this.repository.updateProgress(new Deployment(details));

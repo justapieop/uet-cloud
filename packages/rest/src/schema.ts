@@ -472,6 +472,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployments/{id}/redeploy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rebuild and update an owned existing deployment
+         * @description Resolves the saved Git reference again, builds and pushes its commit-tagged image, then updates only the existing app's main-container image. No repository-push webhook is configured by this endpoint.
+         */
+        post: operations["RedeploymentsController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -574,7 +594,7 @@ export interface components {
             /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
             external: boolean | null;
             /** @enum {string} */
-            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
             image: string | null;
             build_id: string | null;
             resource_id: string | null;
@@ -1058,7 +1078,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter by deployment status */
-                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "FAILED" | "DELETED";
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
                 /** @description Case-insensitive literal substring of the deployment name */
                 name?: string;
                 /** @description Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource */
@@ -2221,6 +2241,75 @@ export interface operations {
                 content?: never;
             };
             /** @description Azure region lookup is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RedeploymentsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description Invalid UUID/key or nonempty request body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active unsuspended user, DeploymentUpdate, and active eligible subscription required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not owned by the current user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is busy, stopped, unprovisioned, or over current plan quota */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key reused with a different request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription verification unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

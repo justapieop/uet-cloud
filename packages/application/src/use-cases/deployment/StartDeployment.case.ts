@@ -24,7 +24,15 @@ export class StartDeploymentCase {
       throw new InvalidDeploymentStatusError(`Cannot start deployment in status ${deployment.status}; must be STOPPED`);
     }
 
-    await this.lifecycleManager.startApp(deployment.userId, deployment.name);
+    if (!await this.repository.transitionStatus(deployment.id, deployment.userId, "STOPPED", "STARTING")) {
+      throw new InvalidDeploymentStatusError("Deployment changed before start");
+    }
+    try {
+      await this.lifecycleManager.startApp(deployment.userId, deployment.name);
+    } catch (error: unknown) {
+      await this.repository.transitionStatus(deployment.id, deployment.userId, "STARTING", "STOPPED");
+      throw error;
+    }
 
     const updated: Deployment = new Deployment({
       ...deployment.getDetails(),
@@ -32,7 +40,7 @@ export class StartDeploymentCase {
       updatedAt: new Date(),
     });
 
-    await this.repository.updateProgress(updated);
+    if (!await this.repository.transitionStatus(deployment.id, deployment.userId, "STARTING", "RUNNING")) throw new InvalidDeploymentStatusError("Deployment changed during start");
     return updated;
   }
 }

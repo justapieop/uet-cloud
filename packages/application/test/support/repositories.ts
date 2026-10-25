@@ -7,7 +7,7 @@ export function emptyRepositories(): UnitOfWorkRepositories {
     users: { findById: unused, findByIdForUpdate: unused, exists: unused, save: unused },
     roles: { findById: unused, findByIds: unused, findAll: unused, findActiveByUserId: unused, save: unused, insert: unused, replace: unused, deactivate: unused },
     userRoles: { findByUserId: unused, replaceForUser: unused },
-    deployment: { findById: unused, findByIdAndUserId: unused, findByUserId: unused, save: unused, insert: unused, countReservedByUserId: unused, update: unused, updateProgress: unused, delete: unused },
+    deployment: { findById: unused, findByIdAndUserId: unused, findByUserId: unused, save: unused, insert: unused, countReservedByUserId: unused, update: unused, updateProgress: unused, transitionStatus: unused, delete: unused },
     deploymentRequests: { findForUpdate: unused, save: unused },
     plans: { findActiveByStripeProductIds: unused },
   };

@@ -69,6 +69,19 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
   });
   assert.ok(accepted!, "Acceptance race must produce a deployment");
 
+  await context.test("redeploy and stop claims cannot both win for the same owner-scoped running deployment", async (): Promise<void> => {
+    const deployment: Deployment = new Deployment({ id: randomUUID(), userId: "123", name: `race-${randomUUID().slice(0, 8)}`, spec: SPEC, status: "RUNNING" });
+    await repository.insert(deployment);
+    try {
+      assert.equal(await repository.transitionStatus(deployment.id, "456", "RUNNING", "PENDING"), false);
+      const results: boolean[] = await Promise.all([
+        repository.transitionStatus(deployment.id, "123", "RUNNING", "PENDING"),
+        repository.transitionStatus(deployment.id, "123", "RUNNING", "STOPPING"),
+      ]);
+      assert.equal(results.filter((won: boolean): boolean => won).length, 1);
+    } finally { await repository.delete(deployment.id, "123"); }
+  });
+
   await context.test("admin plan writes enforce unique mappings, replace fields, and deactivate without deleting", async (): Promise<void> => {
     const orm: Repository<InfraPlan> = source.getRepository(InfraPlan);
     const plans: InfraPlanRepository = new InfraPlanRepository(orm);

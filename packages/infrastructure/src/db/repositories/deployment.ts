@@ -64,7 +64,7 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
   public countReservedByUserId(userId: string): Promise<number> {
     return this.repository.createQueryBuilder("deployment").where("deployment.userId = :userId", { userId })
       .andWhere("(deployment.status IN (:...statuses) OR (deployment.status = :failed AND deployment.azure_resource_id IS NOT NULL))", {
-        statuses: ["PENDING", "PROVISIONING", "RUNNING"], failed: "FAILED",
+        statuses: ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING"], failed: "FAILED",
       }).getCount();
   }
 
@@ -80,6 +80,13 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
         resourceId: deployment.resourceId, fqdn: deployment.fqdn, error: deployment.error, updatedAt: deployment.updatedAt,
       });
     } catch (error: unknown) { throw this.translateError(error); }
+  }
+
+  public async transitionStatus(id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> {
+    const result: Awaited<ReturnType<Repository<InfraDeployment>["update"]>> = await this.repository.update(
+      { id, userId, status: from }, { status: to, updatedAt: new Date() },
+    );
+    return result.affected === 1;
   }
 
   public async delete(deploymentId: string, userId: string): Promise<void> {

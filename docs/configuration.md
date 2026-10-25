@@ -222,3 +222,7 @@ Local user creation is serialized inside the UoW. Linking claims a durable per-u
 
 After 23 hours, an unresolved creation operation refuses automatic customer creation and requires reconciliation, because Stripe may discard idempotency results after 24 hours. No new key is generated for an uncertain result. Stripe or persistence failures prevent that login from completing, while preserving the local user for a later retry. Rolling back the migration removes customer associations and retry records, so reconcile existing Stripe Customers before enabling linking again after such a rollback.
 
+
+## Rebuilding existing deployments
+
+Use `POST /deployments/:id/redeploy` with the current session and an `Idempotency-Key`, without a body. The existing worker rebuilds the saved Git reference and updates only that user's existing app after the Azure Pipeline succeeds. No new configuration keys or fixed pipeline deployment targets are needed. See [redeployment](redeployment.md) for permissions, billing checks, status, and recovery limits.

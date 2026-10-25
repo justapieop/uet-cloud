@@ -19,10 +19,11 @@ import { UserSubscriptionsController } from "../dist/controllers/UserSubscriptio
 import { RolesController } from "../dist/controllers/Roles.controller.js";
 import { UserRolesController } from "../dist/controllers/UserRoles.controller.js";
 import { RegionsController } from "../dist/controllers/Regions.controller.js";
+import { RedeploymentsController } from "../dist/controllers/Redeployments.controller.js";
 import { createOpenApiConfig } from "../dist/common/OpenApi.js";
 
 test("OpenAPI covers controller operations, session authentication, and generated client paths", async (context: TestContext): Promise<void> => {
-  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController];
+  const controllers: Type<object>[] = [AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController];
   // Resolve controllers without starting SQL, sessions, workers, or cloud clients.
   const tokens: Set<Type<object> | string | symbol> = new Set([
     CheckPermissionsCase, CACHE_MANAGER,
@@ -53,7 +54,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 32);
+  assert.equal(count, 33);
   assert.equal(Object.keys(document.paths).some((path: string): boolean => path.startsWith("/admin/")), false);
   const checkoutBody: RequestBodyObject = document.paths["/plans/{id}/subscriptions"]!.post!.requestBody as RequestBodyObject;
   assert.equal(checkoutBody.required, false);
