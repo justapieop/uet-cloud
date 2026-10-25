@@ -14,7 +14,8 @@ COPY packages/infrastructure/package.json ./packages/infrastructure/
 COPY packages/presentation/package.json ./packages/presentation/
 
 FROM manifests AS build
-RUN npm ci --include=dev --omit=optional --ignore-scripts --no-audit --no-fund \
+# TypeScript 7 ships its native compiler as a platform-specific optional dependency.
+RUN npm ci --include=dev --include=optional --ignore-scripts --no-audit --no-fund \
     --include-workspace-root \
     --workspace=apps/api \
     --workspace=packages/domain \
