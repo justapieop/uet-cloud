@@ -12,6 +12,7 @@ interface DashboardPageProps {
 
 const STATUS_STYLES: Readonly<Record<Deployment["status"], string>> = {
   PENDING: "text-amber-300", PROVISIONING: "text-blue-300",
+  STARTING: "text-blue-300", STOPPING: "text-amber-300",
   RUNNING: "text-emerald-300", STOPPED: "text-amber-400", FAILED: "text-red-300", DELETED: "text-muted-text",
 };
 

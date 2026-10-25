@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import type { NextConfig } from "next";
 
@@ -15,7 +16,8 @@ if (process.env.API_URL === undefined && existsSync(repositoryEnvFile)) {
 }
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",
+  outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   reactCompiler: true,
 };
 

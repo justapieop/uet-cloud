@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- The current Next.js frontend has its own repository-root build in `apps/web/Dockerfile`. It uses monorepo standalone output, a non-root distroless Node 24 runtime, and runtime `API_URL` for server-side backend requests. See [Web Docker image](../web-docker.md).
+
 - The backend API image uses a multi-stage build with a non-root distroless Node 24 runtime. Build it from the repository root with `apps/api/Dockerfile`; keep workspace manifests and production dependencies with compiled backend output, and inject configuration at runtime. See [API Docker image](../api-docker.md).
 - The current Azure-generated GitHub workflow uses `azure/container-apps-deploy-action@v2` with its `KUMOAPI_*` authentication secrets, repository-root build context, and explicit `apps/api/Dockerfile`. It builds and pushes the commit-SHA image and deploys the platform API. The earlier image-only CLI workflow was removed; automatic resource provisioning and deployment behavior now belong to the Azure action. See [API image CI/CD](../api-docker.md#publish-to-acr-with-github-actions).
 
