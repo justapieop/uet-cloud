@@ -21,6 +21,7 @@ function createDeployment(status: "RUNNING" | "STOPPED" | "PENDING" | "FAILED"):
 test("StartDeploymentCase starts a stopped deployment and updates status to RUNNING", async (): Promise<void> => {
   let stored: Deployment | null = createDeployment("STOPPED");
   const lifecycleCalls: { start: string[]; stop: string[] } = { start: [], stop: [] };
+  let notifiedUserId: string | null = null;
 
   const repository: DeploymentRepository = {
     ...emptyRepositories().deployment,
@@ -42,13 +43,44 @@ test("StartDeploymentCase starts a stopped deployment and updates status to RUNN
     },
   };
 
-  const useCase: StartDeploymentCase = new StartDeploymentCase(repository, lifecycle);
+  const useCase: StartDeploymentCase = new StartDeploymentCase(repository, lifecycle, async (userId: string): Promise<void> => {
+    notifiedUserId = userId;
+  });
   const result: Deployment = await useCase.exec({ id: "dep-1", userId: "user-1" });
 
-  assert.equal(result.status, "RUNNING");
+  assert.equal(result.status, "STARTING");
+  await useCase.waitForActive();
   assert.equal(stored?.status, "RUNNING");
+  assert.equal(notifiedUserId, "user-1");
   assert.deepEqual(lifecycleCalls.start, ["user-1/test-app"]);
   assert.deepEqual(lifecycleCalls.stop, []);
+});
+
+test("StartDeploymentCase rolls back to STOPPED when lifecycle startApp fails", async (): Promise<void> => {
+  let stored: Deployment | null = createDeployment("STOPPED");
+  const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
+    findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
+      stored && stored.id === id && stored.userId === userId ? stored : null,
+    transitionStatus: async (_id: string, _userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> => {
+      if (!stored || stored.status !== from) return false;
+      stored = new Deployment({ ...stored.getDetails(), status: to });
+      return true;
+    },
+  };
+
+  const lifecycle: ContainerLifecycleManager = {
+    startApp: async (): Promise<void> => {
+      throw new Error("Azure start failure");
+    },
+    stopApp: async (): Promise<void> => {},
+  };
+
+  const useCase: StartDeploymentCase = new StartDeploymentCase(repository, lifecycle);
+  const result: Deployment = await useCase.exec({ id: "dep-1", userId: "user-1" });
+  assert.equal(result.status, "STARTING");
+  await useCase.waitForActive();
+  assert.equal(stored?.status, "STOPPED");
 });
 
 test("StartDeploymentCase throws DeploymentNotFoundError when deployment does not exist", async (): Promise<void> => {
@@ -91,6 +123,7 @@ test("StartDeploymentCase throws InvalidDeploymentStatusError when deployment is
 test("StopDeploymentCase stops a running deployment and updates status to STOPPED", async (): Promise<void> => {
   let stored: Deployment | null = createDeployment("RUNNING");
   const lifecycleCalls: { start: string[]; stop: string[] } = { start: [], stop: [] };
+  let notifiedUserId: string | null = null;
 
   const repository: DeploymentRepository = {
     ...emptyRepositories().deployment,
@@ -112,13 +145,44 @@ test("StopDeploymentCase stops a running deployment and updates status to STOPPE
     },
   };
 
-  const useCase: StopDeploymentCase = new StopDeploymentCase(repository, lifecycle);
+  const useCase: StopDeploymentCase = new StopDeploymentCase(repository, lifecycle, async (userId: string): Promise<void> => {
+    notifiedUserId = userId;
+  });
   const result: Deployment = await useCase.exec({ id: "dep-1", userId: "user-1" });
 
-  assert.equal(result.status, "STOPPED");
+  assert.equal(result.status, "STOPPING");
+  await useCase.waitForActive();
   assert.equal(stored?.status, "STOPPED");
+  assert.equal(notifiedUserId, "user-1");
   assert.deepEqual(lifecycleCalls.stop, ["user-1/test-app"]);
   assert.deepEqual(lifecycleCalls.start, []);
+});
+
+test("StopDeploymentCase rolls back to RUNNING when lifecycle stopApp fails", async (): Promise<void> => {
+  let stored: Deployment | null = createDeployment("RUNNING");
+  const repository: DeploymentRepository = {
+    ...emptyRepositories().deployment,
+    findByIdAndUserId: async (id: string, userId: string): Promise<Deployment | null> =>
+      stored && stored.id === id && stored.userId === userId ? stored : null,
+    transitionStatus: async (_id: string, _userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean> => {
+      if (!stored || stored.status !== from) return false;
+      stored = new Deployment({ ...stored.getDetails(), status: to });
+      return true;
+    },
+  };
+
+  const lifecycle: ContainerLifecycleManager = {
+    startApp: async (): Promise<void> => {},
+    stopApp: async (): Promise<void> => {
+      throw new Error("Azure stop failure");
+    },
+  };
+
+  const useCase: StopDeploymentCase = new StopDeploymentCase(repository, lifecycle);
+  const result: Deployment = await useCase.exec({ id: "dep-1", userId: "user-1" });
+  assert.equal(result.status, "STOPPING");
+  await useCase.waitForActive();
+  assert.equal(stored?.status, "RUNNING");
 });
 
 test("StopDeploymentCase throws InvalidDeploymentStatusError when deployment is not RUNNING", async (): Promise<void> => {
