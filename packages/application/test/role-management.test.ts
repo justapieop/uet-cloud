@@ -69,6 +69,7 @@ class RoleFixture {
 
     return {
       findById: async (id: string): Promise<Role | null> => role(id),
+      findByIdForUpdate: async (id: string): Promise<Role | null> => role(id),
       findByIds: async (ids: readonly string[]): Promise<Role[]> => ids
         .map((id: string): Role | undefined => this.roles.get(id))
         .filter((value: Role | undefined): value is Role => value !== undefined)

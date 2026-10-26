@@ -82,6 +82,14 @@ export class InfraRoleRepository implements RoleRepository {
     return records.map((record: InfraRole): Role => new Role({ ...record }));
   }
 
+  public async findByIdForUpdate(id: string): Promise<Role | null> {
+    // HOLDLOCK protects the missing-key range too, so concurrent signups cannot
+    // both seed the default role. UPDLOCK avoids shared-to-exclusive upgrades.
+    await this.roleRepository.manager.query(
+      "SELECT id FROM roles WITH (UPDLOCK, HOLDLOCK) WHERE id = @0", [id]);
+    return this.findById(id);
+  }
+
   public async findAll(): Promise<Role[]> {
     const records: InfraRole[] = await this.roleRepository.find({
       order: {

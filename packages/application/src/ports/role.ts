@@ -2,6 +2,8 @@ import type { Role } from "@kumo/domain";
 
 export interface RoleRepository {
   findById(id: string): Promise<Role | null>;
+  /** Transaction-only lookup; locks the role ID even when it does not exist yet. */
+  findByIdForUpdate(id: string): Promise<Role | null>;
   findByIds(ids: readonly string[]): Promise<Role[]>;
   findAll(): Promise<Role[]>;
   findActiveByUserId(userId: string): Promise<Role[]>;

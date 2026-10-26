@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
-import { User } from "@kumo/domain";
+import { Role, User } from "@kumo/domain";
 import { StripeCustomerLinkReconciliationRequired, type StripeCustomerGateway, type StripeCustomerLinkClaim, type StripeCustomerLinkRepository } from "../dist/ports/stripe.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../dist/ports/uow.js";
 import { LinkStripeCustomerCase } from "../dist/use-cases/user/LinkStripeCustomer.case.js";
@@ -103,6 +103,8 @@ test("creation and legacy-user login link only after the UoW commits", async ():
   let writes: number = 0;
   const repositories: UnitOfWorkRepositories = {
     ...emptyRepositories(),
+    roles: { ...emptyRepositories().roles, findByIdForUpdate: async (id: string): Promise<Role | null> => new Role({ id, name: id }) },
+    userRoles: { ...emptyRepositories().userRoles, replaceForUser: async (): Promise<void> => {} },
     users: {
       findByIdForUpdate: async (): Promise<User | null> => saved,
       findById: async (): Promise<User | null> => saved,

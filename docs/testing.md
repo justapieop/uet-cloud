@@ -14,7 +14,7 @@ The suite does not read `.env` or application database configuration. Each run c
 
 The SQL suite is excluded from the normal backend command. Running `test:db` without test credentials fails instead of silently skipping. If execution is forcibly terminated, a generated test database might need manual cleanup on the dedicated test server.
 
-Database seed validation, default role grants, and admin GitHub ID validation are covered by the normal backend tests. The SQL suite additionally checks seed reruns, preservation of customized rows, concurrent serialization, rollback on invalid assignments, and admin bootstrap creation/promotion and eligibility. See [database seeding](database-seeding.md) for the standalone commands.
+Signup default/Super role creation, no automatic Super assignment, customized/inactive-role handling, assignment rollback, preservation of revoked assignments, database seed validation, default role grants, and admin GitHub ID validation are covered by the normal backend tests. The SQL suite additionally checks seed reruns, preservation of customized rows, concurrent serialization, rollback on invalid assignments, admin bootstrap creation/promotion and eligibility, and concurrent signup default-role creation with transactional rollback and fresh session grants. See [database seeding](database-seeding.md) for the standalone commands.
 
 The backend GitHub Actions workflow runs the regular check on Windows and Linux and the SQL suite against a disposable SQL Server 2022 service. Frontend testing is deferred.
 

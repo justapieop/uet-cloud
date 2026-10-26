@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- New OAuth users automatically receive role ID `default` (initial name `Default`). Signup self-seeds it with deployment create/read/update/delete, build read, and metrics read grants when absent. It also self-seeds role ID `super` (name `Super`, only the Super bit), without assigning it to any user. Existing Super role settings, including inactivity, are preserved. Existing role settings are preserved, an inactive default blocks new registration, and existing users are not backfilled or reassigned on login. See [permissions](../permissions.md#default-signup-role).
+
 - Browser authentication uses the Next.js `/api/auth/*` proxy for login, the GitHub callback, and GitHub installation. The browser session cookie stays host-only on the frontend hostname; Next.js forwards it to the backend for authenticated server-side requests. Set the GitHub callback to `<FRONTEND_URL>/api/auth/callback`, while frontend runtime `API_URL` continues pointing directly to the backend. See [authentication configuration](../configuration.md#frontend-authentication-proxy).
 
 - The current Next.js frontend has its own repository-root build in `apps/web/Dockerfile`. It uses monorepo standalone output, a non-root distroless Node 24 runtime, and runtime `API_URL` for server-side backend requests. See [Web Docker image](../web-docker.md).

@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
-import { AdminBillingConflict, AdminBillingNotFound, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
+import { AdminBillingConflict, AdminBillingNotFound, CreateDeploymentCase, CreateUserCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
 import { Build, Deployment, Plan, Role, User, type DeploymentSpec } from "@kumo/domain";
 import { InfraSessionAuthorizationReader } from "../dist/auth/session-authorization.js";
 import { InfraBuild, InfraBuildRepository } from "../dist/db/repositories/build.js";
@@ -215,6 +215,60 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     await source.getRepository(InfraRole).update({ id: "session-role" }, { active: false });
     assert.equal((await reader.read("456"))?.permissionBits, 0n);
     await source.getRepository(InfraRole).delete({ id: "session-role" });
+  });
+
+  await context.test("default signup role self-seeds once across concurrent users and rolls back with failed assignments", async (): Promise<void> => {
+    const users: Repository<InfraUser> = source.getRepository(InfraUser);
+    const roles: Repository<InfraRole> = source.getRepository(InfraRole);
+    const links: Repository<InfraUserRole> = source.getRepository(InfraUserRole);
+    const linker: { exec(id: string): Promise<User> } = {
+      exec: async (id: string): Promise<User> => {
+        // This independent connection must see committed user + assignment data.
+        assert.equal(await links.countBy({ userId: id, roleId: "default" }), 1);
+        return new User({ ...await users.findOneByOrFail({ id }) });
+      },
+    };
+    const failing: UnitOfWork = {
+      run: <T>(work: (repositories: UnitOfWorkRepositories) => Promise<T>): Promise<T> => uow.run(
+        (repositories: UnitOfWorkRepositories): Promise<T> => work({ ...repositories, userRoles: {
+          ...repositories.userRoles,
+          findByUserId: (id: string): Promise<Role[]> => repositories.userRoles.findByUserId(id),
+          replaceForUser: async (): Promise<void> => { throw new Error("Injected assignment failure"); },
+        } })),
+    };
+    await assert.rejects(new CreateUserCase(failing, linker).exec("signup-rollback", "Rollback"), /Injected assignment failure/);
+    assert.equal(await users.countBy({ id: "signup-rollback" }), 0);
+    assert.equal(await roles.countBy({ id: "default" }), 0);
+    assert.equal(await roles.countBy({ id: "super" }), 0);
+    const signup: CreateUserCase = new CreateUserCase(uow, linker);
+    await Promise.all([signup.exec("signup-a", "Alice"), signup.exec("signup-b", "Bob"), signup.exec("signup-a", "Alice")]);
+    assert.equal(await roles.countBy({ id: "default" }), 1);
+    assert.equal(await links.countBy({ roleId: "default" }), 2);
+    const superRole: InfraRole = await roles.findOneByOrFail({ id: "super" });
+    assert.equal(superRole.permission, 1n);
+    assert.equal(await links.countBy({ roleId: "super" }), 0);
+    await roles.update({ id: "super" }, { name: "Customized Super", active: false, permission: 0n });
+    const initial: InfraRole = await roles.findOneByOrFail({ id: "default" });
+    const reader: InfraSessionAuthorizationReader = new InfraSessionAuthorizationReader(source);
+    assert.equal((await reader.read("signup-a"))?.permissionBits, initial.permission);
+    await roles.update({ id: "default" }, { name: "Customized", permission: 2n });
+    await signup.exec("signup-c", "Charlie");
+    assert.equal((await roles.findOneByOrFail({ id: "default" })).name, "Customized");
+    assert.equal((await reader.read("signup-c"))?.permissionBits, 2n);
+    const preservedSuper: InfraRole = await roles.findOneByOrFail({ id: "super" });
+    assert.equal(preservedSuper.name, "Customized Super");
+    assert.equal(preservedSuper.active, false);
+    assert.equal(preservedSuper.permission, 0n);
+    await links.delete({ userId: "signup-a" });
+    // An existing linked user must not get a revoked assignment restored.
+    await users.update({ id: "signup-a" }, { stripeCustomerId: "cus_signup" });
+    await signup.exec("signup-a", "Ignored");
+    assert.equal(await links.countBy({ userId: "signup-a" }), 0);
+    await roles.update({ id: "default" }, { active: false });
+    await assert.rejects(signup.exec("signup-disabled", "Disabled"), /Default role is inactive/);
+    assert.equal(await users.countBy({ id: "signup-disabled" }), 0);
+    await users.delete(["signup-a", "signup-b", "signup-c"]);
+    await roles.delete(["default", "super"]);
   });
 
   await context.test("seeding preserves customized rows, serializes reruns, and rolls back invalid assignments", async (): Promise<void> => {

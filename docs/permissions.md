@@ -67,6 +67,16 @@ The role-management endpoints enforce additional guardrails beyond the route per
 
 `GET /plans/me` requires an active, unsuspended authenticated user and returns only that user's matching active plans. It needs no deployment permission grant. `GET /plans` remains a public catalog.
 
-Users without assigned active roles granting the required bits receive HTTP 403. Role assignment and provisioning are not automatic. Revoking grants blocks subsequent requests, including cached reads and accepted-request retries.
+Users without assigned active roles granting the required bits receive HTTP 403. New users created by the OAuth signup flow receive the self-seeding `default` role. Existing users are not automatically assigned or reassigned roles. Revoking grants blocks subsequent requests, including cached reads and accepted-request retries.
 
 The role activity migration defaults existing roles to active. Apply the new database migration before serving permission-protected routes.
+
+## Default signup role
+
+When `CreateUserCase` creates a new user, it ensures role ID `default` exists and assigns it in the same database transaction. A missing role is created with name `Default`, active status, and explicit DeploymentRead, BuildRead, DeploymentMetricsRead, DeploymentCreate, DeploymentUpdate, and DeploymentDelete grants. It receives no administrative grants or Super. Newly added permission catalog entries are not automatically included.
+
+An existing default role retains its name, grants, and activity. If inactive, new-user registration fails without creating a user or contacting Stripe. Administrators can edit or deactivate it through the existing role-management APIs. Subsequent logins preserve existing assignments, including deliberately removed roles. Offline administrator creation and existing users are not backfilled.
+
+Signup also self-seeds role ID `super`, name `Super`, active by default, storing only the Super bit. It is never automatically assigned. An existing Super role retains its name, permission bits, and activity; a disabled Super role does not block ordinary signup. It is separate from the existing offline `admin` role and does not change administrator bootstrap assignments. Both self-seeding checks occur only for newly created users.
+
+User creation, optional role creation, and assignment commit or roll back together. A transaction-only role lookup takes SQL Server update/range locks on the role ID, including when missing, to serialize self-seeding across concurrent signups (lock `default` before `super`) and preserve concurrent administrative edits. Stripe Customer linking runs after commit; a Stripe failure does not undo the committed user/role assignment, and the next login retries linking without reassigning roles. Subscription, quota, and ownership checks still apply.
