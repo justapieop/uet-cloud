@@ -32,7 +32,7 @@ import { RootController } from "../controllers/Root.controller.js";
         const devMode: boolean = ["development", "test"].includes(config.get<string>("NODE_ENV", "production"));
         return {
           pinoHttp: {
-            redact: ["req.headers.authorization", "req.headers.cookie", "req.headers['x-hub-signature-256']", "res.headers['set-cookie']"],
+            redact: ["req.headers.authorization", "req.headers.cookie", "req.headers['x-hub-signature-256']", "res.headers['set-cookie']", "req.body.password"],
             level: devMode ? "debug" : "info",
             quietReqLogger: devMode,
             quietResLogger: devMode,

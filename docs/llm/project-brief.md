@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Ordinary users authenticate strictly through GitHub. The fixed `root` account has a separate optional password login configured only by backend `ROOT_PASSWORD`, with no username setting. It creates a normal session and receives the Super role on first successful login, without GitHub or Stripe calls. See [root login](../configuration.md#root-only-password-login).
+
 - New OAuth users automatically receive role ID `default` (initial name `Default`). Signup self-seeds it with deployment create/read/update/delete, build read, and metrics read grants when absent. It also self-seeds role ID `super` (name `Super`, only the Super bit), without assigning it to any user. Existing Super role settings, including inactivity, are preserved. Existing role settings are preserved, an inactive default blocks new registration, and existing users are not backfilled or reassigned on login. See [permissions](../permissions.md#default-signup-role).
 
 - Browser authentication uses the Next.js `/api/auth/*` proxy for login, the GitHub callback, and GitHub installation. The browser session cookie stays host-only on the frontend hostname; Next.js forwards it to the backend for authenticated server-side requests. Set the GitHub callback to `<FRONTEND_URL>/api/auth/callback`, while frontend runtime `API_URL` continues pointing directly to the backend. See [authentication configuration](../configuration.md#frontend-authentication-proxy).

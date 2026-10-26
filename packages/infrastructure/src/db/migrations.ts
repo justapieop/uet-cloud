@@ -664,6 +664,21 @@ export class DatabaseLoadIndexes1792627200000 implements MigrationInterface {
   }
 }
 
+export class RootLoginLimits1793059200000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({ name: "root_login_limits", columns: [
+      { name: "id", type: "int", isPrimary: true },
+      { name: "attempts", type: "int", isNullable: false },
+      { name: "window_started", type: "datetime2", isNullable: false },
+    ] }));
+    await queryRunner.query("INSERT INTO root_login_limits (id, attempts, window_started) VALUES (1, 0, SYSUTCDATETIME())");
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("root_login_limits");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -682,5 +697,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   UserActive1792540800003,
   RoleActive1792540800004,
   DatabaseLoadIndexes1792627200000,
+  RootLoginLimits1793059200000,
 ];
 

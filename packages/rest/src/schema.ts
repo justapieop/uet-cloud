@@ -92,6 +92,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/root/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in as the environment-configured root account
+         * @description Password login is reserved for the fixed root identity. Ordinary users must use GitHub. Establishes the normal session cookie.
+         */
+        post: operations["RootLoginController_signIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/user/me": {
         parameters: {
             query?: never;
@@ -547,6 +567,10 @@ export interface components {
             per_page: number;
             has_next_page: boolean;
         };
+        RootLoginDto: {
+            /** Format: password */
+            password: string;
+        };
         UserResponseDto: {
             id: string;
             display_name: string;
@@ -989,6 +1013,63 @@ export interface operations {
         responses: {
             /** @description Logout completed; response body is empty */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RootLoginController_signIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RootLoginDto"];
+            };
+        };
+        responses: {
+            /** @description Root session established */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid body; only password is accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid credentials or ineligible root account */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root password login is not configured */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root login attempt limit reached; retry after one minute */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root authentication is unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

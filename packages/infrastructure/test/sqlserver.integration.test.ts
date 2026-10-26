@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import { test, type TestContext } from "node:test";
 import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
-import { AdminBillingConflict, AdminBillingNotFound, CreateDeploymentCase, CreateUserCase, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
+import { AdminBillingConflict, AdminBillingNotFound, CreateDeploymentCase, CreateUserCase, RootLoginCase, RootLoginThrottled, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
 import { Build, Deployment, Plan, Role, User, type DeploymentSpec } from "@kumo/domain";
+import { ConfigService } from "@nestjs/config";
+import { RootPasswordAuthentication } from "../dist/auth/root-password.js";
 import { InfraSessionAuthorizationReader } from "../dist/auth/session-authorization.js";
 import { InfraBuild, InfraBuildRepository } from "../dist/db/repositories/build.js";
 import { InfraPlanRepository } from "../dist/db/repositories/plan.js";
@@ -269,6 +271,43 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     assert.equal(await users.countBy({ id: "signup-disabled" }), 0);
     await users.delete(["signup-a", "signup-b", "signup-c"]);
     await roles.delete(["default", "super"]);
+  });
+
+  await context.test("root login provisions one eligible root account and limits attempts atomically across replicas", async (): Promise<void> => {
+    const users: Repository<InfraUser> = source.getRepository(InfraUser);
+    const roles: Repository<InfraRole> = source.getRepository(InfraRole);
+    const links: Repository<InfraUserRole> = source.getRepository(InfraUserRole);
+    const verifier: { enabled: boolean; verify(password: string): Promise<boolean> } = { enabled: true, verify: async (): Promise<boolean> => true };
+    const broken: UnitOfWork = { run: <T>(work: (repositories: UnitOfWorkRepositories) => Promise<T>): Promise<T> => uow.run(
+      (repositories: UnitOfWorkRepositories): Promise<T> => work({ ...repositories, userRoles: {
+        findByUserId: (id: string): Promise<Role[]> => repositories.userRoles.findByUserId(id),
+        replaceForUser: async (): Promise<void> => { throw new Error("Root assignment failure"); },
+      } })),
+    };
+    await assert.rejects(new RootLoginCase(broken, verifier).exec("test"), /Root assignment failure/);
+    assert.equal(await users.countBy({ id: "root" }), 0);
+    assert.equal(await roles.countBy({ id: "super" }), 0);
+    const login: RootLoginCase = new RootLoginCase(uow, verifier);
+    await Promise.all([login.exec("test"), login.exec("test")]);
+    assert.equal(await users.countBy({ id: "root" }), 1);
+    assert.equal(await links.countBy({ userId: "root", roleId: "super" }), 1);
+    assert.equal((await users.findOneByOrFail({ id: "root" })).stripeCustomerId, null);
+    assert.equal((await new InfraSessionAuthorizationReader(source).read("root"))?.permissionBits, 1n);
+    await users.delete({ id: "root" });
+    await roles.delete({ id: "super" });
+    const config: ConfigService = new ConfigService({ ROOT_PASSWORD: "test-only-strong-root-password" });
+    const first: RootPasswordAuthentication = await RootPasswordAuthentication.create(config, source);
+    const second: RootPasswordAuthentication = await RootPasswordAuthentication.create(config, source);
+    await source.query("UPDATE root_login_limits SET attempts = 0, window_started = SYSUTCDATETIME() WHERE id = 1");
+    const attempts: PromiseSettledResult<boolean>[] = await Promise.allSettled(Array.from({ length: 8 }, (_value: unknown, index: number): Promise<boolean> =>
+      (index % 2 ? first : second).verify("wrong")));
+    assert.equal(attempts.filter((attempt: PromiseSettledResult<boolean>): boolean => attempt.status === "fulfilled" && attempt.value === false).length, 5);
+    assert.equal(attempts.filter((attempt: PromiseSettledResult<boolean>): boolean => attempt.status === "rejected" && attempt.reason instanceof RootLoginThrottled).length, 3);
+    // Restarting a verifier does not clear the shared database limit.
+    const restarted: RootPasswordAuthentication = await RootPasswordAuthentication.create(config, source);
+    await assert.rejects(restarted.verify("test-only-strong-root-password"), RootLoginThrottled);
+    await source.query("UPDATE root_login_limits SET window_started = DATEADD(SECOND, -61, SYSUTCDATETIME()) WHERE id = 1");
+    assert.equal(await restarted.verify("test-only-strong-root-password"), true);
   });
 
   await context.test("seeding preserves customized rows, serializes reruns, and rolls back invalid assignments", async (): Promise<void> => {
