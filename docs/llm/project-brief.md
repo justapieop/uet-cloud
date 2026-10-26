@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Browser authentication uses the Next.js `/api/auth/*` proxy for login, the GitHub callback, and GitHub installation. The browser session cookie stays host-only on the frontend hostname; Next.js forwards it to the backend for authenticated server-side requests. Set the GitHub callback to `<FRONTEND_URL>/api/auth/callback`, while frontend runtime `API_URL` continues pointing directly to the backend. See [authentication configuration](../configuration.md#frontend-authentication-proxy).
+
 - The current Next.js frontend has its own repository-root build in `apps/web/Dockerfile`. It uses monorepo standalone output, a non-root distroless Node 24 runtime, and runtime `API_URL` for server-side backend requests. See [Web Docker image](../web-docker.md).
 
 - The backend API image uses a multi-stage build with a non-root distroless Node 24 runtime. Build it from the repository root with `apps/api/Dockerfile`; keep workspace manifests and production dependencies with compiled backend output, and inject configuration at runtime. See [API Docker image](../api-docker.md).

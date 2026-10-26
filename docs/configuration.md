@@ -35,7 +35,7 @@ The Azure SQL logical server must have a Microsoft Entra administrator, and the 
 
 ## GitHub login
 
-Set `GITHUB_OAUTH2_CLIENT_ID`, `GITHUB_OAUTH2_SECRET`, and `GITHUB_OAUTH2_REDIRECT_URL` in the selected configuration source. The redirect URL must point to this API's `GET /auth/callback` route. `GET /auth/login` starts the GitHub authorization flow; the callback establishes a Passport session in MongoDB, sets the `connect.sid` cookie, and redirects to `FRONTEND_URL`.
+Set `GITHUB_OAUTH2_CLIENT_ID`, `GITHUB_OAUTH2_SECRET`, and `GITHUB_OAUTH2_REDIRECT_URL` in the selected configuration source. For the Next.js frontend, the redirect URL must use its `/api/auth/callback` proxy, which forwards to the API's `GET /auth/callback` route. `GET /auth/login` starts the GitHub authorization flow; the callback establishes a Passport session in MongoDB, sets the `connect.sid` cookie, and redirects to `FRONTEND_URL`.
 
 ### HTTPS ingress and session cookies
 
@@ -46,6 +46,24 @@ Production session cookies use `Secure`, `HttpOnly`, and `SameSite=Lax`. When Az
 To verify, preserve the browser Network log through login and inspect the API callback's 302 response for `Set-Cookie: connect.sid=...; ...; Secure; HttpOnly; SameSite=Lax`. Inspect browser cookie storage on the callback hostname; HttpOnly cookies are absent from `document.cookie`. Cookies are host-only: separate API and frontend hostnames do not share this cookie. The current frontend forwards its incoming cookie for server-side API requests, so production must also provide a common browser origin (for example, path-based API routing) or a separately designed session-sharing arrangement. Proxy trust alone does not solve hostname separation. If the callback still sends no cookie, inspect API session-store errors and MongoDB connectivity.
 
 Application settings are loaded at startup; changes in Azure require an API restart to take effect. Feature flags are loaded at startup by a separate module and polled from Azure App Configuration every 12 hours. Consumers of the `FEATURE_FLAGS` provider read its current `feature_flags` property to get the latest snapshot. If a poll fails, the last known flags remain available until a later poll succeeds. With `CONFIG_SOURCE=local`, the provider supplies an empty flag list and does not poll.
+
+### Frontend authentication proxy
+
+Next.js exposes GET `/api/auth/login`, `/api/auth/callback`, and `/api/auth/github/install`. It forwards only these paths to the backend selected by runtime `API_URL`, preserving query strings and incoming cookies. It returns upstream redirects without following them and forwards each Set-Cookie header separately. Responses are uncached; unavailable upstream requests return a sanitized 502. Other auth paths return 404, and mutation methods are not exposed by this proxy. Existing frontend server actions continue calling the backend directly with the incoming cookie.
+
+The frontend `/auth/login` route redirects to `/api/auth/login`, and GitHub installation links use `/api/auth/github/install`. The full browser flow is frontend login → proxied backend redirect → GitHub → frontend callback proxy → backend session creation → frontend redirect. Because the browser receives the callback response on the frontend hostname, the host-only cookie belongs to the frontend. Leave the backend cookie Domain unset; no shared parent-domain cookie is needed.
+
+For the current production hosts, set these backend settings in the selected configuration source (Azure App Configuration when `CONFIG_SOURCE=azure`):
+
+```dotenv
+GITHUB_OAUTH2_REDIRECT_URL=https://kumo.justapie.dev/api/auth/callback
+FRONTEND_URL=https://kumo.justapie.dev
+TRUST_PROXY_HOPS=1
+```
+
+Set the GitHub application's OAuth callback URL to `https://kumo.justapie.dev/api/auth/callback` as well. The frontend container keeps runtime `API_URL=https://kumo-api.justapie.dev`; it must point directly to the backend, not back to the frontend proxy. Keep HTTPS on that backend connection so ACA's trusted ingress reports HTTPS. Rebuild/redeploy the frontend and restart/redeploy the backend after updating its configuration. Clear old connect.sid cookies on both hostnames and sign in through the frontend. Inspect the frontend callback's 302 Set-Cookie header and confirm the next frontend request carries connect.sid and the dashboard recognizes the session. OAuth and live MongoDB/Azure behavior still require verification in the deployed environment.
+
+For local development, use the frontend's actual origin for `FRONTEND_URL` and `<frontend-origin>/api/auth/callback` for both callback settings. Keep `API_URL` pointing to the local backend and `NODE_ENV=development` on the API for HTTP cookies.
 
 ## GitHub webhooks
 

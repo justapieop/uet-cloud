@@ -1,7 +1,6 @@
 import type { JSX } from "react";
 import { CreateDeploymentForm } from "@/features/create-deployment";
 import { Navbar } from "@/widgets/navbar";
-import { API_URL } from "@/shared/config";
 import { getRegions, getRepositories, type RegionsResult, type RepositoryResult } from "@/features/create-deployment/server";
 
 export async function CreateDeploymentPage(): Promise<JSX.Element> {
@@ -15,7 +14,7 @@ export async function CreateDeploymentPage(): Promise<JSX.Element> {
         </nav>
         <h1 className="text-[28px] font-semibold tracking-tight sm:text-[32px]">Create deployment</h1>
         <p className="mb-8 mt-2 text-sm leading-6 text-muted-text">Build from your repository and run your application on Kumo.</p>
-        <CreateDeploymentForm initialRepositories={repositories} initialRegions={regions} installUrl={`${API_URL}/auth/github/install`} />
+        <CreateDeploymentForm initialRepositories={repositories} initialRegions={regions} installUrl="/api/auth/github/install" />
       </main>
       <footer className="mx-auto w-full max-w-3xl px-5 pb-6 font-mono text-[10px] text-muted-dark sm:px-8">Kumo</footer>
     </div>
