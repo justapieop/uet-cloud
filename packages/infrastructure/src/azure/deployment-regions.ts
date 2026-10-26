@@ -15,7 +15,7 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
     const access: Awaited<ReturnType<AzureCredential["getToken"]>> = await this.credential.getToken("https://management.azure.com/.default", { abortSignal: signal });
     if (!access?.token) throw new Error("Azure region lookup could not authenticate");
     const [locations, app, network, allowed]: [unknown[], unknown, unknown, Set<string> | null] = await Promise.all([
-      this.locations(access.token, signal),
+      this.collection(`${this.subscriptionPath}/locations`, "2022-12-01", "location", access.token, signal),
       this.json(`${this.subscriptionPath}/providers/Microsoft.App?api-version=2021-04-01`, access.token, signal),
       this.json(`${this.subscriptionPath}/providers/Microsoft.Network?api-version=2021-04-01`, access.token, signal),
       this.allowedLocations(access.token, signal),
@@ -37,7 +37,17 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
         regions.set(name, { name, displayName });
       }
     }
-    return [...regions.values()].sort((left: DeploymentRegion, right: DeploymentRegion): number => left.name.localeCompare(right.name));
+    const candidates: DeploymentRegion[] = [...regions.values()].sort((left: DeploymentRegion, right: DeploymentRegion): number => left.name.localeCompare(right.name));
+    const available: DeploymentRegion[] = [];
+    for (let offset: number = 0; offset < candidates.length; offset += 5) {
+      const batch: DeploymentRegion[] = candidates.slice(offset, offset + 5);
+      const hasQuota: boolean[] = await Promise.all(batch.map((region: DeploymentRegion): Promise<boolean> =>
+        this.hasEnvironmentQuota(region.name, access.token, signal)));
+      for (let index: number = 0; index < batch.length; index++) {
+        if (hasQuota[index]) available.push(batch[index]);
+      }
+    }
+    return available;
   }
 
   private async allowedLocations(token: string, signal: AbortSignal): Promise<Set<string> | null> {
@@ -68,21 +78,33 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
     return new Set(resource.locations.map((value: string): string => normalizeAzureRegion(value)));
   }
 
-  private async locations(token: string, signal: AbortSignal): Promise<unknown[]> {
-    const path: string = `${this.subscriptionPath}/locations`;
-    let url: URL | null = new URL(`https://management.azure.com${path}?api-version=2022-12-01`);
+  private async hasEnvironmentQuota(region: string, token: string, signal: AbortSignal): Promise<boolean> {
+    const usages: unknown[] = await this.collection(
+      `${this.subscriptionPath}/providers/Microsoft.App/locations/${encodeURIComponent(region)}/usages`, "2024-03-01", "quota", token, signal);
+    const matches: unknown[] = usages.filter((entry: unknown): boolean =>
+      isRecord(entry) && isRecord(entry.name) && entry.name.value === "ManagedEnvironmentCount");
+    const quota: unknown = matches[0];
+    if (matches.length !== 1 || !isRecord(quota) || typeof quota.currentValue !== "number" || !Number.isSafeInteger(quota.currentValue) || quota.currentValue < 0 ||
+      typeof quota.limit !== "number" || !Number.isSafeInteger(quota.limit) || quota.limit < 0) {
+      throw new Error("Azure returned invalid managed environment quota");
+    }
+    return quota.currentValue < quota.limit;
+  }
+
+  private async collection(path: string, version: string, label: string, token: string, signal: AbortSignal): Promise<unknown[]> {
+    let url: URL | null = new URL(`https://management.azure.com${path}?api-version=${version}`);
     const seen: Set<string> = new Set();
     const locations: unknown[] = [];
     while (url) {
       if (url.origin !== "https://management.azure.com" || url.pathname !== path || url.username || url.password || url.hash ||
-        url.searchParams.get("api-version") !== "2022-12-01" || seen.has(url.href)) {
-        throw new Error("Azure returned invalid location pagination");
+        url.searchParams.get("api-version") !== version || seen.has(url.href)) {
+        throw new Error(`Azure returned invalid ${label} pagination`);
       }
       seen.add(url.href);
       const page: unknown = await this.json(url.href, token, signal);
-      if (!isRecord(page) || !Array.isArray(page.value)) throw new Error("Azure returned an invalid location page");
+      if (!isRecord(page) || !Array.isArray(page.value)) throw new Error(`Azure returned an invalid ${label} page`);
       locations.push(...page.value);
-      if (page.nextLink !== undefined && page.nextLink !== null && typeof page.nextLink !== "string") throw new Error("Azure returned invalid location pagination");
+      if (page.nextLink !== undefined && page.nextLink !== null && typeof page.nextLink !== "string") throw new Error(`Azure returned invalid ${label} pagination`);
       url = page.nextLink ? new URL(page.nextLink as string, url) : null;
     }
     return locations;

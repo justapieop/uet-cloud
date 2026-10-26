@@ -29,6 +29,7 @@ test("region discovery pages subscription locations and intersects all required 
     assert.ok(init?.signal);
     if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
     if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
     if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
     if (url.searchParams.has("page")) return Response.json({ value: [
       { name: "Japan East", displayName: "Japan East", type: "Region" },
@@ -43,7 +44,7 @@ test("region discovery pages subscription locations and intersects all required 
     ], nextLink: "https://management.azure.com/subscriptions/sub/locations?api-version=2022-12-01&page=2" });
   });
   assert.deepEqual(await adapter.list(), [{ name: "japaneast", displayName: "Japan East" }, { name: "southeastasia", displayName: "Southeast Asia" }]);
-  assert.equal(requests.length, 5);
+  assert.equal(requests.length, 7);
 });
 
 test("region lookup returns an empty intersection but rejects unavailable or malformed Azure responses", async (): Promise<void> => {
@@ -53,6 +54,7 @@ test("region lookup returns an empty intersection but rejects unavailable or mal
     const url: URL = new URL(String(input));
     if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
     if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
     if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
     return status === 200 ? Response.json(bad) : new Response("private upstream response", { status });
   });
@@ -78,7 +80,8 @@ test("location pagination cannot send ARM credentials outside the configured sub
       assert.ok(url.pathname.startsWith("/subscriptions/sub/"));
       if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
       if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
-      if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
+      if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
+    if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
       locationReads++;
       return Response.json({ value: [], nextLink: links[index] });
     });
@@ -95,6 +98,7 @@ test("system region policy filters supported locations using live normalized par
     const url: URL = new URL(String(input));
     if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
     if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
     if (url.pathname.endsWith("/sys.regionrestriction")) {
       assert.equal(url.searchParams.get("api-version"), "2023-04-01");
       return status === 200 ? Response.json(policy) : new Response(null, { status });
@@ -128,5 +132,64 @@ test("system region policy filters supported locations using live normalized par
   for (let index: number = 0; index < malformed.length; index++) {
     policy = malformed[index];
     await assert.rejects(adapter.list(), /invalid.*policy/);
+  }
+});
+
+
+test("managed environment quota hides full regions and rejects missing or unavailable quota data", async (): Promise<void> => {
+  let quota: unknown = { name: { value: "ManagedEnvironmentCount" }, currentValue: 1, limit: 1 };
+  let status: number = 200;
+  let nextLink: string | undefined;
+  const adapter: AzureDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0]): Promise<Response> => {
+    const url: URL = new URL(String(input));
+    if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+    if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/sys.regionrestriction")) return Response.json({ properties: {
+      parameters: { listOfAllowedLocations: { value: ["japaneast", "southeastasia"] } },
+    } });
+    if (url.pathname.endsWith("/usages")) {
+      assert.equal(url.searchParams.get("api-version"), "2024-03-01");
+      assert.ok(!url.pathname.includes("westus"));
+      if (status !== 200) return new Response(null, { status });
+      if (url.pathname.includes("/southeastasia/")) return Response.json({ value: [
+        { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 },
+      ] });
+      if (nextLink) return Response.json({ value: [], nextLink });
+      if (!url.searchParams.has("page")) return Response.json({ value: [], nextLink: `${url.href}&page=2` });
+      return Response.json({ value: quota === undefined ? [] : [quota] });
+    }
+    return Response.json({ value: [
+      { name: "japaneast", displayName: "Japan East" },
+      { name: "southeastasia", displayName: "Southeast Asia" },
+      { name: "westus", displayName: "West US" },
+    ] });
+  });
+  assert.deepEqual(await adapter.list(), [{ name: "southeastasia", displayName: "Southeast Asia" }]);
+  quota = { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 };
+  assert.equal((await adapter.list()).length, 2);
+  quota = { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 0 };
+  assert.equal((await adapter.list()).length, 1);
+  quota = { name: { value: "ManagedEnvironmentCount" }, currentValue: 2, limit: 1 };
+  assert.equal((await adapter.list()).length, 1);
+  const malformed: unknown[] = [undefined, null, {},
+    { name: { value: "ExpressEnvironmentCount" }, currentValue: 0, limit: 200 },
+    { name: { value: "ManagedEnvironmentCount" }, currentValue: "0", limit: 1 },
+    { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: -1 }];
+  for (let index: number = 0; index < malformed.length; index++) {
+    quota = malformed[index];
+    await assert.rejects(adapter.list(), /invalid managed environment quota/);
+  }
+  const failures: number[] = [403, 404, 429, 500];
+  for (let index: number = 0; index < failures.length; index++) {
+    status = failures[index];
+    await assert.rejects(adapter.list(), new RegExp(`HTTP ${status}`));
+  }
+  status = 200;
+  const links: string[] = ["https://example.com/steal",
+    "https://management.azure.com/subscriptions/other/providers/Microsoft.App/locations/japaneast/usages?api-version=2024-03-01",
+    "https://management.azure.com/subscriptions/sub/providers/Microsoft.App/locations/japaneast/usages?api-version=2024-03-01"];
+  for (let index: number = 0; index < links.length; index++) {
+    nextLink = links[index];
+    await assert.rejects(adapter.list(), /invalid quota pagination/);
   }
 });
