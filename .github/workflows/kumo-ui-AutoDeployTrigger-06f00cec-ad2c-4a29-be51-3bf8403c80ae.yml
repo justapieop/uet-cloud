@@ -36,14 +36,12 @@ jobs:
         with:
           appSourcePath: ${{ github.workspace }}
           dockerfilePath: apps/web/Dockerfile
-          _targetLabelKey_: _targetLabel_
-          registryUrl: 
+          registryUrl: kumoreg.azurecr.io
           registryUsername: ${{ secrets.KUMOUI_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.KUMOUI_REGISTRY_PASSWORD }}
           containerAppName: kumo-ui
           resourceGroup: kumo-rg
-          imageToBuild: default/[parameters('containerAppName')]:${{ github.sha }}
-          _buildArgumentsKey_: |
-            _buildArgumentsValues_
+          imageToBuild: kumoreg.azurecr.io/kumo-ui:${{ github.sha }}
+          targetPort: 3000
 
 
