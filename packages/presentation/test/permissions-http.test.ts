@@ -108,7 +108,7 @@ test("resource routes check specific grants before lookups and cached responses"
   lifecycleSuccess = true;
   for (let index: number = 0; index < 2; index++) {
     const action: string = index === 0 ? "start" : "stop";
-    assert.equal((await fetch(`${base}/deployments/${id}/${action}`, { method: "POST" })).status, 200);
+    assert.equal((await fetch(`${base}/deployments/${id}/${action}`, { method: "POST" })).status, 202);
     const before: number = calls;
     assert.equal((await fetch(`${base}/deployments/invalid-id/${action}`, { method: "POST" })).status, 400);
     assert.equal(calls, before);

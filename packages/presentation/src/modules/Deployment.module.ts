@@ -19,6 +19,7 @@ import {
 } from "@kumo/application";
 import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
+import { AppCacheModule } from "./AppCache.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { ExternalClientsModule } from "./ExternalClients.module.js";
 import { DatabaseModule } from "./Database.module.js";
@@ -27,9 +28,10 @@ import { StripeModule } from "./Stripe.module.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
+import { RouteReadCache } from "../common/ReadCache.js";
 
 @Module({
-  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule],
+  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule, AppCacheModule],
   controllers: [
     BuildSourceController,
     DeploymentsController,
@@ -78,13 +80,15 @@ import { RedeploymentsController } from "../controllers/Redeployments.controller
     },
     {
       provide: StartDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository, lifecycle: AzureContainerLifecycleManager): StartDeploymentCase => new StartDeploymentCase(repository, lifecycle),
-      inject: [InfraDeploymentRepository, AzureContainerLifecycleManager],
+      useFactory: (repository: InfraDeploymentRepository, lifecycle: AzureContainerLifecycleManager, readCache: RouteReadCache): StartDeploymentCase =>
+        new StartDeploymentCase(repository, lifecycle, (userId: string): Promise<void> => readCache.invalidateDeployments(userId)),
+      inject: [InfraDeploymentRepository, AzureContainerLifecycleManager, RouteReadCache],
     },
     {
       provide: StopDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository, lifecycle: AzureContainerLifecycleManager): StopDeploymentCase => new StopDeploymentCase(repository, lifecycle),
-      inject: [InfraDeploymentRepository, AzureContainerLifecycleManager],
+      useFactory: (repository: InfraDeploymentRepository, lifecycle: AzureContainerLifecycleManager, readCache: RouteReadCache): StopDeploymentCase =>
+        new StopDeploymentCase(repository, lifecycle, (userId: string): Promise<void> => readCache.invalidateDeployments(userId)),
+      inject: [InfraDeploymentRepository, AzureContainerLifecycleManager, RouteReadCache],
     },
     {
       provide: ProcessDeploymentCase,
