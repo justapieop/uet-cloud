@@ -9,6 +9,18 @@ export interface LifecycleActionResult {
   readonly error?: string;
 }
 
+function extractErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    if (error.name === "TimeoutError" || error.message.toLowerCase().includes("timeout")) {
+      return "Request timed out while contacting deployment service";
+    }
+    if (error.message) {
+      return error.message;
+    }
+  }
+  return fallback;
+}
+
 export async function startDeploymentAction(id: string): Promise<LifecycleActionResult> {
   const cookieHeader: string | null = (await headers()).get("cookie");
   if (!cookieHeader) {
@@ -24,13 +36,19 @@ export async function startDeploymentAction(id: string): Promise<LifecycleAction
     });
 
     if (!result.response.ok) {
-      return { success: false, error: "Unable to start container. Ensure it is in stopped state." };
+      if (result.response.status === 409) {
+        return { success: false, error: "Unable to start container. Ensure it is in stopped state." };
+      }
+      if (result.response.status === 404) {
+        return { success: false, error: "Deployment was not found." };
+      }
+      return { success: false, error: `Failed to start container (HTTP ${result.response.status})` };
     }
 
     revalidatePath("/dashboard");
     return { success: true };
-  } catch {
-    return { success: false, error: "Failed to connect to deployment service" };
+  } catch (error: unknown) {
+    return { success: false, error: extractErrorMessage(error, "Failed to connect to deployment service") };
   }
 }
 
@@ -49,12 +67,18 @@ export async function stopDeploymentAction(id: string): Promise<LifecycleActionR
     });
 
     if (!result.response.ok) {
-      return { success: false, error: "Unable to stop container. Ensure it is currently running." };
+      if (result.response.status === 409) {
+        return { success: false, error: "Unable to stop container. Ensure it is currently running." };
+      }
+      if (result.response.status === 404) {
+        return { success: false, error: "Deployment was not found." };
+      }
+      return { success: false, error: `Failed to stop container (HTTP ${result.response.status})` };
     }
 
     revalidatePath("/dashboard");
     return { success: true };
-  } catch {
-    return { success: false, error: "Failed to connect to deployment service" };
+  } catch (error: unknown) {
+    return { success: false, error: extractErrorMessage(error, "Failed to connect to deployment service") };
   }
 }
