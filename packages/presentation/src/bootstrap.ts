@@ -8,7 +8,8 @@ import { SwaggerModule } from "@nestjs/swagger";
 import session from "express-session";
 import passport from "passport";
 import MongoStore from "connect-mongo";
-import { createSessionCookieOptions } from "./common/Session.options.js";
+import { createSessionCookieOptions, parseTrustProxyHops } from "./common/Session.options.js";
+import type { Express } from "express";
 import { createOpenApiConfig } from "./common/OpenApi.js";
 
 export async function bootstrap(): Promise<void> {
@@ -27,6 +28,9 @@ export async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
   const sessionSecret: string = config.get<string>("SESSION_SECRET") ?? "kumo-local-session-secret-key-development";
   const mongoUrl: string = config.get<string>("MONGODB_CONNECTION_STRING") ?? "mongodb://127.0.0.1:27017/kumo-session";
+
+  const expressApp: Express = app.getHttpAdapter().getInstance();
+  expressApp.set("trust proxy", parseTrustProxyHops(config.get<string>("TRUST_PROXY_HOPS")));
 
   app.use(session({
     saveUninitialized: false,

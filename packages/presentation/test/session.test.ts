@@ -8,10 +8,27 @@ import { Passport } from "passport";
 import { User } from "@kumo/domain";
 import type { ExecutionContext } from "@nestjs/common";
 import { LoggedInGuard } from "../dist/common/Auth.guard.js";
-import { createSessionCookieOptions } from "../dist/common/Session.options.js";
+import { createSessionCookieOptions, parseTrustProxyHops } from "../dist/common/Session.options.js";
 
-test("HTTP login sets a cookie that authenticates the next request despite an unavailable frontend", async (context: TestContext): Promise<void> => {
+interface SessionScenario {
+  name: string;
+  environment: string;
+  trustProxyHops?: string;
+  forwardedProto?: string;
+  setsCookie: boolean;
+}
+
+const scenarios: SessionScenario[] = [
+  { name: "development HTTP login", environment: "development", setsCookie: true },
+  { name: "production HTTPS login through trusted ingress", environment: "production", trustProxyHops: "1", forwardedProto: "https", setsCookie: true },
+  { name: "production ignores untrusted HTTPS forwarding", environment: "production", forwardedProto: "https", setsCookie: false },
+  { name: "production rejects plain HTTP through trusted ingress", environment: "production", trustProxyHops: "1", forwardedProto: "http", setsCookie: false },
+];
+
+scenarios.forEach((scenario: SessionScenario): void => {
+test(scenario.name, async (context: TestContext): Promise<void> => {
   const app: ExpressApplication = express();
+  app.set("trust proxy", parseTrustProxyHops(scenario.trustProxyHops));
   const passport: InstanceType<typeof Passport> = new Passport();
   const guard: LoggedInGuard = new LoggedInGuard();
   const user: User = new User({ id: "123", displayName: "Alice", suspended: false });
@@ -28,7 +45,7 @@ test("HTTP login sets a cookie that authenticates the next request despite an un
     secret: "session-regression-test-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: createSessionCookieOptions("development"),
+    cookie: createSessionCookieOptions(scenario.environment),
   }));
   app.use(passport.initialize());
   app.use(passport.session());
@@ -64,13 +81,19 @@ test("HTTP login sets a cookie that authenticates the next request despite an un
   });
   const address: AddressInfo = server.address() as AddressInfo;
   const baseUrl: string = `http://127.0.0.1:${address.port}`;
-  const callback: globalThis.Response = await fetch(`${baseUrl}/auth/callback`, { redirect: "manual" });
+  const headers: Record<string, string> = scenario.forwardedProto ? { "X-Forwarded-Proto": scenario.forwardedProto } : {};
+  const callback: globalThis.Response = await fetch(`${baseUrl}/auth/callback`, { redirect: "manual", headers });
   assert.equal(callback.status, 302);
   assert.equal(callback.headers.get("location"), "http://localhost:8000/");
   const setCookie: string | null = callback.headers.get("set-cookie");
+  if (!scenario.setsCookie) {
+    assert.equal(setCookie, null);
+    return;
+  }
   assert.ok(setCookie);
   assert.match(setCookie, /HttpOnly/);
-  assert.doesNotMatch(setCookie, /; Secure/i);
+  if (scenario.environment === "production") assert.match(setCookie, /; Secure/i);
+  else assert.doesNotMatch(setCookie, /; Secure/i);
   const cookie: string = setCookie.split(";")[0]!;
   const authenticated: globalThis.Response = await fetch(`${baseUrl}/user/me`, { headers: { cookie } });
   assert.equal(authenticated.status, 200);
@@ -78,6 +101,16 @@ test("HTTP login sets a cookie that authenticates the next request despite an un
   assert.deepEqual(restoredIds, [user.id]);
   const anonymous: globalThis.Response = await fetch(`${baseUrl}/user/me`);
   assert.equal(anonymous.status, 403);
+});
+});
+
+test("proxy trust defaults off and rejects invalid hop counts", (): void => {
+  assert.equal(parseTrustProxyHops(undefined), 0);
+  assert.equal(parseTrustProxyHops("0"), 0);
+  assert.equal(parseTrustProxyHops(" 2 "), 2);
+  ["", "true", "-1", "1.5", "1e2", "9007199254740992"].forEach((value: string): void => {
+    assert.throws(() => parseTrustProxyHops(value), /TRUST_PROXY_HOPS/);
+  });
 });
 
 test("production requires secure cookies while development and test allow HTTP", (): void => {

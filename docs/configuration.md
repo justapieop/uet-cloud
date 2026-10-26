@@ -35,7 +35,15 @@ The Azure SQL logical server must have a Microsoft Entra administrator, and the 
 
 ## GitHub login
 
-Set `GITHUB_OAUTH2_CLIENT_ID`, `GITHUB_OAUTH2_SECRET`, and `GITHUB_OAUTH2_REDIRECT_URL` in the selected configuration source. The redirect URL must point to this API's `GET /auth/callback` route. `GET /auth/login` starts the GitHub authorization flow; the callback returns the verified user. The API does not yet issue a session or application token, so this response does not authenticate later requests.
+Set `GITHUB_OAUTH2_CLIENT_ID`, `GITHUB_OAUTH2_SECRET`, and `GITHUB_OAUTH2_REDIRECT_URL` in the selected configuration source. The redirect URL must point to this API's `GET /auth/callback` route. `GET /auth/login` starts the GitHub authorization flow; the callback establishes a Passport session in MongoDB, sets the `connect.sid` cookie, and redirects to `FRONTEND_URL`.
+
+### HTTPS ingress and session cookies
+
+Production session cookies use `Secure`, `HttpOnly`, and `SameSite=Lax`. When Azure Container Apps ingress terminates HTTPS and forwards HTTP to Node, set `TRUST_PROXY_HOPS=1` in the API's selected configuration source and restart/redeploy the API. Express then recognizes the trusted ingress's `X-Forwarded-Proto: https` header and permits the secure session cookie. Without proxy trust, OAuth can finish and redirect successfully while the callback sends no session cookie.
+
+`TRUST_PROXY_HOPS` defaults to `0` (no proxy trust) and accepts a nonnegative safe integer. Set it to the actual trusted proxy hop count for your topology. The immediate trusted ingress must overwrite client-supplied forwarding headers, and callers must not be able to bypass it to reach Node directly. Multiple paths of different lengths need a separate proxy trust design rather than an arbitrarily large hop count. Keep secure cookies enabled in production.
+
+To verify, preserve the browser Network log through login and inspect the API callback's 302 response for `Set-Cookie: connect.sid=...; ...; Secure; HttpOnly; SameSite=Lax`. Inspect browser cookie storage on the callback hostname; HttpOnly cookies are absent from `document.cookie`. Cookies are host-only: separate API and frontend hostnames do not share this cookie. The current frontend forwards its incoming cookie for server-side API requests, so production must also provide a common browser origin (for example, path-based API routing) or a separately designed session-sharing arrangement. Proxy trust alone does not solve hostname separation. If the callback still sends no cookie, inspect API session-store errors and MongoDB connectivity.
 
 Application settings are loaded at startup; changes in Azure require an API restart to take effect. Feature flags are loaded at startup by a separate module and polled from Azure App Configuration every 12 hours. Consumers of the `FEATURE_FLAGS` provider read its current `feature_flags` property to get the latest snapshot. If a poll fails, the last known flags remain available until a later poll succeeds. With `CONFIG_SOURCE=local`, the provider supplies an empty flag list and does not poll.
 
