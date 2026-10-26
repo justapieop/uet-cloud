@@ -36,9 +36,8 @@ jobs:
         with:
           appSourcePath: ${{ github.workspace }}
           dockerfilePath: apps/web/Dockerfile
-          registryUrl: kumoreg.azurecr.io
-          registryUsername: ${{ secrets.KUMOUI_REGISTRY_USERNAME }}
-          registryPassword: ${{ secrets.KUMOUI_REGISTRY_PASSWORD }}
+          # Authenticate to ACR using the identity from Azure Login.
+          acrName: kumoreg
           containerAppName: kumo-ui
           resourceGroup: kumo-rg
           imageToBuild: kumoreg.azurecr.io/kumo-ui:${{ github.sha }}
