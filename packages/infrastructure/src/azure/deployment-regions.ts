@@ -14,10 +14,11 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
     const signal: AbortSignal = AbortSignal.timeout(30_000);
     const access: Awaited<ReturnType<AzureCredential["getToken"]>> = await this.credential.getToken("https://management.azure.com/.default", { abortSignal: signal });
     if (!access?.token) throw new Error("Azure region lookup could not authenticate");
-    const [locations, app, network]: [unknown[], unknown, unknown] = await Promise.all([
+    const [locations, app, network, allowed]: [unknown[], unknown, unknown, Set<string> | null] = await Promise.all([
       this.locations(access.token, signal),
       this.json(`${this.subscriptionPath}/providers/Microsoft.App?api-version=2021-04-01`, access.token, signal),
       this.json(`${this.subscriptionPath}/providers/Microsoft.Network?api-version=2021-04-01`, access.token, signal),
+      this.allowedLocations(access.token, signal),
     ]);
     const supported: Set<string>[] = [this.supportedLocations(app, "containerApps"),
       this.supportedLocations(app, "managedEnvironments"), this.supportedLocations(network, "virtualNetworks")];
@@ -32,11 +33,29 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
       const name: string = normalizeAzureRegion(location.name);
       const displayName: string = location.displayName.trim();
       if (!/^[a-z][a-z0-9]{0,63}$/.test(name) || !displayName) throw new Error("Azure returned an invalid region");
-      if (supported.every((names: Set<string>): boolean => names.has(name) || names.has(normalizeAzureRegion(displayName)))) {
+      if ((allowed === null || allowed.has(name)) && supported.every((names: Set<string>): boolean => names.has(name) || names.has(normalizeAzureRegion(displayName)))) {
         regions.set(name, { name, displayName });
       }
     }
     return [...regions.values()].sort((left: DeploymentRegion, right: DeploymentRegion): number => left.name.localeCompare(right.name));
+  }
+
+  private async allowedLocations(token: string, signal: AbortSignal): Promise<Set<string> | null> {
+    const assignment: unknown = await this.json(
+      `${this.subscriptionPath}/providers/Microsoft.Authorization/policyAssignments/sys.regionrestriction?api-version=2023-04-01`, token, signal, true);
+    // Subscriptions without the system restriction retain their supported region catalog.
+    if (assignment === undefined) return null;
+    if (!isRecord(assignment) || !isRecord(assignment.properties)) throw new Error("Azure returned an invalid region policy");
+    const properties: Record<string, unknown> = assignment.properties;
+    if (properties.enforcementMode === "DoNotEnforce") return null;
+    if (properties.enforcementMode !== undefined && properties.enforcementMode !== "Default") throw new Error("Azure returned an invalid region policy enforcement mode");
+    const parameters: unknown = properties.parameters;
+    const parameter: unknown = isRecord(parameters) ? parameters.listOfAllowedLocations : undefined;
+    if (!isRecord(parameter) || !Array.isArray(parameter.value) || parameter.value.some((value: unknown): boolean =>
+      typeof value !== "string" || !/^[a-z][a-z0-9]{0,63}$/.test(normalizeAzureRegion(value)))) {
+      throw new Error("Azure returned invalid allowed policy locations");
+    }
+    return new Set(parameter.value.map((value: string): string => normalizeAzureRegion(value)));
   }
 
   private supportedLocations(provider: unknown, resourceType: string): Set<string> {
@@ -69,10 +88,11 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
     return locations;
   }
 
-  private async json(path: string, token: string, signal: AbortSignal): Promise<unknown> {
+  private async json(path: string, token: string, signal: AbortSignal, allowNotFound: boolean = false): Promise<unknown> {
     const response: Response = await this.http(path.startsWith("/") ? `https://management.azure.com${path}` : path, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, redirect: "error", signal,
     });
+    if (allowNotFound && response.status === 404) return undefined;
     if (!response.ok) throw new Error(`Azure region lookup failed: HTTP ${response.status}`);
     return response.json();
   }

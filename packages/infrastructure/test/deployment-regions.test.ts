@@ -29,6 +29,7 @@ test("region discovery pages subscription locations and intersects all required 
     assert.ok(init?.signal);
     if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
     if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
     if (url.searchParams.has("page")) return Response.json({ value: [
       { name: "Japan East", displayName: "Japan East", type: "Region" },
       { name: "westus", displayName: "West US", type: "Region" },
@@ -42,7 +43,7 @@ test("region discovery pages subscription locations and intersects all required 
     ], nextLink: "https://management.azure.com/subscriptions/sub/locations?api-version=2022-12-01&page=2" });
   });
   assert.deepEqual(await adapter.list(), [{ name: "japaneast", displayName: "Japan East" }, { name: "southeastasia", displayName: "Southeast Asia" }]);
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 5);
 });
 
 test("region lookup returns an empty intersection but rejects unavailable or malformed Azure responses", async (): Promise<void> => {
@@ -52,6 +53,7 @@ test("region lookup returns an empty intersection but rejects unavailable or mal
     const url: URL = new URL(String(input));
     if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
     if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
     return status === 200 ? Response.json(bad) : new Response("private upstream response", { status });
   });
   assert.deepEqual(await adapter.list(), []);
@@ -76,10 +78,55 @@ test("location pagination cannot send ARM credentials outside the configured sub
       assert.ok(url.pathname.startsWith("/subscriptions/sub/"));
       if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
       if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+      if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
       locationReads++;
       return Response.json({ value: [], nextLink: links[index] });
     });
     await assert.rejects(adapter.list(), /invalid location pagination/);
     assert.equal(locationReads, 1);
+  }
+});
+
+
+test("system region policy filters supported locations using live normalized parameters", async (): Promise<void> => {
+  let policy: unknown = { properties: { parameters: { listOfAllowedLocations: { value: ["Japan East", "japaneast", "westus"] } } } };
+  let status: number = 200;
+  const adapter: AzureDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0]): Promise<Response> => {
+    const url: URL = new URL(String(input));
+    if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+    if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/sys.regionrestriction")) {
+      assert.equal(url.searchParams.get("api-version"), "2023-04-01");
+      return status === 200 ? Response.json(policy) : new Response(null, { status });
+    }
+    return Response.json({ value: [
+      { name: "japaneast", displayName: "Japan East" },
+      { name: "southeastasia", displayName: "Southeast Asia" },
+      { name: "westus", displayName: "West US" },
+    ] });
+  });
+  assert.deepEqual(await adapter.list(), [{ name: "japaneast", displayName: "Japan East" }]);
+  policy = { properties: { parameters: { listOfAllowedLocations: { value: ["southeastasia"] } } } };
+  assert.deepEqual(await adapter.list(), [{ name: "southeastasia", displayName: "Southeast Asia" }]);
+  policy = { properties: { parameters: { listOfAllowedLocations: { value: [] } } } };
+  assert.deepEqual(await adapter.list(), []);
+  policy = { properties: { enforcementMode: "DoNotEnforce" } };
+  assert.equal((await adapter.list()).length, 2);
+  status = 404;
+  assert.equal((await adapter.list()).length, 2);
+  const failures: number[] = [401, 403, 429, 500];
+  for (let index: number = 0; index < failures.length; index++) {
+    status = failures[index];
+    await assert.rejects(adapter.list(), new RegExp(`HTTP ${status}`));
+  }
+  status = 200;
+  const malformed: unknown[] = [null, {}, { properties: {} },
+    { properties: { enforcementMode: "invalid" } },
+    { properties: { parameters: { listOfAllowedLocations: { value: [123] } } } },
+    { properties: { parameters: { listOfAllowedLocations: { value: [" "] } } } },
+    { properties: { parameters: { listOfAllowedLocations: { value: "japaneast" } } } }];
+  for (let index: number = 0; index < malformed.length; index++) {
+    policy = malformed[index];
+    await assert.rejects(adapter.list(), /invalid.*policy/);
   }
 });
