@@ -57,7 +57,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 36);
+  assert.equal(count, 39);
   const webhook: OperationObject = document.paths["/github/webhook"]!.post!;
   assert.ok(webhook.responses["200"]);
   assert.ok(webhook.responses["401"]);

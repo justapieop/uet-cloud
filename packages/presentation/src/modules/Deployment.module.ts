@@ -2,8 +2,12 @@ import { ResilienceService } from "@nestjs/resilience";
 import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import { NetworkManagementClient } from "@azure/arm-network";
 import { ResourceManagementClient } from "@azure/arm-resources";
+import { StorageManagementClient } from "@azure/arm-storage";
 import { Module } from "@nestjs/common";
 import {
+  AttachVolumeCase,
+  DetachVolumeCase,
+  ListVolumesCase,
   CreateDeploymentCase,
   RedeployDeploymentCase,
   DeleteDeploymentCase,
@@ -91,14 +95,25 @@ import { RouteReadCache } from "../common/ReadCache.js";
       inject: [InfraDeploymentRepository, AzureProvider],
     },
     {
+      provide: StorageManagementClient,
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): StorageManagementClient =>
+        new StorageManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), {
+          retryOptions: { maxRetries: 0 },
+          additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }],
+        }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
+    },
+    {
       provide: AzureProvider,
       useFactory: (
         config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase,
-        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService,
+        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, storage: StorageManagementClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService,
       ): AzureProvider => {
         const clients: AzureProviderClients = {
           resources: resources.resources, resourceGroups: resources.resourceGroups,
           managedEnvironments: apps.managedEnvironments, containerApps: apps.containerApps,
+          managedEnvironmentsStorages: apps.managedEnvironmentsStorages,
+          storageAccounts: storage.storageAccounts, fileShares: storage.fileShares,
         };
         const createLegacy: () => AzureLegacyEnvironmentProvisioner = (): AzureLegacyEnvironmentProvisioner => {
           const network: NetworkManagementClient = new NetworkManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), {
@@ -109,7 +124,7 @@ import { RouteReadCache } from "../common/ReadCache.js";
         };
         return new AzureProvider(config, triggerBuild, getBuild, clients, createLegacy, flags);
       },
-      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService],
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, StorageManagementClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService],
     },
     {
       provide: CreateDeploymentCase,
@@ -146,6 +161,23 @@ import { RouteReadCache } from "../common/ReadCache.js";
         UNIT_OF_WORK,
       ],
     },
+    {
+      provide: AttachVolumeCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider): AttachVolumeCase =>
+        new AttachVolumeCase(uow, subscriptions, provider),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider],
+    },
+    {
+      provide: DetachVolumeCase,
+      useFactory: (uow: UnitOfWork, provider: AzureProvider): DetachVolumeCase =>
+        new DetachVolumeCase(uow, provider),
+      inject: [UNIT_OF_WORK, AzureProvider],
+    },
+    {
+      provide: ListVolumesCase,
+      useFactory: (uow: UnitOfWork): ListVolumesCase => new ListVolumesCase(uow),
+      inject: [UNIT_OF_WORK],
+    },
   ],
   exports: [
     RedeployDeploymentCase,
@@ -154,6 +186,9 @@ import { RouteReadCache } from "../common/ReadCache.js";
     GetDeploymentCase,
     UpdateDeploymentCase,
     DeleteDeploymentCase,
+    AttachVolumeCase,
+    DetachVolumeCase,
+    ListVolumesCase,
   ],
 })
 export class DeploymentModule {}

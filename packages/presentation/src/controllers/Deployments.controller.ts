@@ -8,6 +8,9 @@ import {
   BuildNotFound,
   GetBuildCase,
   DeploymentConfigurationReadError,
+  AttachVolumeCase,
+  DetachVolumeCase,
+  ListVolumesCase,
   type DeploymentReadResult,
 } from "@kumo/application";
 import {
@@ -18,13 +21,14 @@ import {
   ApiCookieAuth,
 } from "@nestjs/swagger";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, SubscriptionCheckUnavailable, DeploymentRequestInProgress, DeploymentRequestKeyReused, CreateDeploymentCase, DeploymentAlreadyExists, DeploymentNotFoundError, GetDeploymentCase } from "@kumo/application";
-import { Permission, InvalidDomainParams, type BuildDetails, type Deployment, type DeploymentPortMapping, type User } from "@kumo/domain";
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException, ServiceUnavailableException } from "@nestjs/common";
+import { Permission, InvalidDomainParams, type BuildDetails, type Deployment, type DeploymentPortMapping, type DeploymentVolume, type User } from "@kumo/domain";
+import { BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Header, HttpCode, HttpStatus, NotFoundException, Optional, Param, ParseUUIDPipe, Post, Query, Req, UseGuards, UseInterceptors, ValidationPipe, UnprocessableEntityException, ServiceUnavailableException } from "@nestjs/common";
 import { ApiServiceUnavailableResponse, ApiHeader, ApiUnprocessableEntityResponse, ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { RequirePermissions } from "../common/RequirePermissions.decorator.js";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { AdditionalDeploymentPortDto, CreateDeploymentDto, DeploymentResponseDto } from "../dto/Deployment.dto.js";
+import { DeploymentVolumeDto, DeploymentVolumeResponseDto } from "../dto/Volume.dto.js";
 import { BuildResponseDto } from "../dto/BuildResponse.dto.js";
 import { ListDeploymentsQueryDto } from "../dto/ListDeploymentsQuery.dto.js";
 import { CacheRead, RouteReadCache, UserReadCacheInterceptor } from "../common/ReadCache.js";
@@ -42,6 +46,9 @@ export class DeploymentsController {
     private readonly stopDeployment: StopDeploymentCase,
     private readonly readCache: RouteReadCache,
     private readonly getBuildCase: GetBuildCase,
+    @Optional() private readonly attachVolumeCase?: AttachVolumeCase,
+    @Optional() private readonly detachVolumeCase?: DetachVolumeCase,
+    @Optional() private readonly listVolumesCase?: ListVolumesCase,
   ) {}
 
   @Post("deployments")
@@ -68,6 +75,9 @@ export class DeploymentsController {
           ref: input.ref, targetPort: input.target_port, external: input.external, maxVcpu: input.max_vcpu, maxMemory: input.max_memory,
           additionalPorts: input.additional_ports?.map((port: AdditionalDeploymentPortDto): DeploymentPortMapping => ({
             targetPort: port.target_port, exposedPort: port.exposed_port, external: port.external,
+          })),
+          volumes: input.volumes?.map((v: DeploymentVolumeDto): DeploymentVolume => ({
+            name: v.name, mountPath: v.mount_path, subPath: v.sub_path, sizeGb: v.size_gb, accessMode: v.access_mode,
           })),
           minScaling: input.min_scaling, maxScaling: input.max_scaling, envVars: input.env_vars,
         },
@@ -126,6 +136,108 @@ export class DeploymentsController {
     } catch (error: unknown) {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
+      throw error;
+    }
+  }
+
+  @Post("deployments/:id/volumes")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequirePermissions(Permission.DeploymentUpdate)
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Attach a persistent volume to an existing deployment" })
+  @ApiAcceptedResponse({ type: DeploymentResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID or volume specification" })
+  @ApiNotFoundResponse({ description: "Deployment not found" })
+  @ApiConflictResponse({ description: "Deployment not in RUNNING or STOPPED state, or disk quota exceeded" })
+  @ApiForbiddenResponse({ description: "Active Stripe subscription required" })
+  public async attachVolume(
+    @Req() request: Request,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) input: DeploymentVolumeDto,
+  ): Promise<DeploymentResponseDto> {
+    const user: User = this.owner(request);
+    if (!this.attachVolumeCase) throw new ServiceUnavailableException("Volume management is not available");
+    try {
+      const deployment: Deployment = await this.attachVolumeCase.exec({
+        userId: user.id,
+        deploymentId: id,
+        volume: {
+          name: input.name,
+          mountPath: input.mount_path,
+          subPath: input.sub_path,
+          sizeGb: input.size_gb,
+          accessMode: input.access_mode,
+        },
+      });
+      await this.readCache.invalidateDeployments(user.id);
+      return new DeploymentResponseDto(deployment);
+    } catch (error: unknown) {
+      if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
+      if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
+      if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
+      if (error instanceof DeploymentQuotaExceeded) throw new ConflictException({ code: "DEPLOYMENT_QUOTA_EXCEEDED", message: error.message });
+      if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
+      throw error;
+    }
+  }
+
+  @Delete("deployments/:id/volumes/:volumeName")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequirePermissions(Permission.DeploymentUpdate)
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Detach a persistent volume from an existing deployment" })
+  @ApiAcceptedResponse({ type: DeploymentResponseDto })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID or volume name" })
+  @ApiNotFoundResponse({ description: "Deployment not found" })
+  @ApiConflictResponse({ description: "Deployment not in RUNNING or STOPPED state" })
+  public async detachVolume(
+    @Req() request: Request,
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @Param("volumeName") volumeName: string,
+    @Query("delete_data") deleteData?: string,
+  ): Promise<DeploymentResponseDto> {
+    const user: User = this.owner(request);
+    if (!this.detachVolumeCase) throw new ServiceUnavailableException("Volume management is not available");
+    try {
+      const deployment: Deployment = await this.detachVolumeCase.exec({
+        userId: user.id,
+        deploymentId: id,
+        volumeName,
+        deleteData: deleteData === "true",
+      });
+      await this.readCache.invalidateDeployments(user.id);
+      return new DeploymentResponseDto(deployment);
+    } catch (error: unknown) {
+      if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
+      if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
+      if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
+      if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
+      throw error;
+    }
+  }
+
+  @Get("deployments/:id/volumes")
+  @RequirePermissions(Permission.DeploymentRead)
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "List mounted volumes of a deployment" })
+  @ApiOkResponse({ type: [DeploymentVolumeResponseDto] })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
+  @ApiNotFoundResponse({ description: "Deployment not found" })
+  public async listVolumes(
+    @Req() request: Request,
+    @Param("id", new ParseUUIDPipe()) id: string,
+  ): Promise<DeploymentVolumeResponseDto[]> {
+    const user: User = this.owner(request);
+    if (!this.listVolumesCase) throw new ServiceUnavailableException("Volume management is not available");
+    try {
+      const volumes: readonly DeploymentVolume[] = await this.listVolumesCase.exec({
+        userId: user.id,
+        deploymentId: id,
+      });
+      return volumes.map((v: DeploymentVolume): DeploymentVolumeResponseDto => new DeploymentVolumeResponseDto(v));
+    } catch (error: unknown) {
+      if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
+      if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       throw error;
     }
   }
