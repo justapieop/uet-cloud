@@ -1,6 +1,6 @@
-import type { ContainerApp, ContainerAppsAPIClient, Container, Ingress, IngressPortMapping } from "@azure/arm-appcontainers";
+import type { ContainerApp, ContainerAppsAPIClient, Container, Ingress, IngressPortMapping, VolumeMount } from "@azure/arm-appcontainers";
 import { DeploymentConfigurationReadError, type DeploymentConfiguration, type DeploymentConfigurationReader } from "@kumo/application";
-import type { DeploymentPortMapping } from "@kumo/domain";
+import type { DeploymentPortMapping, DeploymentVolume } from "@kumo/domain";
 import { ResilienceError } from "@nestjs/resilience";
 import type { ConfigService } from "@nestjs/config";
 import { normalizeAzureRegion } from "./region.js";
@@ -46,6 +46,15 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
       additionalPorts: (ingress?.additionalPortMappings ?? []).map((port: IngressPortMapping): DeploymentPortMapping => ({
         targetPort: port.targetPort, exposedPort: port.exposedPort ?? port.targetPort, external: port.external ?? false,
       })),
+      ...(container.volumeMounts && container.volumeMounts.length > 0 ? {
+        volumes: container.volumeMounts.map((mount: VolumeMount): DeploymentVolume => ({
+          name: mount.volumeName ?? "",
+          mountPath: mount.mountPath ?? "",
+          subPath: mount.subPath || undefined,
+          sizeGb: 1,
+          accessMode: "ReadWrite",
+        })),
+      } : {}),
       image: container.image ?? null,
       fqdn: ingress?.fqdn ?? null,
     };

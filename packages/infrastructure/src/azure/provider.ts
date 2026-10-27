@@ -1,7 +1,8 @@
-import type { ContainerAppsAPIClient, Container, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, WorkloadProfile } from "@azure/arm-appcontainers";
+import type { ContainerAppsAPIClient, Container, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, Volume, VolumeMount, WorkloadProfile } from "@azure/arm-appcontainers";
 import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
-import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult } from "@kumo/application";
-import { validateDeploymentPorts, type BuildDetails, type DeploymentPortMapping, type InvalidDomainParams } from "@kumo/domain";
+import type { StorageManagementClient, StorageAccountListKeysResult } from "@azure/arm-storage";
+import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult, type VolumeManager } from "@kumo/application";
+import { validateDeploymentPorts, validateDeploymentVolumes, type BuildDetails, type DeploymentPortMapping, type DeploymentVolume, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { setTimeout as delay } from "node:timers/promises";
@@ -37,6 +38,7 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
   maxReplicas?: number;
   deploymentId?: string;
   resourceId?: string;
+  volumes?: readonly DeploymentVolume[];
   onBuildAccepted?: (id: string, image: string) => Promise<void>;
 }
 
@@ -45,10 +47,13 @@ export interface AzureProviderClients {
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get">;
   containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate" | "update">;
+  managedEnvironmentsStorages?: Pick<ContainerAppsAPIClient["managedEnvironmentsStorages"], "createOrUpdate" | "delete" | "get">;
+  storageAccounts?: Pick<StorageManagementClient["storageAccounts"], "create" | "getProperties" | "listKeys">;
+  fileShares?: Pick<StorageManagementClient["fileShares"], "create" | "get" | "delete">;
 }
 
 @Injectable()
-export class AzureProvider implements DeploymentProvisioner {
+export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   private readonly platformResourceGroup: string;
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
@@ -121,7 +126,8 @@ export class AzureProvider implements DeploymentProvisioner {
     const app: ContainerApp = await runBuildStep("Deployment provisioning", () => this.createDeployment({
       ...input.spec, name: input.name, userId: input.userId, deploymentId: input.id, resourceId: input.resourceId,
       resources: { cpu: input.spec.maxVcpu, memory: `${input.spec.maxMemory}Gi` },
-      minReplicas: input.spec.minScaling, maxReplicas: input.spec.maxScaling, onBuildAccepted,
+      minReplicas: input.spec.minScaling, maxReplicas: input.spec.maxScaling,
+      volumes: input.spec.volumes, onBuildAccepted,
     }));
     const buildId: string | undefined = app.tags?.["kumo-build-id"];
     const image: string | undefined = app.template?.containers?.[0]?.image;
@@ -134,6 +140,8 @@ export class AzureProvider implements DeploymentProvisioner {
   public async createDeployment(input: AzureDeploymentCreateInput): Promise<ContainerApp> {
     const portError: InvalidDomainParams | null = validateDeploymentPorts(input.targetPort, input.additionalPorts, input.external);
     if (portError) throw portError;
+    const volumeError: InvalidDomainParams | null = validateDeploymentVolumes(input.volumes);
+    if (volumeError) throw volumeError;
     const rgName: string = this.userResourceGroup(input.userId);
     if (input.resourceId && (!input.deploymentId || !ownedContainerAppResource({ resourceId: input.resourceId, userId: input.userId, appName: input.name }, this.requiredSetting("AZURE_SUBSCRIPTION_ID"), this.platformResourceGroup))) {
       throw new BuildProviderError("Redeployment resource does not belong to this user");
@@ -232,6 +240,24 @@ export class AzureProvider implements DeploymentProvisioner {
     const env: EnvironmentVar[] = Object.entries(input.envVars ?? {}).map(
       ([name, value]: [string, string]): EnvironmentVar => ({ name, value }),
     );
+    const volumeDefinitions: Volume[] = [];
+    const containerVolumeMounts: VolumeMount[] = [];
+    if (input.volumes && input.volumes.length > 0) {
+      for (let index: number = 0; index < input.volumes.length; index += 1) {
+        const vol: DeploymentVolume = input.volumes[index]!;
+        const storageLinkName: string = await this.ensureVolumeStorage(input.userId, input.name, environment, vol, signal);
+        volumeDefinitions.push({
+          name: vol.name,
+          storageType: "AzureFile",
+          storageName: storageLinkName,
+        });
+        containerVolumeMounts.push({
+          volumeName: vol.name,
+          mountPath: vol.mountPath,
+          subPath: vol.subPath,
+        });
+      }
+    }
     const app: ContainerApp = {
       tags: { "kumo-build-id": build.buildId, ...(input.deploymentId ? { "kumo-deployment-id": input.deploymentId } : {}) },
       location: normalizeAzureRegion(environment.location),
@@ -250,8 +276,15 @@ export class AzureProvider implements DeploymentProvisioner {
         identitySettings: [{ identity: pullIdentity, lifecycle: "None" }],
       },
       template: {
-        containers: [{ name: input.name, image: completed.image, env, resources }],
+        containers: [{
+          name: input.name,
+          image: completed.image,
+          env,
+          resources,
+          ...(containerVolumeMounts.length > 0 ? { volumeMounts: containerVolumeMounts } : {}),
+        }],
         scale: { minReplicas, maxReplicas },
+        ...(volumeDefinitions.length > 0 ? { volumes: volumeDefinitions } : {}),
       },
     };
     signal.throwIfAborted();
@@ -283,6 +316,197 @@ export class AzureProvider implements DeploymentProvisioner {
   private operationSignal(signal?: AbortSignal): AbortSignal {
     const timeout: AbortSignal = AbortSignal.timeout(this.timeoutMs);
     return signal ? AbortSignal.any([signal, timeout]) : timeout;
+  }
+
+  public async attachVolume(input: {
+    readonly userId: string;
+    readonly appName: string;
+    readonly deploymentId: string;
+    readonly resourceId: string;
+    readonly volume: DeploymentVolume;
+    readonly existingVolumes: readonly DeploymentVolume[];
+  }): Promise<void> {
+    const rgName: string = this.userResourceGroup(input.userId);
+    const signal: AbortSignal = this.operationSignal();
+    const app: ContainerApp = await this.clients.containerApps.get(rgName, input.appName, { abortSignal: signal });
+    const existingEnvironmentId: string | undefined = app.environmentId ?? app.managedEnvironmentId;
+    if (!existingEnvironmentId) throw new BuildProviderError("Existing Container App has no managed environment identity");
+    const environment: ManagedEnvironment = await this.getAcaEnvironment({ userId: input.userId, environmentId: existingEnvironmentId, abortSignal: signal });
+
+    const storageLinkName: string = await this.ensureVolumeStorage(input.userId, input.appName, environment, input.volume, signal);
+
+    const containers: Container[] = app.template?.containers ?? [];
+    const container: Container | undefined = containers.find((c: Container): boolean => c.name === input.appName) ?? containers[0];
+    if (!container) throw new BuildProviderError("Container App main container not found");
+
+    const updatedVolumeMounts: VolumeMount[] = [
+      ...(container.volumeMounts ?? []),
+      { volumeName: input.volume.name, mountPath: input.volume.mountPath, subPath: input.volume.subPath },
+    ];
+    const updatedVolumes: Volume[] = [
+      ...(app.template?.volumes ?? []),
+      { name: input.volume.name, storageType: "AzureFile", storageName: storageLinkName },
+    ];
+
+    const updatedContainers: Container[] = containers.map((c: Container): Container =>
+      c.name === container.name ? { ...c, volumeMounts: updatedVolumeMounts } : c,
+    );
+
+    const updatedApp: ContainerApp = {
+      location: app.location,
+      tags: app.tags,
+      template: {
+        ...app.template,
+        revisionSuffix: `vol-${Date.now()}`,
+        containers: updatedContainers,
+        volumes: updatedVolumes,
+      },
+    };
+
+    await runBuildStep("Container App volume attach", () =>
+      this.clients.containerApps.update(rgName, input.appName, updatedApp, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }),
+    );
+  }
+
+  public async detachVolume(input: {
+    readonly userId: string;
+    readonly appName: string;
+    readonly deploymentId: string;
+    readonly resourceId: string;
+    readonly volumeName: string;
+    readonly existingVolumes: readonly DeploymentVolume[];
+    readonly deleteData?: boolean;
+  }): Promise<void> {
+    const rgName: string = this.userResourceGroup(input.userId);
+    const signal: AbortSignal = this.operationSignal();
+    const app: ContainerApp = await this.clients.containerApps.get(rgName, input.appName, { abortSignal: signal });
+    const existingEnvironmentId: string | undefined = app.environmentId ?? app.managedEnvironmentId;
+    if (!existingEnvironmentId) throw new BuildProviderError("Existing Container App has no managed environment identity");
+    const environment: ManagedEnvironment = await this.getAcaEnvironment({ userId: input.userId, environmentId: existingEnvironmentId, abortSignal: signal });
+
+    const containers: Container[] = app.template?.containers ?? [];
+    const container: Container | undefined = containers.find((c: Container): boolean => c.name === input.appName) ?? containers[0];
+    if (!container) throw new BuildProviderError("Container App main container not found");
+
+    const updatedVolumeMounts: VolumeMount[] = (container.volumeMounts ?? []).filter(
+      (m: VolumeMount): boolean => m.volumeName !== input.volumeName,
+    );
+    const updatedVolumes: Volume[] = (app.template?.volumes ?? []).filter(
+      (v: Volume): boolean => v.name !== input.volumeName,
+    );
+
+    const updatedContainers: Container[] = containers.map((c: Container): Container =>
+      c.name === container.name ? { ...c, volumeMounts: updatedVolumeMounts } : c,
+    );
+
+    const updatedApp: ContainerApp = {
+      location: app.location,
+      tags: app.tags,
+      template: {
+        ...app.template,
+        revisionSuffix: `unvol-${Date.now()}`,
+        containers: updatedContainers,
+        volumes: updatedVolumes,
+      },
+    };
+
+    await runBuildStep("Container App volume detach", () =>
+      this.clients.containerApps.update(rgName, input.appName, updatedApp, { abortSignal: signal }).pollUntilDone({ abortSignal: signal }),
+    );
+
+    const storageLinkName: string = this.storageLinkName(input.appName, input.volumeName);
+    const envRef: ManagedEnvironmentReference = managedEnvironmentReference(environment.id!, this.requiredSetting("AZURE_SUBSCRIPTION_ID"));
+    if (this.clients.managedEnvironmentsStorages) {
+      try {
+        await this.clients.managedEnvironmentsStorages.delete(envRef.resourceGroup, envRef.name, storageLinkName, { abortSignal: signal });
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+    }
+
+    if (input.deleteData && this.clients.fileShares) {
+      const storageAccountName: string = this.userStorageAccountName(input.userId);
+      const shareName: string = this.volumeShareName(input.appName, input.volumeName);
+      try {
+        await this.clients.fileShares.delete(rgName, storageAccountName, shareName, { abortSignal: signal });
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+    }
+  }
+
+  public userStorageAccountName(userId: string): string {
+    const sanitized: string = userId.toLowerCase().replace(/[^a-z0-9]/g, "");
+    return `stkumo${sanitized.slice(0, 18).padEnd(3, "0")}`;
+  }
+
+  public volumeShareName(appName: string, volumeName: string): string {
+    return `share-${appName.slice(0, 25)}-${volumeName.slice(0, 25)}`;
+  }
+
+  public storageLinkName(appName: string, volumeName: string): string {
+    return `stg-${appName.slice(0, 13)}-${volumeName.slice(0, 13)}`;
+  }
+
+  private async ensureVolumeStorage(
+    userId: string,
+    appName: string,
+    environment: ManagedEnvironment,
+    volume: DeploymentVolume,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const rgName: string = this.userResourceGroup(userId);
+    const storageAccountName: string = this.userStorageAccountName(userId);
+    const shareName: string = this.volumeShareName(appName, volume.name);
+    const storageLinkName: string = this.storageLinkName(appName, volume.name);
+    const opSignal: AbortSignal = this.operationSignal(signal);
+
+    if (this.clients.storageAccounts && this.clients.fileShares && this.clients.managedEnvironmentsStorages) {
+      let accountExists: boolean = false;
+      try {
+        await this.clients.storageAccounts.getProperties(rgName, storageAccountName, { abortSignal: opSignal });
+        accountExists = true;
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+      if (!accountExists) {
+        await runBuildStep("Storage Account creation", () =>
+          this.clients.storageAccounts!.create(rgName, storageAccountName, {
+            location: normalizeAzureRegion(environment.location),
+            sku: { name: "Standard_LRS" },
+            kind: "StorageV2",
+          }, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
+        );
+      }
+
+      await runBuildStep("File share creation", () =>
+        this.clients.fileShares!.create(rgName, storageAccountName, shareName, {
+          shareQuota: volume.sizeGb,
+        }, { abortSignal: opSignal }),
+      );
+
+      const keysResult: StorageAccountListKeysResult = await this.clients.storageAccounts.listKeys(rgName, storageAccountName, { abortSignal: opSignal });
+      const accountKey: string | undefined = keysResult.keys?.[0]?.value;
+      if (!accountKey) {
+        throw new BuildProviderError("Failed to retrieve Azure Storage Account access key");
+      }
+
+      const envRef: ManagedEnvironmentReference = managedEnvironmentReference(environment.id!, this.requiredSetting("AZURE_SUBSCRIPTION_ID"));
+      await runBuildStep("Managed environment storage link registration", () =>
+        this.clients.managedEnvironmentsStorages!.createOrUpdate(envRef.resourceGroup, envRef.name, storageLinkName, {
+          properties: {
+            azureFile: {
+              accountName: storageAccountName,
+              accountKey,
+              shareName,
+              accessMode: volume.accessMode ?? "ReadWrite",
+            },
+          },
+        }, { abortSignal: opSignal }),
+      );
+    }
+
+    return storageLinkName;
   }
 
   private isNotFound(error: unknown): boolean {
