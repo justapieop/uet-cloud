@@ -1,4 +1,4 @@
-import type { Deployment, DeploymentSpec, DeploymentStatus } from "@kumo/domain";
+import type { Deployment, DeploymentSpec, DeploymentStatus, DeploymentVolume } from "@kumo/domain";
 
 export interface DeploymentListFilters {
   readonly status?: DeploymentStatus;
@@ -44,6 +44,29 @@ export interface DeploymentProvisionResult {
 export interface DeploymentProvisioner {
   provisionDeployment(input: DeploymentProvisionInput, onBuildAccepted: (id: string, image: string) => Promise<void>): Promise<DeploymentProvisionResult>;
 }
+
+export interface VolumeManager {
+  attachVolume(input: {
+    readonly userId: string;
+    readonly appName: string;
+    readonly deploymentId: string;
+    readonly resourceId: string;
+    readonly volume: DeploymentVolume;
+    readonly existingVolumes: readonly DeploymentVolume[];
+  }): Promise<void>;
+
+  detachVolume(input: {
+    readonly userId: string;
+    readonly appName: string;
+    readonly deploymentId: string;
+    readonly resourceId: string;
+    readonly volumeName: string;
+    readonly existingVolumes: readonly DeploymentVolume[];
+    readonly deleteData?: boolean;
+  }): Promise<void>;
+}
+
+export const VOLUME_MANAGER: symbol = Symbol("VOLUME_MANAGER");
 
 export class DeploymentAlreadyExists extends Error {}
 export class DeploymentNotFoundError extends Error {}

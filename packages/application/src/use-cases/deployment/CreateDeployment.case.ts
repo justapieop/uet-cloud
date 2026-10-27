@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Deployment, InvalidDomainParams, type DeploymentSpec, type Plan, type User } from "@kumo/domain";
+import { Deployment, InvalidDomainParams, type DeploymentSpec, type DeploymentVolume, type Plan, type User } from "@kumo/domain";
 import { DeploymentRequestKeyReused, type DeploymentRequestReceipt } from "../../ports/deployment-request.js";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, type StripeSubscriptionGateway } from "../../ports/stripe.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
@@ -58,11 +58,13 @@ export class CreateDeploymentCase {
       const plans: Plan[] = await repo.plans.findActiveByStripeProductIds(productIds);
       if (plans.length === 0) throw new DeploymentSubscriptionRequired("An active subscription linked to an active Kumo plan is required");
       const reservedCount: number = await repo.deployment.countReservedByUserId(input.userId);
+      const requestedDisk: number = (input.spec.volumes ?? []).reduce((sum: number, vol: DeploymentVolume): number => sum + vol.sizeGb, 0);
       // Each plan must independently cover the request; multiple subscriptions do not stack quotas.
       const eligible: boolean = plans.some((plan: Plan): boolean =>
         reservedCount + 1 <= plan.deployments && input.spec.maxVcpu <= plan.vcpu &&
-        input.spec.maxMemory <= plan.memory && input.spec.maxScaling <= plan.maxReplicas);
-      if (!eligible) throw new DeploymentQuotaExceeded("The request exceeds the plan's deployment-count, per-deployment CPU, RAM, or replica limit");
+        input.spec.maxMemory <= plan.memory && input.spec.maxScaling <= plan.maxReplicas &&
+        requestedDisk <= plan.disk);
+      if (!eligible) throw new DeploymentQuotaExceeded("The request exceeds the plan's deployment-count, per-deployment CPU, RAM, disk, or replica limit");
 
       await repo.deployment.insert(deployment);
       if (keyHash && fingerprint) {
