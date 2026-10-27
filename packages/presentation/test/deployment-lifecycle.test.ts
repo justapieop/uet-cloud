@@ -36,7 +36,7 @@ function createMockRequest(user: User = createMockUser()): Request {
   } as unknown as Request;
 }
 
-function createDeployment(status: "RUNNING" | "STOPPED"): Deployment {
+function createDeployment(status: "RUNNING" | "STOPPED" | "STARTING" | "STOPPING"): Deployment {
   const details: DeploymentDetails = {
     id: "00000000-0000-4000-8000-000000000001",
     userId: "user-123",
@@ -58,11 +58,11 @@ function createFixture(overrides: {
   const invalidatedUsers: string[] = [];
 
   const startCase: StartDeploymentCase = {
-    exec: overrides.startDeploymentMock ?? (async (): Promise<Deployment> => createDeployment("RUNNING")),
+    exec: overrides.startDeploymentMock ?? (async (): Promise<Deployment> => createDeployment("STARTING")),
   } as unknown as StartDeploymentCase;
 
   const stopCase: StopDeploymentCase = {
-    exec: overrides.stopDeploymentMock ?? (async (): Promise<Deployment> => createDeployment("STOPPED")),
+    exec: overrides.stopDeploymentMock ?? (async (): Promise<Deployment> => createDeployment("STOPPING")),
   } as unknown as StopDeploymentCase;
 
   const readCache: RouteReadCache = {
@@ -91,7 +91,7 @@ test("DeploymentsController.start returns DeploymentResponseDto and invalidates 
   const request: Request = createMockRequest();
   const response: DeploymentResponseDto = await controller.start(request, "00000000-0000-4000-8000-000000000001");
 
-  assert.equal(response.status, "RUNNING");
+  assert.equal(response.status, "STARTING");
   assert.equal(response.name, "test-app");
   assert.deepEqual(invalidatedUsers, ["user-123"]);
 });
@@ -122,25 +122,12 @@ test("DeploymentsController.start throws ConflictException when deployment not s
   );
 });
 
-test("DeploymentsController.start throws BadGatewayException when Azure fails", async (): Promise<void> => {
-  const { controller }: ControllerFixture = createFixture({
-    startDeploymentMock: async (): Promise<never> => {
-      throw new BuildProviderError("Container App start failed");
-    },
-  });
-  const request: Request = createMockRequest();
-  await assert.rejects(
-    controller.start(request, "00000000-0000-4000-8000-000000000001"),
-    BadGatewayException,
-  );
-});
-
 test("DeploymentsController.stop returns DeploymentResponseDto and invalidates cache", async (): Promise<void> => {
   const { controller, invalidatedUsers }: ControllerFixture = createFixture();
   const request: Request = createMockRequest();
   const response: DeploymentResponseDto = await controller.stop(request, "00000000-0000-4000-8000-000000000001");
 
-  assert.equal(response.status, "STOPPED");
+  assert.equal(response.status, "STOPPING");
   assert.equal(response.name, "test-app");
   assert.deepEqual(invalidatedUsers, ["user-123"]);
 });

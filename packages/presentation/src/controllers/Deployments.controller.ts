@@ -87,15 +87,14 @@ export class DeploymentsController {
   }
 
   @Post("deployments/:id/start")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   @RequirePermissions(Permission.DeploymentUpdate)
   @Header("Cache-Control", "private, no-store")
   @ApiOperation({ summary: "Start an owned stopped container deployment" })
-  @ApiOkResponse({ type: DeploymentResponseDto })
+  @ApiAcceptedResponse({ type: DeploymentResponseDto })
   @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
   @ApiConflictResponse({ description: "Deployment is not in a stopped state" })
-  @ApiBadGatewayResponse({ description: "Azure failed to start the container app" })
   public async start(@Req() request: Request, @Param("id", new ParseUUIDPipe()) id: string): Promise<DeploymentResponseDto> {
     const user: User = this.owner(request);
     try {
@@ -105,21 +104,19 @@ export class DeploymentsController {
     } catch (error: unknown) {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
-      if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
       throw error;
     }
   }
 
   @Post("deployments/:id/stop")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   @RequirePermissions(Permission.DeploymentUpdate)
   @Header("Cache-Control", "private, no-store")
   @ApiOperation({ summary: "Stop an owned running container deployment" })
-  @ApiOkResponse({ type: DeploymentResponseDto })
+  @ApiAcceptedResponse({ type: DeploymentResponseDto })
   @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
   @ApiNotFoundResponse({ description: "Deployment not found for this user" })
   @ApiConflictResponse({ description: "Deployment is not in a running state" })
-  @ApiBadGatewayResponse({ description: "Azure failed to stop the container app" })
   public async stop(@Req() request: Request, @Param("id", new ParseUUIDPipe()) id: string): Promise<DeploymentResponseDto> {
     const user: User = this.owner(request);
     try {
@@ -129,7 +126,6 @@ export class DeploymentsController {
     } catch (error: unknown) {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
-      if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
       throw error;
     }
   }
