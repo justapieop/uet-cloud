@@ -77,7 +77,12 @@ test("OpenAPI covers controller operations, session authentication, and generate
     const path: string = paths[index]!;
     const operation: OperationObject = (document.paths[path]?.get ?? document.paths[path]?.post)!;
     assert.ok(operation.responses["400"], `${path} must document UUID validation failures`);
-    assert.ok(operation.responses["200"]);
+    if (path === "/deployments/{id}/start" || path === "/deployments/{id}/stop") {
+      assert.ok(operation.responses["202"], `${path} must document 202 response`);
+      assert.equal(operation.responses["200"], undefined, `${path} must not document 200 response`);
+    } else {
+      assert.ok(operation.responses["200"], `${path} must document 200 response`);
+    }
     assert.equal(operation.responses["201"], undefined);
   }
 });

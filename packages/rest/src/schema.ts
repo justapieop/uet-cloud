@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/auth/root/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in as the environment-configured root account
+         * @description Password login is reserved for the fixed root identity. Ordinary users must use GitHub. Establishes the normal session cookie.
+         */
+        post: operations["RootLoginController_signIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -92,26 +112,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/root/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Sign in as the environment-configured root account
-         * @description Password login is reserved for the fixed root identity. Ordinary users must use GitHub. Establishes the normal session cookie.
-         */
-        post: operations["RootLoginController_signIn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/user/me": {
         parameters: {
             query?: never;
@@ -121,40 +121,6 @@ export interface paths {
         };
         /** Get the current authenticated user's profile */
         get: operations["UserController_getMe"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/builds/{id}/manifest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get the manifest for a pipeline's assigned build */
-        get: operations["BuildSourceController_manifest"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/builds/{id}/source": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Download the saved commit's Docker build context */
-        get: operations["BuildSourceController_download"];
         put?: never;
         post?: never;
         delete?: never;
@@ -269,18 +235,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plans/me": {
+    "/builds/{id}/manifest": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Check whether the signed-in user has an active plan
-         * @description Verifies active Stripe subscriptions and matches active local plans. No linked customer or no matching active subscription returns has_plan=false. Stripe verification failures return 503, not false. Does not reserve quota or grant deployment access.
-         */
-        get: operations["UserPlansController_get"];
+        /** Get the manifest for a pipeline's assigned build */
+        get: operations["BuildSourceController_manifest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/builds/{id}/source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download the saved commit's Docker build context */
+        get: operations["BuildSourceController_download"];
         put?: never;
         post?: never;
         delete?: never;
@@ -347,6 +327,26 @@ export interface paths {
          * @description Sets active=false. This removes eligibility for subsequent deployment admissions through this plan.
          */
         delete: operations["PlansController_deactivate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check whether the signed-in user has an active plan
+         * @description Verifies active Stripe subscriptions and matches active local plans. No linked customer or no matching active subscription returns has_plan=false. Stripe verification failures return 503, not false. Does not reserve quota or grant deployment access.
+         */
+        get: operations["UserPlansController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -553,6 +553,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RootLoginDto: {
+            /** Format: password */
+            password: string;
+        };
         GitHubRepositoryResponseDto: {
             id: number;
             name: string;
@@ -567,23 +571,12 @@ export interface components {
             per_page: number;
             has_next_page: boolean;
         };
-        RootLoginDto: {
-            /** Format: password */
-            password: string;
-        };
         UserResponseDto: {
             id: string;
             display_name: string;
             /** Format: date-time */
             created_at: string;
             suspended: boolean;
-        };
-        BuildManifestDto: {
-            /** Format: uuid */
-            build_id: string;
-            dockerfile_path: string;
-            commit_sha: string;
-            image: string;
         };
         AdditionalDeploymentPortDto: {
             /**
@@ -726,6 +719,13 @@ export interface components {
             /** @description Average active replica count per revision; zero is returned only when Azure emits zero */
             replicas: components["schemas"]["MetricSeriesDto"][];
         };
+        BuildManifestDto: {
+            /** Format: uuid */
+            build_id: string;
+            dockerfile_path: string;
+            commit_sha: string;
+            image: string;
+        };
         PlanResponseDto: {
             id: string;
             name: string;
@@ -741,12 +741,6 @@ export interface components {
             disk: number;
             /** @description Maximum replicas per deployment */
             max_replicas: number;
-        };
-        UserPlansResponseDto: {
-            /** @description True when an active Stripe subscription maps to at least one active local plan; does not indicate remaining quota */
-            has_plan: boolean;
-            /** @description Active local plans matching the user's active Stripe subscriptions */
-            plans: components["schemas"]["PlanResponseDto"][];
         };
         AdminPlanResponseDto: {
             id: string;
@@ -794,6 +788,12 @@ export interface components {
             active: boolean;
             stripe_product_id: string | null;
             max_replicas: number;
+        };
+        UserPlansResponseDto: {
+            /** @description True when an active Stripe subscription maps to at least one active local plan; does not indicate remaining quota */
+            has_plan: boolean;
+            /** @description Active local plans matching the user's active Stripe subscriptions */
+            plans: components["schemas"]["PlanResponseDto"][];
         };
         PlanSubscriptionResponseDto: {
             checkout_session_id: string;
@@ -885,6 +885,63 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    RootLoginController_signIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RootLoginDto"];
+            };
+        };
+        responses: {
+            /** @description Root session established */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid body; only password is accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid credentials or ineligible root account */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root password login is not configured */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root login attempt limit reached; retry after one minute */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root authentication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     AuthController_login: {
         parameters: {
             query?: never;
@@ -1020,63 +1077,6 @@ export interface operations {
             };
         };
     };
-    RootLoginController_signIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RootLoginDto"];
-            };
-        };
-        responses: {
-            /** @description Root session established */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid body; only password is accepted */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid credentials or ineligible root account */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Root password login is not configured */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Root login attempt limit reached; retry after one minute */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Root authentication is unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     UserController_getMe: {
         parameters: {
             query?: never;
@@ -1097,94 +1097,6 @@ export interface operations {
             };
             /** @description The request has no authenticated session */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    BuildSourceController_manifest: {
-        parameters: {
-            query?: never;
-            header: {
-                authorization: string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BuildManifestDto"];
-                };
-            };
-            /** @description Invalid build ID or Dockerfile */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid or expired credential for this build */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description GitHub download or archive preparation failed */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    BuildSourceController_download: {
-        parameters: {
-            query?: never;
-            header: {
-                authorization: string;
-            };
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/gzip": string;
-                };
-            };
-            /** @description Invalid build ID or Dockerfile */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid or expired credential for this build */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description GitHub download or archive preparation failed */
-            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1318,7 +1230,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1354,13 +1266,6 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Azure failed to start the container app */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
         };
     };
     DeploymentsController_stop: {
@@ -1374,7 +1279,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1405,13 +1310,6 @@ export interface operations {
             };
             /** @description Deployment is not in a running state */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Azure failed to stop the container app */
-            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1589,11 +1487,15 @@ export interface operations {
             };
         };
     };
-    UserPlansController_get: {
+    BuildSourceController_manifest: {
         parameters: {
             query?: never;
-            header?: never;
-            path?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -1603,18 +1505,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserPlansResponseDto"];
+                    "application/json": components["schemas"]["BuildManifestDto"];
                 };
             };
-            /** @description Authenticated, active, unsuspended user required */
-            403: {
+            /** @description Invalid build ID or Dockerfile */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
-            /** @description Stripe subscription verification unavailable */
-            503: {
+            /** @description Invalid or expired credential for this build */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub download or archive preparation failed */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    BuildSourceController_download: {
+        parameters: {
+            query?: never;
+            header: {
+                authorization: string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": string;
+                };
+            };
+            /** @description Invalid build ID or Dockerfile */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid or expired credential for this build */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description GitHub download or archive preparation failed */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1884,6 +1837,39 @@ export interface operations {
             };
             /** @description Plan ID or Stripe product mapping already exists */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UserPlansController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPlansResponseDto"];
+                };
+            };
+            /** @description Authenticated, active, unsuspended user required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription verification unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

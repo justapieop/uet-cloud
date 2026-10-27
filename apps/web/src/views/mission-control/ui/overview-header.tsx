@@ -7,6 +7,8 @@ interface OverviewHeaderProps {
 
 const STATUS_CONFIGS: Readonly<Record<Deployment["status"], { readonly label: string; readonly dotClass: string; readonly badgeClass: string }>> = {
   RUNNING: { label: "Running", dotClass: "bg-emerald-400", badgeClass: "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" },
+  STARTING: { label: "Starting", dotClass: "bg-blue-400 animate-pulse", badgeClass: "border-blue-400/20 bg-blue-400/10 text-blue-300" },
+  STOPPING: { label: "Stopping", dotClass: "bg-amber-400 animate-pulse", badgeClass: "border-amber-400/20 bg-amber-400/10 text-amber-300" },
   PROVISIONING: { label: "Provisioning", dotClass: "bg-blue-400 animate-pulse", badgeClass: "border-blue-400/20 bg-blue-400/10 text-blue-300" },
   PENDING: { label: "Pending", dotClass: "bg-amber-400", badgeClass: "border-amber-400/20 bg-amber-400/10 text-amber-300" },
   STOPPED: { label: "Stopped", dotClass: "bg-zinc-400", badgeClass: "border-zinc-400/20 bg-zinc-400/10 text-zinc-300" },

@@ -9,9 +9,12 @@ export interface StartDeploymentInput {
 }
 
 export class StartDeploymentCase {
+  private readonly activeOperations: Map<string, Promise<void>> = new Map<string, Promise<void>>();
+
   public constructor(
     private readonly repository: DeploymentRepository,
     private readonly lifecycleManager: ContainerLifecycleManager,
+    private readonly onStateChanged?: (userId: string) => Promise<void>,
   ) {}
 
   public async exec(input: StartDeploymentInput): Promise<Deployment> {
@@ -27,20 +30,36 @@ export class StartDeploymentCase {
     if (!await this.repository.transitionStatus(deployment.id, deployment.userId, "STOPPED", "STARTING")) {
       throw new InvalidDeploymentStatusError("Deployment changed before start");
     }
-    try {
-      await this.lifecycleManager.startApp(deployment.userId, deployment.name);
-    } catch (error: unknown) {
-      await this.repository.transitionStatus(deployment.id, deployment.userId, "STARTING", "STOPPED");
-      throw error;
-    }
 
-    const updated: Deployment = new Deployment({
+    const starting: Deployment = new Deployment({
       ...deployment.getDetails(),
-      status: "RUNNING",
+      status: "STARTING",
       updatedAt: new Date(),
     });
 
-    if (!await this.repository.transitionStatus(deployment.id, deployment.userId, "STARTING", "RUNNING")) throw new InvalidDeploymentStatusError("Deployment changed during start");
-    return updated;
+    const operation: Promise<void> = this.runLifecycle(deployment);
+    this.activeOperations.set(deployment.id, operation);
+    void operation.finally((): void => {
+      this.activeOperations.delete(deployment.id);
+    });
+
+    return starting;
+  }
+
+  private async runLifecycle(deployment: Deployment): Promise<void> {
+    try {
+      await this.lifecycleManager.startApp(deployment.userId, deployment.name);
+      await this.repository.transitionStatus(deployment.id, deployment.userId, "STARTING", "RUNNING");
+    } catch {
+      await this.repository.transitionStatus(deployment.id, deployment.userId, "STARTING", "STOPPED");
+    } finally {
+      if (this.onStateChanged) {
+        await this.onStateChanged(deployment.userId).catch((): void => {});
+      }
+    }
+  }
+
+  public async waitForActive(): Promise<void> {
+    await Promise.all(Array.from(this.activeOperations.values()));
   }
 }
