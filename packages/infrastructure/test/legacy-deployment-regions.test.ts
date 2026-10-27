@@ -1,0 +1,195 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { ConfigService } from "@nestjs/config";
+import type { AzureCredential, HttpTransport } from "../dist/external-clients.js";
+import { AzureLegacyDeploymentRegionsReader } from "../dist/azure/legacy-deployment-regions.js";
+
+const CREDENTIAL: AzureCredential = { getToken: async (scope: string | string[]): Promise<{ token: string; expiresOnTimestamp: number }> => {
+  assert.equal(scope, "https://management.azure.com/.default");
+  return { token: "private-token", expiresOnTimestamp: Date.now() + 60_000 };
+} };
+const APP: object = { resourceTypes: [
+  { resourceType: "containerApps", locations: ["Japan East", "Southeast Asia", "West US", "East US"] },
+  { resourceType: "managedEnvironments", locations: ["Japan East", "Southeast Asia", "East US"] },
+] };
+const NETWORK: object = { resourceTypes: [{ resourceType: "virtualNetworks", locations: ["Japan East", "Southeast Asia", "West US"] }] };
+
+function reader(http: HttpTransport): AzureLegacyDeploymentRegionsReader {
+  return new AzureLegacyDeploymentRegionsReader(new ConfigService({ AZURE_SUBSCRIPTION_ID: "sub" }), CREDENTIAL, http, { feature_flags: [{ id: "LegacyPerUserProvisioning", enabled: true }] });
+}
+
+test("legacy: region discovery pages subscription locations and intersects all required resource types", async (): Promise<void> => {
+  const requests: string[] = [];
+  const adapter: AzureLegacyDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0], init?: RequestInit): Promise<Response> => {
+    const url: URL = new URL(String(input));
+    requests.push(url.href);
+    assert.ok(url.pathname.startsWith("/subscriptions/sub/"));
+    assert.equal(new Headers(init?.headers).get("Authorization"), "Bearer private-token");
+    assert.equal(init?.redirect, "error");
+    assert.ok(init?.signal);
+    if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+    if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
+    if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
+    if (url.searchParams.has("page")) return Response.json({ value: [
+      { name: "Japan East", displayName: "Japan East", type: "Region" },
+      { name: "westus", displayName: "West US", type: "Region" },
+      { name: "eastus", displayName: "East US", type: "Region" },
+      { name: "global", displayName: "Global", metadata: { regionType: "Logical" } },
+    ] });
+    return Response.json({ value: [
+      { name: "southeastasia", displayName: "Southeast Asia", type: "Region" },
+      { name: "japaneast", displayName: "Japan East", type: "Region" },
+      { name: "edge", displayName: "Edge", type: "EdgeZone" },
+    ], nextLink: "https://management.azure.com/subscriptions/sub/locations?api-version=2022-12-01&page=2" });
+  });
+  assert.deepEqual(await adapter.list(), [{ name: "japaneast", displayName: "Japan East" }, { name: "southeastasia", displayName: "Southeast Asia" }]);
+  assert.equal(requests.length, 7);
+});
+
+test("legacy: region lookup returns an empty intersection but rejects unavailable or malformed Azure responses", async (): Promise<void> => {
+  let bad: unknown = { value: [] };
+  let status: number = 200;
+  const adapter: AzureLegacyDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0]): Promise<Response> => {
+    const url: URL = new URL(String(input));
+    if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+    if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
+    if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
+    return status === 200 ? Response.json(bad) : new Response("private upstream response", { status });
+  });
+  assert.deepEqual(await adapter.list(), []);
+  bad = { value: [{ name: 123 }] };
+  await assert.rejects(adapter.list(), /invalid subscription location/);
+  status = 403;
+  await assert.rejects(adapter.list(), /HTTP 403/);
+  status = 429;
+  await assert.rejects(adapter.list(), /HTTP 429/);
+  const malformed: AzureLegacyDeploymentRegionsReader = reader(async (): Promise<Response> => Response.json({}));
+  await assert.rejects(malformed.list());
+});
+
+test("legacy: location pagination cannot send ARM credentials outside the configured subscription or loop forever", async (): Promise<void> => {
+  const links: string[] = ["https://example.com/steal", "https://management.azure.com/subscriptions/other/locations?api-version=2022-12-01",
+    "https://management.azure.com/subscriptions/sub/locations?api-version=2022-12-01"];
+  for (let index: number = 0; index < links.length; index++) {
+    let locationReads: number = 0;
+    const adapter: AzureLegacyDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0]): Promise<Response> => {
+      const url: URL = new URL(String(input));
+      assert.equal(url.origin, "https://management.azure.com");
+      assert.ok(url.pathname.startsWith("/subscriptions/sub/"));
+      if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+      if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+      if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
+    if (url.pathname.endsWith("/sys.regionrestriction")) return new Response(null, { status: 404 });
+      locationReads++;
+      return Response.json({ value: [], nextLink: links[index] });
+    });
+    await assert.rejects(adapter.list(), /invalid location pagination/);
+    assert.equal(locationReads, 1);
+  }
+});
+
+
+test("legacy: system region policy filters supported locations using live normalized parameters", async (): Promise<void> => {
+  let policy: unknown = { properties: { parameters: { listOfAllowedLocations: { value: ["Japan East", "japaneast", "westus"] } } } };
+  let status: number = 200;
+  const adapter: AzureLegacyDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0]): Promise<Response> => {
+    const url: URL = new URL(String(input));
+    if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+    if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/usages")) return Response.json({ value: [{ name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 }] });
+    if (url.pathname.endsWith("/sys.regionrestriction")) {
+      assert.equal(url.searchParams.get("api-version"), "2023-04-01");
+      return status === 200 ? Response.json(policy) : new Response(null, { status });
+    }
+    return Response.json({ value: [
+      { name: "japaneast", displayName: "Japan East" },
+      { name: "southeastasia", displayName: "Southeast Asia" },
+      { name: "westus", displayName: "West US" },
+    ] });
+  });
+  assert.deepEqual(await adapter.list(), [{ name: "japaneast", displayName: "Japan East" }]);
+  policy = { properties: { parameters: { listOfAllowedLocations: { value: ["southeastasia"] } } } };
+  assert.deepEqual(await adapter.list(), [{ name: "southeastasia", displayName: "Southeast Asia" }]);
+  policy = { properties: { parameters: { listOfAllowedLocations: { value: [] } } } };
+  assert.deepEqual(await adapter.list(), []);
+  policy = { properties: { enforcementMode: "DoNotEnforce" } };
+  assert.equal((await adapter.list()).length, 2);
+  status = 404;
+  assert.equal((await adapter.list()).length, 2);
+  const failures: number[] = [401, 403, 429, 500];
+  for (let index: number = 0; index < failures.length; index++) {
+    status = failures[index];
+    await assert.rejects(adapter.list(), new RegExp(`HTTP ${status}`));
+  }
+  status = 200;
+  const malformed: unknown[] = [null, {}, { properties: {} },
+    { properties: { enforcementMode: "invalid" } },
+    { properties: { parameters: { listOfAllowedLocations: { value: [123] } } } },
+    { properties: { parameters: { listOfAllowedLocations: { value: [" "] } } } },
+    { properties: { parameters: { listOfAllowedLocations: { value: "japaneast" } } } }];
+  for (let index: number = 0; index < malformed.length; index++) {
+    policy = malformed[index];
+    await assert.rejects(adapter.list(), /invalid.*policy/);
+  }
+});
+
+
+test("legacy: managed environment quota hides full regions and rejects missing or unavailable quota data", async (): Promise<void> => {
+  let quota: unknown = { name: { value: "ManagedEnvironmentCount" }, currentValue: 1, limit: 1 };
+  let status: number = 200;
+  let nextLink: string | undefined;
+  const adapter: AzureLegacyDeploymentRegionsReader = reader(async (input: Parameters<HttpTransport>[0]): Promise<Response> => {
+    const url: URL = new URL(String(input));
+    if (url.pathname.endsWith("/Microsoft.App")) return Response.json(APP);
+    if (url.pathname.endsWith("/Microsoft.Network")) return Response.json(NETWORK);
+    if (url.pathname.endsWith("/sys.regionrestriction")) return Response.json({ properties: {
+      parameters: { listOfAllowedLocations: { value: ["japaneast", "southeastasia"] } },
+    } });
+    if (url.pathname.endsWith("/usages")) {
+      assert.equal(url.searchParams.get("api-version"), "2024-03-01");
+      assert.ok(!url.pathname.includes("westus"));
+      if (status !== 200) return new Response(null, { status });
+      if (url.pathname.includes("/southeastasia/")) return Response.json({ value: [
+        { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 },
+      ] });
+      if (nextLink) return Response.json({ value: [], nextLink });
+      if (!url.searchParams.has("page")) return Response.json({ value: [], nextLink: `${url.href}&page=2` });
+      return Response.json({ value: quota === undefined ? [] : [quota] });
+    }
+    return Response.json({ value: [
+      { name: "japaneast", displayName: "Japan East" },
+      { name: "southeastasia", displayName: "Southeast Asia" },
+      { name: "westus", displayName: "West US" },
+    ] });
+  });
+  assert.deepEqual(await adapter.list(), [{ name: "southeastasia", displayName: "Southeast Asia" }]);
+  quota = { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 1 };
+  assert.equal((await adapter.list()).length, 2);
+  quota = { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: 0 };
+  assert.equal((await adapter.list()).length, 1);
+  quota = { name: { value: "ManagedEnvironmentCount" }, currentValue: 2, limit: 1 };
+  assert.equal((await adapter.list()).length, 1);
+  const malformed: unknown[] = [undefined, null, {},
+    { name: { value: "ExpressEnvironmentCount" }, currentValue: 0, limit: 200 },
+    { name: { value: "ManagedEnvironmentCount" }, currentValue: "0", limit: 1 },
+    { name: { value: "ManagedEnvironmentCount" }, currentValue: 0, limit: -1 }];
+  for (let index: number = 0; index < malformed.length; index++) {
+    quota = malformed[index];
+    await assert.rejects(adapter.list(), /invalid managed environment quota/);
+  }
+  const failures: number[] = [403, 404, 429, 500];
+  for (let index: number = 0; index < failures.length; index++) {
+    status = failures[index];
+    await assert.rejects(adapter.list(), new RegExp(`HTTP ${status}`));
+  }
+  status = 200;
+  const links: string[] = ["https://example.com/steal",
+    "https://management.azure.com/subscriptions/other/providers/Microsoft.App/locations/japaneast/usages?api-version=2024-03-01",
+    "https://management.azure.com/subscriptions/sub/providers/Microsoft.App/locations/japaneast/usages?api-version=2024-03-01"];
+  for (let index: number = 0; index < links.length; index++) {
+    nextLink = links[index];
+    await assert.rejects(adapter.list(), /invalid quota pagination/);
+  }
+});

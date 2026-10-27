@@ -15,7 +15,7 @@ export class RegionsController {
 
   @Get()
   @Header("Cache-Control", "private, no-store")
-  @ApiOperation({ summary: "List deployment regions in the configured Azure subscription", description: "Subscription locations intersected with advertised Container Apps, managed-environment, and VNet support. Does not guarantee quota, capacity, policy eligibility, or compatibility with an existing user's shared environment. No client-supplied subscription is used." })
+  @ApiOperation({ summary: "List deployment regions for the configured provisioning mode", description: "Returns the ready shared environment region when supported by Container Apps and the subscription region policy. Environment-count quotas do not filter this result because deployments reuse the environment. Does not reserve app capacity or evaluate all policies. Explicit legacy mode instead uses the preserved subscription/provider/policy/quota catalog. No client-supplied subscription is used." })
   @ApiOkResponse({ type: DeploymentRegionResponseDto, isArray: true })
   @ApiForbiddenResponse({ description: "An active, unsuspended authenticated user is required" })
   @ApiBadRequestResponse({ description: "Query parameters, including subscription selectors, are not accepted" })

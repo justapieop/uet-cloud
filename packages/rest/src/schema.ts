@@ -480,8 +480,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List deployment regions in the configured Azure subscription
-         * @description Subscription locations intersected with advertised Container Apps, managed-environment, and VNet support. Does not guarantee quota, capacity, policy eligibility, or compatibility with an existing user's shared environment. No client-supplied subscription is used.
+         * List deployment regions for the configured provisioning mode
+         * @description Returns the ready shared environment region when supported by Container Apps and the subscription region policy. Environment-count quotas do not filter this result because deployments reuse the environment. Does not reserve app capacity or evaluate all policies. Explicit legacy mode instead uses the preserved subscription/provider/policy/quota catalog. No client-supplied subscription is used.
          */
         get: operations["RegionsController_list"];
         put?: never;
@@ -604,7 +604,7 @@ export interface components {
         };
         CreateDeploymentDto: {
             /**
-             * @description Region for the shared user environment; must match it if already created
+             * @description Must match the configured shared environment region; omitted requests use that region
              * @example japaneast
              */
             region?: string;
@@ -614,7 +614,7 @@ export interface components {
             /** @description Up to five additional TCP port mappings */
             additional_ports?: components["schemas"]["AdditionalDeploymentPortDto"][];
             /**
-             * @description Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the same environment.
+             * @description Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the shared environment, including other users' apps.
              * @example true
              */
             external?: boolean;

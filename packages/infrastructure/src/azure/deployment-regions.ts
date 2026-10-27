@@ -1,27 +1,38 @@
 import type { DeploymentRegion, DeploymentRegionsReader } from "@kumo/application";
 import type { ConfigService } from "@nestjs/config";
 import type { AzureCredential, HttpTransport } from "../external-clients.js";
+import { sharedEnvironmentReference, validateEnvironment, type ManagedEnvironmentReference } from "./shared-environment.js";
+import { legacyProvisioningEnabled } from "../feature-flags/legacy-provisioning.js";
+import type { FeatureFlagConfiguration } from "../feature-flags/provider.js";
 import { normalizeAzureRegion } from "./region.js";
 
 export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
   private readonly subscriptionPath: string;
+  private readonly shared: ManagedEnvironmentReference;
 
-  public constructor(config: ConfigService, private readonly credential: AzureCredential, private readonly http: HttpTransport) {
+  public constructor(config: ConfigService, private readonly credential: AzureCredential, private readonly http: HttpTransport,
+    private readonly featureFlags: FeatureFlagConfiguration, private readonly legacy: DeploymentRegionsReader) {
+    this.shared = sharedEnvironmentReference(config);
     this.subscriptionPath = `/subscriptions/${encodeURIComponent(config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"))}`;
   }
 
   public async list(): Promise<DeploymentRegion[]> {
+    if (legacyProvisioningEnabled(this.featureFlags)) return this.legacy.list();
     const signal: AbortSignal = AbortSignal.timeout(30_000);
     const access: Awaited<ReturnType<AzureCredential["getToken"]>> = await this.credential.getToken("https://management.azure.com/.default", { abortSignal: signal });
     if (!access?.token) throw new Error("Azure region lookup could not authenticate");
-    const [locations, app, network, allowed]: [unknown[], unknown, unknown, Set<string> | null] = await Promise.all([
+    const [locations, app, environment, allowed]: [unknown[], unknown, unknown, Set<string> | null] = await Promise.all([
       this.collection(`${this.subscriptionPath}/locations`, "2022-12-01", "location", access.token, signal),
       this.json(`${this.subscriptionPath}/providers/Microsoft.App?api-version=2021-04-01`, access.token, signal),
-      this.json(`${this.subscriptionPath}/providers/Microsoft.Network?api-version=2021-04-01`, access.token, signal),
+      this.json(`${this.shared.id}?api-version=2024-03-01`, access.token, signal),
       this.allowedLocations(access.token, signal),
     ]);
-    const supported: Set<string>[] = [this.supportedLocations(app, "containerApps"),
-      this.supportedLocations(app, "managedEnvironments"), this.supportedLocations(network, "virtualNetworks")];
+    if (!isRecord(environment) || !isRecord(environment.properties) || environment.properties.provisioningState !== "Succeeded") {
+      throw new Error("The shared managed environment is unavailable or not ready");
+    }
+    const sharedRegion: string = validateEnvironment({ id: environment.id, location: environment.location,
+      environmentMode: environment.properties.environmentMode, workloadProfiles: environment.properties.workloadProfiles }, this.shared);
+    const supported: Set<string> = this.supportedLocations(app, "containerApps");
     const regions: Map<string, DeploymentRegion> = new Map();
     for (let index: number = 0; index < locations.length; index++) {
       const location: unknown = locations[index];
@@ -33,21 +44,12 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
       const name: string = normalizeAzureRegion(location.name);
       const displayName: string = location.displayName.trim();
       if (!/^[a-z][a-z0-9]{0,63}$/.test(name) || !displayName) throw new Error("Azure returned an invalid region");
-      if ((allowed === null || allowed.has(name)) && supported.every((names: Set<string>): boolean => names.has(name) || names.has(normalizeAzureRegion(displayName)))) {
+      if (name === sharedRegion && (allowed === null || allowed.has(name)) &&
+        (supported.has(name) || supported.has(normalizeAzureRegion(displayName)))) {
         regions.set(name, { name, displayName });
       }
     }
-    const candidates: DeploymentRegion[] = [...regions.values()].sort((left: DeploymentRegion, right: DeploymentRegion): number => left.name.localeCompare(right.name));
-    const available: DeploymentRegion[] = [];
-    for (let offset: number = 0; offset < candidates.length; offset += 5) {
-      const batch: DeploymentRegion[] = candidates.slice(offset, offset + 5);
-      const hasQuota: boolean[] = await Promise.all(batch.map((region: DeploymentRegion): Promise<boolean> =>
-        this.hasEnvironmentQuota(region.name, access.token, signal)));
-      for (let index: number = 0; index < batch.length; index++) {
-        if (hasQuota[index]) available.push(batch[index]);
-      }
-    }
-    return available;
+    return [...regions.values()];
   }
 
   private async allowedLocations(token: string, signal: AbortSignal): Promise<Set<string> | null> {
@@ -76,19 +78,6 @@ export class AzureDeploymentRegionsReader implements DeploymentRegionsReader {
       throw new Error("Azure did not report supported resource locations");
     }
     return new Set(resource.locations.map((value: string): string => normalizeAzureRegion(value)));
-  }
-
-  private async hasEnvironmentQuota(region: string, token: string, signal: AbortSignal): Promise<boolean> {
-    const usages: unknown[] = await this.collection(
-      `${this.subscriptionPath}/providers/Microsoft.App/locations/${encodeURIComponent(region)}/usages`, "2024-03-01", "quota", token, signal);
-    const matches: unknown[] = usages.filter((entry: unknown): boolean =>
-      isRecord(entry) && isRecord(entry.name) && entry.name.value === "ManagedEnvironmentCount");
-    const quota: unknown = matches[0];
-    if (matches.length !== 1 || !isRecord(quota) || typeof quota.currentValue !== "number" || !Number.isSafeInteger(quota.currentValue) || quota.currentValue < 0 ||
-      typeof quota.limit !== "number" || !Number.isSafeInteger(quota.limit) || quota.limit < 0) {
-      throw new Error("Azure returned invalid managed environment quota");
-    }
-    return quota.currentValue < quota.limit;
   }
 
   private async collection(path: string, version: string, label: string, token: string, signal: AbortSignal): Promise<unknown[]> {

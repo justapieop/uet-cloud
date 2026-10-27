@@ -1,5 +1,7 @@
 # Azure deployment plan
 
+Historical draft: the accepted shared environment design supersedes this document's per-user environment and platform-network separation proposals. Follow [the current project brief](project-brief.md) and [shared networking](../user-networking.md) for implemented behavior.
+
 Draft dated 2026-10-24. This is a proposed deployment design, not an implemented deployment or a change to confirmed product requirements. No Azure account, existing cloud resources, subscription permissions, or live quotas were inspected.
 
 ## Recommendation

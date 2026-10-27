@@ -131,7 +131,7 @@ export function CreateDeploymentForm({ initialRepositories, initialRegions, inst
             </Switch.Content>
           </Switch>
           <input type="hidden" name="external" value={String(containerExternal)} />
-          <p id="container-visibility-help" className="mt-2 text-xs leading-5 text-muted-text">{containerExternal ? "The main HTTPS endpoint is public. Choose internal or external access separately for each additional TCP port." : "The main HTTPS endpoint and all additional TCP ports are accessible only to apps in the same environment."}</p>
+          <p id="container-visibility-help" className="mt-2 text-xs leading-5 text-muted-text">{containerExternal ? "The main HTTPS endpoint is public. Choose internal or external access separately for each additional TCP port." : "The main HTTPS endpoint and all additional TCP ports are accessible to apps in the same environment. Shared environments can include other users' apps."}</p>
           <label className={`${LABEL_CLASS} mt-6`}>Main application port<input className={INPUT_CLASS} name="target_port" type="number" required min="1" max="65535" step="1" defaultValue="3000" /><span className="mt-2 block font-normal leading-5 text-muted-text">The port your application listens on inside its container, served through HTTPS ingress.</span></label>
           <AdditionalPorts inputClass={INPUT_CLASS} labelClass={LABEL_CLASS} disabled={pending} containerExternal={containerExternal} />
         </section>

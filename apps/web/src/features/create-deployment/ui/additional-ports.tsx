@@ -53,7 +53,7 @@ export function AdditionalPorts({ inputClass, labelClass, disabled, containerExt
         <Button type="button" variant="secondary" size="sm" isDisabled={disabled || rows.length >= 5} onPress={addPort}>Add TCP port</Button>
         <span className="text-xs text-muted-text" role="status">{rows.length} of 5 ports added</span>
       </div>
-      <p id="external-ports-help" className="mt-3 text-xs leading-5 text-muted-text">External TCP ports require a public container and VNet integration, which is configured automatically for new environments. Existing environments without VNet integration require migration. External ports cannot expose 80 or 443. Each target and exposed port must be unique; targets must also differ from the main application port.</p>
+      <p id="external-ports-help" className="mt-3 text-xs leading-5 text-muted-text">External TCP ports require a public container and an existing VNet-connected environment. Kumo does not change the shared network. Exposed external ports must be available across all apps in the environment. External ports cannot expose 80 or 443. Each target and exposed port must be unique; targets must also differ from the main application port.</p>
     </div>
   );
 }

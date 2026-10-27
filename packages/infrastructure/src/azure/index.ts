@@ -11,3 +11,5 @@ export * from "./monitoring.js";
 export * from "./deployment-configuration.js";
 export * from "./container-lifecycle.js";
 export * from "./deployment-regions.js";
+export { AzureLegacyEnvironmentProvisioner, type LegacyEnvironmentClients } from "./legacy-environment.js";
+export * from "./legacy-deployment-regions.js";

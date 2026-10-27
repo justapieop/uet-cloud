@@ -8,7 +8,7 @@ Nest module factories construct external clients and pass them to infrastructure
 | --- | --- | --- |
 | GitHubModule | KeyClient | KmsProvider, used by GitHubProvider |
 | BuildModule | Injected credential and HTTP transport | AzurePipelinesProvider |
-| DeploymentModule | ResourceManagementClient, NetworkManagementClient, and ContainerAppsAPIClient | AzureProvider (provisioning), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
+| DeploymentModule | ResourceManagementClient and ContainerAppsAPIClient | AzureProvider (provisioning), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
 | MonitoringModule | MonitorClient | AzureMonitorMetricsReader |
 | AcrModule | ContainerRegistryTasksManagementClient | AcrProvider |
 
@@ -23,3 +23,7 @@ App Configuration loading remains a bootstrap configuration factory, since it ru
 Start/stop use cases receive the dedicated `AzureContainerLifecycleManager`, whose client surface contains only `start` and `stop`. It does not depend on build use cases, resource-group creation, or managed-environment provisioning. The existing timeout, polling-to-completion, and safe error mapping remain in effect. Provisioning, lifecycle operations, configuration reads, and metrics reads share workload resource-group isolation through `azure/workload-scope.ts`; read adapters retain their own error contracts and configuration reads still verify the deployment tag on the returned app.
 
 The default injected HTTP transport now applies dependency resilience policies. Azure SDK factory registrations attach an equivalent pipeline policy and disable SDK retries to avoid multiplying attempts. See [Resilience and idempotency](reliability.md).
+
+AzureProvider receives only managed-environment read operations in its client surface. It joins the configured shared environment and never constructs network clients or writes environment/network resources. Shared target parsing and validation live in `azure/shared-environment.ts`; the region reader uses the same validation rules.
+
+The preserved AzureLegacyEnvironmentProvisioner receives writable managed-environment and network clients only when the current LegacyPerUserProvisioning feature flag is enabled. Shared mode constructs neither that adapter nor its NetworkManagementClient; no infrastructure constructor creates SDK fallbacks. RegionsModule injects the live feature configuration into the region reader, which chooses the legacy catalog per operation after refresh. The writable legacy client factory is injected and invoked lazily; infrastructure constructors do not build SDK clients.

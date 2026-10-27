@@ -34,7 +34,7 @@ export class AdditionalDeploymentPortResponseDto {
 }
 
 export class CreateDeploymentDto {
-  @ApiPropertyOptional({ example: "japaneast", description: "Region for the shared user environment; must match it if already created" })
+  @ApiPropertyOptional({ example: "japaneast", description: "Must match the configured shared environment region; omitted requests use that region" })
   @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
   @IsString()
   @Matches(/^[a-z][a-z0-9]{0,63}$/)
@@ -61,7 +61,7 @@ export class CreateDeploymentDto {
   @IsArray() @ArrayMaxSize(5) @ValidateNested({ each: true }) @Type(() => AdditionalDeploymentPortDto)
   public additional_ports?: AdditionalDeploymentPortDto[];
 
-  @ApiPropertyOptional({ example: true, description: "Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the same environment." })
+  @ApiPropertyOptional({ example: true, description: "Whether container ingress is accessible outside its environment. Defaults to true; false limits access to apps in the shared environment, including other users' apps." })
   @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
   @IsBoolean()
   public external?: boolean;

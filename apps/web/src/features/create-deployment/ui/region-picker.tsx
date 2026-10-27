@@ -35,10 +35,10 @@ export function RegionPicker({ initialRegions, inputClass, labelClass, disabled 
     <div>
       <label className={labelClass} htmlFor="deployment-region">Region <span className="font-normal text-muted-dark">(optional)</span></label>
       <select id="deployment-region" name="region" className={inputClass} defaultValue="" disabled={disabled || loading} aria-describedby="deployment-region-help deployment-region-status">
-        <option value="">Use workspace region</option>
+        <option value="">Use configured environment region</option>
         {result.data?.map((region: DeploymentRegion): JSX.Element => <option key={region.name} value={region.name}>{region.display_name}</option>)}
       </select>
-      <p id="deployment-region-help" className="mt-2 text-xs leading-5 text-muted-text">Must match your existing workspace region. For a new workspace, choosing a region overrides the default Southeast Asia region. Azure policies, quotas, and capacity still apply.</p>
+      <p id="deployment-region-help" className="mt-2 text-xs leading-5 text-muted-text">Available regions follow the platform deployment configuration. Azure policies, quotas, and available capacity still apply.</p>
       <div id="deployment-region-status" className="mt-2 text-xs leading-5" aria-live="polite" aria-busy={loading}>
         {result.error ? <p role="alert" className="text-red-200">{result.error}</p> : result.data?.length === 0 && <p className="text-muted-text">No deployment regions were returned.</p>}
         {(result.error || result.data?.length === 0) && <Button type="button" variant="secondary" size="sm" className="mt-2" isDisabled={disabled || loading} isPending={loading} onPress={retry}>{loading ? "Loading regions…" : "Retry loading regions"}</Button>}

@@ -1,7 +1,7 @@
 import { ResilienceService } from "@nestjs/resilience";
 import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
-import { ResourceManagementClient } from "@azure/arm-resources";
 import { NetworkManagementClient } from "@azure/arm-network";
+import { ResourceManagementClient } from "@azure/arm-resources";
 import { Module } from "@nestjs/common";
 import {
   CreateDeploymentCase,
@@ -17,19 +17,20 @@ import {
   UpdateDeploymentCase,
   type UnitOfWork,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppConfigModule } from "./AppConfig.module.js";
 import { ExternalClientsModule } from "./ExternalClients.module.js";
 import { DatabaseModule } from "./Database.module.js";
 import { BuildModule } from "./Build.module.js";
+import { FeatureModule } from "./Feature.module.js";
 import { StripeModule } from "./Stripe.module.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
 
 @Module({
-  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule],
+  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule, FeatureModule],
   controllers: [
     BuildSourceController,
     DeploymentsController,
@@ -41,12 +42,6 @@ import { RedeploymentsController } from "../controllers/Redeployments.controller
       provide: RedeployDeploymentCase,
       useFactory: (uow: UnitOfWork, subscriptions: StripeProvider): RedeployDeploymentCase => new RedeployDeploymentCase(uow, subscriptions),
       inject: [UNIT_OF_WORK, StripeProvider],
-    },
-    {
-      provide: NetworkManagementClient,
-      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): NetworkManagementClient =>
-        new NetworkManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }] }),
-      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
       provide: ResourceManagementClient,
@@ -95,16 +90,22 @@ import { RedeploymentsController } from "../controllers/Redeployments.controller
       provide: AzureProvider,
       useFactory: (
         config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase,
-        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, network: NetworkManagementClient,
+        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService,
       ): AzureProvider => {
         const clients: AzureProviderClients = {
           resources: resources.resources, resourceGroups: resources.resourceGroups,
           managedEnvironments: apps.managedEnvironments, containerApps: apps.containerApps,
-          virtualNetworks: network.virtualNetworks,
         };
-        return new AzureProvider(config, triggerBuild, getBuild, clients);
+        const createLegacy: () => AzureLegacyEnvironmentProvisioner = (): AzureLegacyEnvironmentProvisioner => {
+          const network: NetworkManagementClient = new NetworkManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), {
+            retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }],
+          });
+          return new AzureLegacyEnvironmentProvisioner(config, { resourceGroups: resources.resourceGroups,
+            managedEnvironments: apps.managedEnvironments, virtualNetworks: network.virtualNetworks }, flags);
+        };
+        return new AzureProvider(config, triggerBuild, getBuild, clients, createLegacy, flags);
       },
-      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, NetworkManagementClient],
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService],
     },
     {
       provide: CreateDeploymentCase,

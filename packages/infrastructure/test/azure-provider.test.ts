@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import type { ContainerApp, ManagedEnvironment } from "@azure/arm-appcontainers";
-import type { VirtualNetwork } from "@azure/arm-network";
 import type { GetBuildCase, TriggerBuildCase, TriggerBuildInput, TriggerBuildResult } from "@kumo/application";
 import type { BuildDetails, BuildStatus } from "@kumo/domain";
+import type { FeatureFlagConfiguration } from "../dist/feature-flags/provider.js";
+import type { AzureLegacyEnvironmentProvisioner } from "../dist/azure/legacy-environment.js";
 import { AzureProvider, type AzureDeploymentCreateInput, type AzureProviderClients } from "../dist/azure/provider.js";
 
-const ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/managedEnvironments/user-aca-env-123";
+const ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.App/managedEnvironments/shared-env";
+const LEGACY_ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/managedEnvironments/user-aca-env-123";
 const PULL_IDENTITY: string = "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.ManagedIdentity/userAssignedIdentities/acr-pull";
 const VNET_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.Network/virtualNetworks/user-vnet-123";
 const SUBNET_ID: string = `${VNET_ID}/subnets/aca-infrastructure`;
@@ -16,6 +18,11 @@ const INPUT: AzureDeploymentCreateInput = { name: "my-app", userId: "123", repo:
 
 interface FixtureOptions {
   existingResources?: boolean;
+  enableLegacy?: boolean;
+  featureFlags?: FeatureFlagConfiguration;
+  legacyProvider?: Pick<AzureLegacyEnvironmentProvisioner, "getAcaEnvironment">;
+  userId?: string;
+  sharedId?: string;
   existingApp?: boolean;
   statuses?: readonly BuildStatus[];
   environmentStates?: readonly string[];
@@ -26,11 +33,12 @@ interface FixtureOptions {
   anonymousPullEnabled?: boolean;
   pullIdentityName?: string;
   onBuildRead?: () => void;
-  existingNetwork?: boolean;
-  network?: VirtualNetwork;
-  networkError?: unknown;
-  networkCreateError?: unknown;
-  networkStates?: readonly string[];
+  legacy?: boolean;
+  environmentMissing?: boolean;
+  responseEnvironmentId?: string;
+  environmentMode?: "Express";
+  noConsumptionProfile?: boolean;
+  consumptionProfileName?: string;
   region?: string;
   environmentVnet?: boolean;
 }
@@ -42,47 +50,20 @@ interface Fixture {
 }
 
 function fixture(options: FixtureOptions = {}): Fixture {
+  const userId: string = options.userId ?? "123";
+  const configuredId: string = options.sharedId ?? ENVIRONMENT_ID;
   const events: string[] = [];
   const apps: Map<string, ContainerApp> = new Map();
   let rgExists: boolean = options.existingResources ?? false;
-  let environmentExists: boolean = options.existingResources ?? false;
   let environmentReads: number = 0;
   let buildReads: number = 0;
-  let networkExists: boolean = options.existingNetwork ?? false;
-  let networkReads: number = 0;
-  const environment: ManagedEnvironment = { id: ENVIRONMENT_ID, location: options.region ?? "southeastasia", provisioningState: "Succeeded",
+  const environmentId: string = options.legacy ? LEGACY_ENVIRONMENT_ID : configuredId;
+  const environment: ManagedEnvironment = { id: options.responseEnvironmentId ?? environmentId,
+    location: options.region ?? "southeastasia", provisioningState: "Succeeded", environmentMode: options.environmentMode,
+    workloadProfiles: options.noConsumptionProfile ? [] : [{ name: options.consumptionProfileName ?? "Consumption", workloadProfileType: "Consumption" }],
     ...(options.environmentVnet ? { vnetConfiguration: { infrastructureSubnetId: SUBNET_ID } } : {}) };
-  const network: VirtualNetwork = options.network ?? { id: VNET_ID, location: environment.location, provisioningState: "Succeeded",
-    subnets: [{ id: SUBNET_ID, name: "aca-infrastructure", provisioningState: "Succeeded", addressPrefix: "10.0.0.0/24",
-      delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] }] };
-  if (options.existingApp) apps.set(INPUT.name, { location: environment.location, environmentId: ENVIRONMENT_ID });
+  if (options.existingApp) apps.set(INPUT.name, { location: environment.location, environmentId });
   const clients: AzureProviderClients = {
-    virtualNetworks: {
-      get: async (rg: string, name: string): Promise<VirtualNetwork> => {
-        assert.equal(rg, "user-rg-123");
-        assert.equal(name, "user-vnet-123");
-        events.push("vnet-get");
-        if (options.networkError) throw options.networkError;
-        if (!networkExists) throw { statusCode: 404 };
-        const states: readonly string[] = options.networkStates ?? [network.provisioningState ?? "Succeeded"];
-        return { ...network, provisioningState: states[Math.min(networkReads++, states.length - 1)]! };
-      },
-      createOrUpdate: (rg: string, name: string, envelope: VirtualNetwork): ReturnType<AzureProviderClients["virtualNetworks"]["createOrUpdate"]> => {
-        assert.equal(rg, "user-rg-123");
-        assert.equal(name, "user-vnet-123");
-        assert.equal(envelope.location, (options.region ?? "southeastasia").replace(/\s/g, "").toLowerCase());
-        assert.deepEqual(envelope.addressSpace, { addressPrefixes: ["10.0.0.0/16"] });
-        assert.deepEqual(envelope.subnets, [{ name: "aca-infrastructure", addressPrefix: "10.0.0.0/24",
-          delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] }]);
-        events.push("vnet-create");
-        return { pollUntilDone: async (): Promise<VirtualNetwork> => {
-          if (options.networkCreateError) throw options.networkCreateError;
-          events.push("vnet-ready");
-          networkExists = true;
-          return network;
-        } } as ReturnType<AzureProviderClients["virtualNetworks"]["createOrUpdate"]>;
-      },
-    },
     resources: {
       getById: async () => {
         events.push("registry-check");
@@ -91,17 +72,18 @@ function fixture(options: FixtureOptions = {}): Fixture {
     },
     resourceGroups: {
       checkExistence: async (name: string): Promise<Awaited<ReturnType<AzureProviderClients["resourceGroups"]["checkExistence"]>>> => {
-        assert.equal(name, "user-rg-123");
+        assert.equal(name, `user-rg-${userId}`);
         events.push("rg-check");
         return { body: rgExists };
       },
       get: async (name: string) => {
-        assert.equal(name, "user-rg-123");
+        assert.equal(name, `user-rg-${userId}`);
         events.push("rg-get");
         return { location: environment.location };
       },
-      createOrUpdate: async (name: string) => {
-        assert.equal(name, "user-rg-123");
+      createOrUpdate: async (name: string, envelope: { location: string }) => {
+        assert.equal(name, `user-rg-${userId}`);
+        assert.equal(envelope.location, environment.location!.replace(/\s+/g, "").toLowerCase());
         events.push("rg-create");
         rgExists = true;
         return { location: environment.location };
@@ -109,36 +91,19 @@ function fixture(options: FixtureOptions = {}): Fixture {
     },
     managedEnvironments: {
       get: async (rg: string, name: string): Promise<ManagedEnvironment> => {
-        assert.equal(rg, "user-rg-123");
-        assert.equal(name, "user-aca-env-123");
+        assert.equal(rg, environmentId.split("/")[4]);
+        assert.equal(name, environmentId.split("/")[8]);
         events.push("env-get");
         if (options.environmentError) throw options.environmentError;
-        if (!environmentExists) throw { statusCode: 404 };
+        if (options.environmentMissing) throw { statusCode: 404 };
         const states: readonly string[] = options.environmentStates ?? ["Succeeded"];
         const provisioningState: string = states[Math.min(environmentReads++, states.length - 1)]!;
         return { ...environment, provisioningState };
       },
-      createOrUpdate: (rg: string, name: string, envelope: ManagedEnvironment): ReturnType<AzureProviderClients["managedEnvironments"]["createOrUpdate"]> => {
-        assert.equal(rg, "user-rg-123");
-        assert.equal(name, "user-aca-env-123");
-        assert.equal(envelope.environmentMode, "WorkloadProfiles");
-        assert.deepEqual(envelope.workloadProfiles, [{ name: "Consumption", workloadProfileType: "Consumption" }]);
-        assert.deepEqual(envelope.vnetConfiguration, { infrastructureSubnetId: SUBNET_ID, internal: false });
-        assert.ok(events.includes("vnet-ready") || options.existingNetwork);
-        events.push("env-create");
-        return {
-          pollUntilDone: async (): Promise<ManagedEnvironment> => {
-            events.push("env-ready");
-            environmentExists = true;
-            environment.vnetConfiguration = envelope.vnetConfiguration;
-            return environment;
-          },
-        } as ReturnType<AzureProviderClients["managedEnvironments"]["createOrUpdate"]>;
-      },
     },
     containerApps: {
       update: (rg: string, name: string, envelope: ContainerApp): ReturnType<AzureProviderClients["containerApps"]["update"]> => {
-        assert.equal(rg, "user-rg-123");
+        assert.equal(rg, `user-rg-${userId}`);
         assert.equal(envelope.configuration, undefined);
         assert.equal(envelope.identity, undefined);
         events.push("app-update");
@@ -147,7 +112,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
         return { pollUntilDone: async (): Promise<ContainerApp> => result } as ReturnType<AzureProviderClients["containerApps"]["update"]>;
       },
       get: async (rg: string, name: string): Promise<ContainerApp> => {
-        assert.equal(rg, "user-rg-123");
+        assert.equal(rg, `user-rg-${userId}`);
         events.push("app-get");
         if (options.appError) throw options.appError;
         const app: ContainerApp | undefined = apps.get(name);
@@ -155,7 +120,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
         return app;
       },
       createOrUpdate: (rg: string, name: string, envelope: ContainerApp): ReturnType<AzureProviderClients["containerApps"]["createOrUpdate"]> => {
-        assert.equal(rg, "user-rg-123");
+        assert.equal(rg, `user-rg-${userId}`);
         events.push("app-create");
         apps.set(name, envelope);
         return {
@@ -170,7 +135,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
   const trigger: Pick<TriggerBuildCase, "exec"> = {
     exec: async (input: TriggerBuildInput): Promise<TriggerBuildResult> => {
       events.push("build-trigger");
-      assert.equal(input.userId, "123");
+      assert.equal(input.userId, userId);
       assert.equal(input.repo, INPUT.repo);
       assert.equal("tag" in input, false);
       return { buildId: "build-id", image: "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", status: "PENDING", commitSha: null, runId: null, runUrl: null };
@@ -179,7 +144,7 @@ function fixture(options: FixtureOptions = {}): Fixture {
   const getBuild: Pick<GetBuildCase, "exec"> = {
     exec: async (id: string, userId: string): Promise<BuildDetails> => {
       assert.equal(id, "build-id");
-      assert.equal(userId, "123");
+      assert.equal(userId, options.userId ?? "123");
       const statuses: readonly BuildStatus[] = options.statuses ?? ["PENDING", "PREPARING", "RUNNING", "SUCCEEDED"];
       const status: BuildStatus = statuses[Math.min(buildReads++, statuses.length - 1)]!;
       events.push(`build-${status}`);
@@ -193,22 +158,27 @@ function fixture(options: FixtureOptions = {}): Fixture {
     },
   };
   const config: ConfigService = new ConfigService({
-    AZURE_PLATFORM_RESOURCE_GROUP: options.platformResourceGroup ?? "platform",
+    AZURE_PLATFORM_RESOURCE_GROUP: options.platformResourceGroup ?? configuredId.split("/")[4],
     AZURE_SUBSCRIPTION_ID: "sub",
+    AZURE_SHARED_ENVIRONMENT_NAME: configuredId.split("/")[8],
     AZURE_CONTAINER_REGISTRY_SERVER: "registry.azurecr.io",
     AZURE_CONTAINER_REGISTRY_RESOURCE_ID: "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.ContainerRegistry/registries/registry",
     AZURE_CONTAINER_REGISTRY_PULL_IDENTITY_NAME: options.pullIdentityName ?? "acr-pull",
     AZURE_DEPLOYMENT_TIMEOUT_MS: String(options.timeoutMs ?? 1000),
     AZURE_DEPLOYMENT_POLL_INTERVAL_MS: "1",
   });
-  return { provider: new AzureProvider(config, trigger, getBuild, clients), events, apps };
+  const flags: FeatureFlagConfiguration = options.featureFlags ?? { feature_flags: [{ id: "LegacyPerUserProvisioning", enabled: options.enableLegacy ?? false }] };
+  return { provider: new AzureProvider(config, trigger, getBuild, clients, (): Pick<AzureLegacyEnvironmentProvisioner, "getAcaEnvironment"> => {
+    if (!options.legacyProvider) throw new Error("Legacy provisioning provider is not configured");
+    return options.legacyProvider;
+  }, flags), events, apps };
 }
 
-test("missing resources are created in order and the app waits for build success", async (): Promise<void> => {
+test("new apps reuse the shared environment and build before app creation", async (): Promise<void> => {
   const setup: Fixture = fixture();
   const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT, envVars: { NODE_ENV: "production" } });
   assert.deepEqual(setup.events, [
-    "rg-check", "rg-create", "env-get", "vnet-get", "vnet-create", "vnet-ready", "env-create", "env-ready", "app-get", "registry-check", "build-trigger",
+    "app-get", "env-get", "rg-check", "rg-create", "registry-check", "build-trigger",
     "build-PENDING", "build-PREPARING", "build-RUNNING", "build-SUCCEEDED", "app-create", "app-ready",
   ]);
   assert.equal(app.environmentId, ENVIRONMENT_ID);
@@ -225,15 +195,15 @@ test("multiple apps reuse their user's resource group and managed environment", 
   await setup.provider.createDeployment(INPUT);
   await setup.provider.createDeployment({ ...INPUT, name: "second-app" });
   assert.equal(setup.events.filter((event: string): boolean => event === "rg-create").length, 1);
-  assert.equal(setup.events.filter((event: string): boolean => event === "env-create").length, 1);
-  assert.equal(setup.events.filter((event: string): boolean => event === "vnet-create").length, 1);
+  assert.equal(setup.events.filter((event: string): boolean => event === "env-create").length, 0);
+  assert.equal(setup.events.filter((event: string): boolean => event === "vnet-create").length, 0);
   assert.equal(setup.apps.get("my-app")?.environmentId, setup.apps.get("second-app")?.environmentId);
 });
 
 test("an existing app is reused without rebuilding or updating the environment", async (): Promise<void> => {
   const setup: Fixture = fixture({ existingResources: true, existingApp: true });
   await setup.provider.createDeployment(INPUT);
-  assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get", "app-get"]);
+  assert.deepEqual(setup.events, ["app-get", "env-get"]);
 });
 
 test("redeployment rebuilds then updates only its owned app image while preserving live settings", async (): Promise<void> => {
@@ -270,57 +240,8 @@ test("a failed redeployment build never updates the existing app and foreign res
   assert.deepEqual(foreign.events, []);
 });
 
-test("a ready existing user VNet is reused before creating the managed environment", async (): Promise<void> => {
-  const setup: Fixture = fixture({ existingNetwork: true });
-  await setup.provider.createDeployment(INPUT);
-  assert.equal(setup.events.includes("vnet-create"), false);
-  assert.ok(setup.events.indexOf("vnet-get") < setup.events.indexOf("env-create"));
-});
-
-test("VNet provisioning is awaited before environment creation", async (): Promise<void> => {
-  const setup: Fixture = fixture({ existingNetwork: true, networkStates: ["Updating", "Succeeded"] });
-  await setup.provider.createDeployment(INPUT);
-  assert.deepEqual(setup.events.slice(0, 6), ["rg-check", "rg-create", "env-get", "vnet-get", "vnet-get", "env-create"]);
-});
-
-test("VNet read and creation failures stop before environment creation and building", async (): Promise<void> => {
-  const failure: Error & { statusCode: number } = Object.assign(new Error("Forbidden"), { statusCode: 403 });
-  const denied: Fixture = fixture({ networkError: failure });
-  await assert.rejects(denied.provider.createDeployment(INPUT), (error: unknown): boolean => error instanceof Error && error.cause === failure);
-  assert.equal(denied.events.includes("vnet-create"), false);
-  assert.equal(denied.events.includes("env-create"), false);
-  const failed: Fixture = fixture({ networkCreateError: failure });
-  await assert.rejects(failed.provider.createDeployment(INPUT), /Virtual network creation failed/);
-  assert.equal(failed.events.includes("env-create"), false);
-  assert.equal(failed.events.includes("build-trigger"), false);
-});
-
-test("incompatible existing VNets fail without rewriting resources or building", async (): Promise<void> => {
-  const valid: VirtualNetwork = { id: VNET_ID, location: "southeastasia", provisioningState: "Succeeded", subnets: [
-    { id: SUBNET_ID, name: "aca-infrastructure", provisioningState: "Succeeded", addressPrefix: "10.0.0.0/24",
-      delegations: [{ name: "container-apps", serviceName: "Microsoft.App/environments" }] },
-  ] };
-  const cases: { network: VirtualNetwork; error: RegExp }[] = [
-    { network: { ...valid, id: VNET_ID.replace("user-rg-123", "platform") }, error: /identity or region/ },
-    { network: { ...valid, location: "eastus" }, error: /identity or region/ },
-    { network: { ...valid, provisioningState: "Failed" }, error: /not ready: Failed/ },
-    { network: { ...valid, subnets: [] }, error: /dedicated aca-infrastructure subnet/ },
-    { network: { ...valid, subnets: [{ ...valid.subnets![0]!, delegations: [] }] }, error: /delegated/ },
-    { network: { ...valid, subnets: [{ ...valid.subnets![0]!, addressPrefix: "10.0.0.0/28" }] }, error: /27 or larger/ },
-    { network: { ...valid, subnets: [{ ...valid.subnets![0]!, id: `${VNET_ID}/subnets/foreign` }] }, error: /dedicated/ },
-  ];
-  for (let index: number = 0; index < cases.length; index++) {
-    const entry: typeof cases[number] = cases[index]!;
-    const setup: Fixture = fixture({ existingNetwork: true, network: entry.network });
-    await assert.rejects(setup.provider.createDeployment(INPUT), entry.error);
-    assert.equal(setup.events.includes("vnet-create"), false);
-    assert.equal(setup.events.includes("env-create"), false);
-    assert.equal(setup.events.includes("build-trigger"), false);
-  }
-});
-
-test("new VNet-connected environments support external additional TCP ports", async (): Promise<void> => {
-  const setup: Fixture = fixture();
+test("VNet-connected shared environments support external additional TCP ports", async (): Promise<void> => {
+  const setup: Fixture = fixture({ environmentVnet: true });
   const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT,
     additionalPorts: [{ targetPort: 9090, exposedPort: 9091, external: true }],
   });
@@ -340,10 +261,10 @@ test("internal containers configure internal ingress and reject external additio
 test("legacy environments without VNet are preserved and external ports fail before building", async (): Promise<void> => {
   const setup: Fixture = fixture({ existingResources: true });
   await assert.rejects(setup.provider.createDeployment({ ...INPUT, additionalPorts: [{ targetPort: 9090, external: true }] }), /virtual network/);
-  assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get"]);
+  assert.deepEqual(setup.events, ["app-get", "env-get"]);
 });
 
-test("network and environment creation use the requested normalized region", async (): Promise<void> => {
+test("apps use the shared environment normalized region", async (): Promise<void> => {
   const setup: Fixture = fixture({ region: "Japan East" });
   const app: ContainerApp = await setup.provider.createDeployment({ ...INPUT, region: "japaneast" });
   assert.equal(app.location, "japaneast");
@@ -362,7 +283,7 @@ test("permission errors propagate without creating or rebuilding resources", asy
   const failure: Error & { statusCode: number } = Object.assign(new Error("Forbidden"), { statusCode: 403 });
   const setup: Fixture = fixture({ existingResources: true, environmentError: failure });
   await assert.rejects(setup.provider.createDeployment(INPUT), (error: unknown): boolean => error instanceof Error && error.cause === failure);
-  assert.deepEqual(setup.events, ["rg-check", "rg-get", "env-get"]);
+  assert.deepEqual(setup.events, ["app-get", "env-get"]);
   const deniedApp: Fixture = fixture({ existingResources: true, appError: failure });
   await assert.rejects(deniedApp.provider.createDeployment(INPUT), (error: unknown): boolean => error instanceof Error && error.cause === failure);
   assert.equal(deniedApp.events.includes("build-trigger"), false);
@@ -371,7 +292,7 @@ test("permission errors propagate without creating or rebuilding resources", asy
 test("an environment already provisioning is awaited without another create operation", async (): Promise<void> => {
   const setup: Fixture = fixture({ existingResources: true, environmentStates: ["Waiting", "Succeeded"], statuses: ["SUCCEEDED"] });
   await setup.provider.createDeployment(INPUT);
-  assert.deepEqual(setup.events.slice(0, 5), ["rg-check", "rg-get", "env-get", "env-get", "app-get"]);
+  assert.deepEqual(setup.events.slice(0, 3), ["app-get", "env-get", "env-get"]);
   assert.equal(setup.events.includes("env-create"), false);
 });
 
@@ -415,4 +336,93 @@ test("the pull identity setting accepts a name rather than a resource path", asy
   const setup: Fixture = fixture({ pullIdentityName: PULL_IDENTITY });
   await assert.rejects(setup.provider.createDeployment(INPUT), /pull identity name/);
   assert.deepEqual(setup.events, []);
+});
+
+
+test("different users use the configured shared ID and live region while keeping their own app groups", async (): Promise<void> => {
+  const sharedId: string = "/subscriptions/sub/resourceGroups/custom-infra/providers/Microsoft.App/managedEnvironments/custom-pool";
+  const first: Fixture = fixture({ userId: "123", sharedId, region: "West Europe", consumptionProfileName: "LiveProfile" });
+  const second: Fixture = fixture({ userId: "456", sharedId, region: "West Europe", consumptionProfileName: "LiveProfile" });
+  const apps: ContainerApp[] = await Promise.all([
+    first.provider.createDeployment(INPUT), second.provider.createDeployment({ ...INPUT, userId: "456", name: "other-app" }),
+  ]);
+  assert.ok(apps.every((app: ContainerApp): boolean => app.environmentId === sharedId && app.location === "westeurope" && app.workloadProfileName === "LiveProfile"));
+});
+
+test("missing, unhealthy or mismatched shared environments stop before creating groups or starting builds", async (): Promise<void> => {
+  const options: FixtureOptions[] = [
+    { environmentMissing: true }, { environmentMode: "Express" }, { noConsumptionProfile: true },
+    { responseEnvironmentId: ENVIRONMENT_ID.replace("/platform/", "/foreign/") },
+    { responseEnvironmentId: ENVIRONMENT_ID.replace("/sub/", "/other/") },
+  ];
+  for (let index: number = 0; index < options.length; index++) {
+    const setup: Fixture = fixture(options[index]);
+    await assert.rejects(setup.provider.createDeployment(INPUT), /environment|Environment|Consumption/);
+    assert.equal(setup.events.includes("rg-create"), false);
+    assert.equal(setup.events.includes("build-trigger"), false);
+  }
+  const mismatch: Fixture = fixture({ region: "Japan East" });
+  await assert.rejects(mismatch.provider.createDeployment({ ...INPUT, region: "westeurope" }), /requested region/);
+  assert.equal(mismatch.events.includes("rg-create"), false);
+});
+
+test("legacy app redeployment retains its existing environment without moving it to the shared pool", async (): Promise<void> => {
+  const setup: Fixture = fixture({ legacy: true, existingResources: true, existingApp: true });
+  const resourceId: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
+  setup.apps.set(INPUT.name, { id: resourceId, location: "southeastasia", environmentId: LEGACY_ENVIRONMENT_ID,
+    tags: { "kumo-deployment-id": "deployment" }, template: { containers: [{ name: "my-app", image: "old" }] } });
+  const result: ContainerApp = await setup.provider.createDeployment({ ...INPUT, deploymentId: "deployment", resourceId });
+  assert.equal(result.environmentId, LEGACY_ENVIRONMENT_ID);
+  assert.deepEqual(setup.events.slice(0, 2), ["app-get", "env-get"]);
+  assert.equal(setup.events.includes("rg-create"), false);
+});
+
+test("an existing app cannot select another user's environment or another platform environment", async (): Promise<void> => {
+  const ids: string[] = [LEGACY_ENVIRONMENT_ID.replace(/123/g, "456"), ENVIRONMENT_ID.replace("shared-env", "another-env")];
+  for (let index: number = 0; index < ids.length; index++) {
+    const setup: Fixture = fixture({ existingApp: true });
+    setup.apps.set(INPUT.name, { location: "southeastasia", environmentId: ids[index] });
+    await assert.rejects(setup.provider.createDeployment(INPUT), /allowed managed environment/);
+    assert.deepEqual(setup.events, ["app-get"]);
+  }
+});
+
+
+test("legacy resource creation is opt-in and is never a shared-environment failure fallback", async (): Promise<void> => {
+  let calls: number = 0;
+  const legacyProvider: Pick<AzureLegacyEnvironmentProvisioner, "getAcaEnvironment"> = { getAcaEnvironment: async (): Promise<ManagedEnvironment> => {
+    calls++;
+    return { id: LEGACY_ENVIRONMENT_ID, location: "southeastasia", provisioningState: "Succeeded",
+      workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }] };
+  } };
+  const disabled: Fixture = fixture({ legacyProvider });
+  assert.equal((await disabled.provider.createDeployment(INPUT)).environmentId, ENVIRONMENT_ID);
+  assert.equal(calls, 0);
+  const unavailable: Fixture = fixture({ legacyProvider, environmentMissing: true });
+  await assert.rejects(unavailable.provider.createDeployment(INPUT));
+  assert.equal(calls, 0);
+  const enabled: Fixture = fixture({ legacyProvider, enableLegacy: true });
+  assert.equal((await enabled.provider.createDeployment(INPUT)).environmentId, LEGACY_ENVIRONMENT_ID);
+  assert.equal(calls, 1);
+  const incomplete: Fixture = fixture({ enableLegacy: true });
+  await assert.rejects(incomplete.provider.createDeployment(INPUT), /Legacy provisioning provider is not configured/);
+});
+
+
+test("provisioning follows refreshed flags without reconstructing the provider", async (): Promise<void> => {
+  let enabled: boolean = false;
+  const flags: FeatureFlagConfiguration = { get feature_flags(): readonly unknown[] { return [{ id: "LegacyPerUserProvisioning", enabled }]; } };
+  let calls: number = 0;
+  const setup: Fixture = fixture({ featureFlags: flags, legacyProvider: { getAcaEnvironment: async (): Promise<ManagedEnvironment> => {
+    calls++;
+    return { id: LEGACY_ENVIRONMENT_ID, location: "southeastasia", provisioningState: "Succeeded" };
+  } } });
+  assert.equal((await setup.provider.getAcaEnvironment(INPUT)).id, ENVIRONMENT_ID);
+  assert.equal(calls, 0);
+  enabled = true;
+  assert.equal((await setup.provider.getAcaEnvironment(INPUT)).id, LEGACY_ENVIRONMENT_ID);
+  assert.equal(calls, 1);
+  enabled = false;
+  assert.equal((await setup.provider.getAcaEnvironment(INPUT)).id, ENVIRONMENT_ID);
+  assert.equal(calls, 1);
 });
