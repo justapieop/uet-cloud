@@ -473,8 +473,9 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
         await runBuildStep("Storage Account creation", () =>
           this.clients.storageAccounts!.create(rgName, storageAccountName, {
             location: normalizeAzureRegion(environment.location),
-            sku: { name: "Standard_LRS" },
-            kind: "StorageV2",
+            sku: { name: "StandardV2_LRS" },
+            kind: "FileStorage",
+            minimumTlsVersion: "TLS1_2",
           }, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
         );
       }

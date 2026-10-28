@@ -9,7 +9,7 @@ import type { DeploymentVolume } from "@kumo/domain";
 const ENVIRONMENT_ID: string =
   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/platform-rg/providers/Microsoft.App/managedEnvironments/shared-env";
 
-function createSetup(options: { existingApp?: boolean } = {}): {
+function createSetup(options: { existingApp?: boolean; storageAccountExists?: boolean } = {}): {
   provider: AzureProvider;
   events: string[];
   apps: Map<string, ContainerApp>;
@@ -84,10 +84,13 @@ function createSetup(options: { existingApp?: boolean } = {}): {
     storageAccounts: {
       getProperties: async () => {
         events.push("storage-getProperties");
+        if (options.storageAccountExists === false) {
+          throw { statusCode: 404 };
+        }
         return { location: "japaneast" };
       },
-      create: () => {
-        events.push("storage-create");
+      create: (_rg: string, _name: string, parameters: unknown) => {
+        events.push(`storage-create:${JSON.stringify(parameters)}`);
         return { pollUntilDone: async () => ({}) } as unknown as ReturnType<NonNullable<AzureProviderClients["storageAccounts"]>["create"]>;
       },
       listKeys: async () => {
@@ -199,6 +202,33 @@ test("AzureProvider.createDeployment mounts volumes into template and creates st
   assert.ok(events.includes("share-create:share-sample-app-data:5"));
   assert.ok(events.includes("env-storage-create:stg-sample-app-data"));
   assert.ok(events.includes("app-createOrUpdate"));
+});
+
+test("AzureProvider.createDeployment provisions FileStorage StandardV2_LRS account when account does not exist", async (): Promise<void> => {
+  const { provider, events }: { provider: AzureProvider; events: string[] } = createSetup({ storageAccountExists: false });
+
+  const volume: DeploymentVolume = {
+    name: "data",
+    mountPath: "/var/data",
+    sizeGb: 5,
+    accessMode: "ReadWrite",
+  };
+
+  await provider.createDeployment({
+    userId: "12345",
+    name: "sample-app",
+    repo: "https://github.com/owner/repo",
+    targetPort: 8080,
+    volumes: [volume],
+  });
+
+  const expectedParams: string = JSON.stringify({
+    location: "japaneast",
+    sku: { name: "StandardV2_LRS" },
+    kind: "FileStorage",
+    minimumTlsVersion: "TLS1_2",
+  });
+  assert.ok(events.includes(`storage-create:${expectedParams}`));
 });
 
 test("AzureProvider.attachVolume adds volume to running app and updates revision", async (): Promise<void> => {
