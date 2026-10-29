@@ -18,6 +18,7 @@ import {
   type StartDeploymentCase,
   type StopDeploymentCase,
   type GetBuildCase,
+  type DeploymentConfiguration,
 } from "@kumo/application";
 import type { Request } from "express";
 import { DeploymentsController } from "../dist/controllers/Deployments.controller.js";
@@ -236,4 +237,32 @@ test("DeploymentsController.listVolumes returns list of DeploymentVolumeResponse
   assert.equal(response[0]?.mountPath, "/var/data");
   assert.equal(response[0]?.sizeGb, 5);
   assert.equal(response[0]?.accessMode, "ReadWrite");
+});
+
+test("DeploymentResponseDto preserves volume sizeGb and accessMode from spec when configuration volumes are present", (): void => {
+  const deployment: Deployment = createTestDeployment([
+    { name: "data", mountPath: "/var/data", sizeGb: 32, accessMode: "ReadWrite" },
+  ]);
+  const configuration: DeploymentConfiguration = {
+    region: "eastasia",
+    maxVcpu: 0.25,
+    maxMemory: 0.5,
+    minScaling: 0,
+    maxScaling: 1,
+    targetPort: 80,
+    external: true,
+    additionalPorts: [],
+    volumes: [
+      { name: "data", mountPath: "/var/data", sizeGb: 1, accessMode: "ReadWrite" },
+    ],
+    image: "image:tag",
+    fqdn: "app.example.com",
+  };
+
+  const response: DeploymentResponseDto = new DeploymentResponseDto(deployment, configuration);
+  assert.equal(response.volumes.length, 1);
+  assert.equal(response.volumes[0]?.name, "data");
+  assert.equal(response.volumes[0]?.mountPath, "/var/data");
+  assert.equal(response.volumes[0]?.sizeGb, 32);
+  assert.equal(response.volumes[0]?.accessMode, "ReadWrite");
 });

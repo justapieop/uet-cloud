@@ -147,7 +147,18 @@ export class DeploymentResponseDto {
     this.targetPort = configuration ? configuration.targetPort : deployment.spec?.targetPort ?? null;
     this.external = configuration ? configuration.external : deployment.spec ? deployment.spec.external ?? true : null;
     this.additionalPorts = (configuration ? configuration.additionalPorts : deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
-    this.volumes = (configuration?.volumes ?? deployment.spec?.volumes ?? []).map((vol: DeploymentVolume): DeploymentVolumeResponseDto => new DeploymentVolumeResponseDto(vol));
+    const specVolumes: readonly DeploymentVolume[] = deployment.spec?.volumes ?? [];
+    const effectiveVolumes: readonly DeploymentVolume[] = configuration?.volumes
+      ? configuration.volumes.map((vol: DeploymentVolume): DeploymentVolume => {
+          const specVol: DeploymentVolume | undefined = specVolumes.find(
+            (item: DeploymentVolume): boolean => item.name === vol.name,
+          );
+          return specVol
+            ? { ...vol, sizeGb: specVol.sizeGb, accessMode: specVol.accessMode ?? vol.accessMode }
+            : vol;
+        })
+      : specVolumes;
+    this.volumes = effectiveVolumes.map((vol: DeploymentVolume): DeploymentVolumeResponseDto => new DeploymentVolumeResponseDto(vol));
     this.status = deployment.status;
     this.image = configuration ? configuration.image : deployment.image;
     this.buildId = deployment.buildId;
