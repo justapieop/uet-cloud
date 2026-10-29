@@ -1,4 +1,4 @@
-import type { ContainerAppsAPIClient, Container, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, Volume, VolumeMount, WorkloadProfile } from "@azure/arm-appcontainers";
+import type { AzureFileProperties, ContainerAppsAPIClient, Container, ContainerApp, ContainerResources, EnvironmentVar, ManagedEnvironment, Volume, VolumeMount, WorkloadProfile } from "@azure/arm-appcontainers";
 import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
 import type { StorageManagementClient, StorageAccountListKeysResult } from "@azure/arm-storage";
 import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult, type VolumeManager } from "@kumo/application";
@@ -43,12 +43,12 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
 }
 
 export interface AzureProviderClients {
-  resources: Pick<ResourceManagementClient["resources"], "getById">;
+  resources: Pick<ResourceManagementClient["resources"], "getById"> & Partial<Pick<ResourceManagementClient["resources"], "createOrUpdateById">>;
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get">;
   containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate" | "update">;
   managedEnvironmentsStorages?: Pick<ContainerAppsAPIClient["managedEnvironmentsStorages"], "createOrUpdate" | "delete" | "get">;
-  storageAccounts?: Pick<StorageManagementClient["storageAccounts"], "create" | "getProperties" | "listKeys">;
+  storageAccounts?: Pick<StorageManagementClient["storageAccounts"], "create" | "getProperties"> & Partial<Pick<StorageManagementClient["storageAccounts"], "listKeys">>;
   fileShares?: Pick<StorageManagementClient["fileShares"], "create" | "get" | "delete">;
 }
 
@@ -486,25 +486,36 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
         }, { abortSignal: opSignal }),
       );
 
-      const keysResult: StorageAccountListKeysResult = await this.clients.storageAccounts.listKeys(rgName, storageAccountName, { abortSignal: opSignal });
-      const accountKey: string | undefined = keysResult.keys?.[0]?.value;
-      if (!accountKey) {
-        throw new BuildProviderError("Failed to retrieve Azure Storage Account access key");
-      }
-
       const envRef: ManagedEnvironmentReference = managedEnvironmentReference(environment.id!, this.requiredSetting("AZURE_SUBSCRIPTION_ID"));
-      await runBuildStep("Managed environment storage link registration", () =>
-        this.clients.managedEnvironmentsStorages!.createOrUpdate(envRef.resourceGroup, envRef.name, storageLinkName, {
-          properties: {
-            azureFile: {
-              accountName: storageAccountName,
-              accountKey,
-              shareName,
-              accessMode: volume.accessMode ?? "ReadWrite",
+      const storageResourceId: string = `${environment.id}/storages/${storageLinkName}`;
+
+      if (this.clients.resources?.createOrUpdateById) {
+        await runBuildStep("Managed environment storage link registration", () =>
+          this.clients.resources!.createOrUpdateById!(storageResourceId, "2024-03-01", {
+            properties: {
+              azureFile: {
+                accountName: storageAccountName,
+                shareName,
+                accessMode: volume.accessMode ?? "ReadWrite",
+                identity: "system",
+              },
             },
-          },
-        }, { abortSignal: opSignal }),
-      );
+          }, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
+        );
+      } else if (this.clients.managedEnvironmentsStorages) {
+        await runBuildStep("Managed environment storage link registration", () =>
+          this.clients.managedEnvironmentsStorages!.createOrUpdate(envRef.resourceGroup, envRef.name, storageLinkName, {
+            properties: {
+              azureFile: {
+                accountName: storageAccountName,
+                shareName,
+                accessMode: volume.accessMode ?? "ReadWrite",
+                identity: "system",
+              } as unknown as AzureFileProperties,
+            },
+          }, { abortSignal: opSignal }),
+        );
+      }
     }
 
     return storageLinkName;

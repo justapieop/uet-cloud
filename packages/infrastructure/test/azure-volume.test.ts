@@ -9,7 +9,7 @@ import type { DeploymentVolume } from "@kumo/domain";
 const ENVIRONMENT_ID: string =
   "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/platform-rg/providers/Microsoft.App/managedEnvironments/shared-env";
 
-function createSetup(options: { existingApp?: boolean; storageAccountExists?: boolean } = {}): {
+function createSetup(options: { existingApp?: boolean; storageAccountExists?: boolean; useResourcesCreateOrUpdateById?: boolean } = {}): {
   provider: AzureProvider;
   events: string[];
   apps: Map<string, ContainerApp>;
@@ -42,6 +42,16 @@ function createSetup(options: { existingApp?: boolean; storageAccountExists?: bo
       getById: async () => ({
         properties: { loginServer: "registry.azurecr.io", anonymousPullEnabled: false },
       }),
+      ...(options.useResourcesCreateOrUpdateById
+        ? {
+            createOrUpdateById: ((resourceId: string, _apiVersion: string, parameters: unknown): unknown => {
+              events.push(`resource-createById:${resourceId}:${JSON.stringify(parameters)}`);
+              return {
+                pollUntilDone: async (): Promise<unknown> => parameters,
+              };
+            }) as NonNullable<AzureProviderClients["resources"]["createOrUpdateById"]>,
+          }
+        : {}),
     },
     resourceGroups: {
       checkExistence: async () => ({ body: true }),
@@ -110,7 +120,8 @@ function createSetup(options: { existingApp?: boolean; storageAccountExists?: bo
     },
     managedEnvironmentsStorages: {
       createOrUpdate: async (_rg, _env, name, parameters) => {
-        events.push(`env-storage-create:${name}`);
+        const fileProps: any = (parameters as any)?.properties?.azureFile;
+        events.push(`env-storage-create:${name}:identity=${fileProps?.identity}:hasKey=${Boolean(fileProps?.accountKey)}`);
         return parameters;
       },
       delete: async (_rg, _env, name) => {
@@ -199,8 +210,9 @@ test("AzureProvider.createDeployment mounts volumes into template and creates st
   assert.equal(app.template?.containers?.[0]?.volumeMounts?.[0]?.mountPath, "/var/data");
 
   assert.ok(events.includes("storage-getProperties"));
+  assert.ok(!events.includes("storage-listKeys"));
   assert.ok(events.includes("share-create:share-sample-app-data:5"));
-  assert.ok(events.includes("env-storage-create:stg-sample-app-data"));
+  assert.ok(events.includes("env-storage-create:stg-sample-app-data:identity=system:hasKey=false"));
   assert.ok(events.includes("app-createOrUpdate"));
 });
 
@@ -255,6 +267,8 @@ test("AzureProvider.attachVolume adds volume to running app and updates revision
   assert.equal(updated.template?.volumes?.[0]?.name, "logs");
   assert.equal(updated.template?.containers?.[0]?.volumeMounts?.length, 1);
   assert.equal(updated.template?.containers?.[0]?.volumeMounts?.[0]?.mountPath, "/var/logs");
+  assert.ok(events.includes("env-storage-create:stg-sample-app-logs:identity=system:hasKey=false"));
+  assert.ok(!events.includes("storage-listKeys"));
   assert.ok(events.includes("app-update"));
 });
 
@@ -329,4 +343,30 @@ test("AzureDeploymentConfigurationReader reads applied volumes from container", 
   assert.equal(result.volumes?.[0]?.name, "data");
   assert.equal(result.volumes?.[0]?.mountPath, "/var/data");
   assert.equal(result.volumes?.[0]?.subPath, "sub");
+});
+
+test("AzureProvider.attachVolume registers environment storage via resources.createOrUpdateById with Managed Identity", async (): Promise<void> => {
+  const { provider, events } = createSetup({ existingApp: true, useResourcesCreateOrUpdateById: true });
+
+  const volume: DeploymentVolume = {
+    name: "data",
+    mountPath: "/var/data",
+    sizeGb: 10,
+    accessMode: "ReadWrite",
+  };
+
+  await provider.attachVolume({
+    userId: "12345",
+    appName: "sample-app",
+    deploymentId: "dep-1",
+    resourceId: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/user-rg-12345/providers/Microsoft.App/containerApps/sample-app",
+    volume,
+    existingVolumes: [],
+  });
+
+  const registeredEvent: string | undefined = events.find((e: string): boolean => e.startsWith("resource-createById:"));
+  assert.ok(registeredEvent, "Expected resource-createById event");
+  assert.ok(registeredEvent.includes('"identity":"system"'), "Expected identity system in payload");
+  assert.ok(!registeredEvent.includes('"accountKey"'), "Expected no accountKey in payload");
+  assert.ok(!events.includes("storage-listKeys"), "Expected no storage-listKeys event");
 });
