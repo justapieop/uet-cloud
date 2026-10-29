@@ -1,36 +1,46 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { useState, useTransition, type ChangeEvent, type Dispatch, type FormEvent, type JSX, type SetStateAction, type TransitionStartFunction } from "react";
-import { useRouter } from "next/navigation";
-import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { attachVolumeAction } from "../api/actions";
+import { useEffect, useState, type ChangeEvent, type Dispatch, type FormEvent, type JSX, type SetStateAction } from "react";
 import {
   type AttachVolumeInput,
-  type VolumeActionResult,
   MOUNT_PATH_REGEX,
   VOLUME_NAME_REGEX,
 } from "../model/types";
 
 interface AttachVolumeModalProps {
-  readonly deploymentId: string;
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  readonly onSubmitVolume: (input: AttachVolumeInput) => void;
+  readonly initialValues?: AttachVolumeInput | null;
 }
 
 const INPUT_CLASS: string =
   "mt-1.5 h-10 w-full rounded-lg border border-surface-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-dark focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-60";
 const LABEL_CLASS: string = "block text-xs font-medium text-foreground";
 
-export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolumeModalProps): JSX.Element | null {
-  const router: AppRouterInstance = useRouter();
+export function AttachVolumeModal({
+  isOpen,
+  onClose,
+  onSubmitVolume,
+  initialValues,
+}: AttachVolumeModalProps): JSX.Element | null {
   const [name, setName]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [mountPath, setMountPath]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [subPath, setSubPath]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(5);
   const [accessMode, setAccessMode]: ["ReadWrite" | "ReadOnly", Dispatch<SetStateAction<"ReadWrite" | "ReadOnly">>] = useState<"ReadWrite" | "ReadOnly">("ReadWrite");
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
-  const [pending, startTransition]: [boolean, TransitionStartFunction] = useTransition();
+
+  useEffect((): void => {
+    if (initialValues) {
+      setName(initialValues.name);
+      setMountPath(initialValues.mount_path);
+      setSubPath(initialValues.sub_path ?? "");
+      setSizeGb(initialValues.size_gb);
+      setAccessMode(initialValues.access_mode ?? "ReadWrite");
+    }
+  }, [initialValues, isOpen]);
 
   if (!isOpen) return null;
 
@@ -44,7 +54,6 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
   }
 
   function handleClose(): void {
-    if (pending) return;
     resetForm();
     onClose();
   }
@@ -58,17 +67,17 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
     const trimmedSubPath: string = subPath.trim();
 
     if (!VOLUME_NAME_REGEX.test(trimmedName)) {
-      setErrorMessage("Tên volume phải gồm 2–32 ký tự chữ thường, số hoặc gạch nối (ví dụ: data-storage).");
+      setErrorMessage("Volume name must be 2–32 lowercase letters, numbers, or hyphens (e.g. data-storage).");
       return;
     }
 
     if (!MOUNT_PATH_REGEX.test(trimmedMount)) {
-      setErrorMessage("Mount path phải là đường dẫn tuyệt đối bắt đầu bằng / (ví dụ: /var/data).");
+      setErrorMessage("Mount path must be an absolute path inside the container starting with / (e.g. /var/data).");
       return;
     }
 
     if (!Number.isInteger(sizeGb) || sizeGb < 1) {
-      setErrorMessage("Dung lượng phải là số nguyên dương tính theo GiB.");
+      setErrorMessage("Volume capacity must be a positive integer in GiB.");
       return;
     }
 
@@ -80,16 +89,9 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
       access_mode: accessMode,
     };
 
-    startTransition(async (): Promise<void> => {
-      const result: VolumeActionResult = await attachVolumeAction(deploymentId, payload);
-      if (!result.success) {
-        setErrorMessage(result.error ?? "Không thể gắn volume. Vui lòng thử lại.");
-      } else {
-        resetForm();
-        onClose();
-        router.refresh();
-      }
-    });
+    onSubmitVolume(payload);
+    resetForm();
+    onClose();
   }
 
   return (
@@ -109,18 +111,17 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
         <div className="flex items-start justify-between border-b border-surface-border pb-4">
           <div>
             <h2 id="attach-volume-title" className="text-base font-semibold text-foreground">
-              Gắn Persistent Volume mới
+              Attach Persistent Volume
             </h2>
             <p className="mt-1 text-xs text-muted-text">
-              Tạo Azure File Share và mount trực tiếp vào container của deployment này.
+              Create an Azure File Share and mount it directly into this deployment&apos;s container.
             </p>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            disabled={pending}
             className="rounded-lg p-1 text-muted-text hover:bg-surface-hover hover:text-foreground"
-            aria-label="Đóng dialog"
+            aria-label="Close dialog"
           >
             <span className="text-lg leading-none">&times;</span>
           </button>
@@ -129,45 +130,43 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
         <form onSubmit={handleSubmit} className="mt-5 space-y-4">
           <div>
             <label className={LABEL_CLASS} htmlFor="volume-name">
-              Tên volume
+              Volume name
             </label>
             <input
               id="volume-name"
               className={INPUT_CLASS}
               type="text"
               required
-              disabled={pending}
               value={name}
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setName(e.target.value)}
               placeholder="data-storage"
               pattern="[a-z][a-z0-9-]{0,30}[a-z0-9]"
               autoComplete="off"
             />
-            <span className="mt-1 block text-[11px] text-muted-text">2–32 chữ thường, số hoặc gạch ngang.</span>
+            <span className="mt-1 block text-[11px] text-muted-text">2–32 lowercase letters, numbers, or hyphens.</span>
           </div>
 
           <div>
             <label className={LABEL_CLASS} htmlFor="volume-mount-path">
-              Mount path trong container
+              Container mount path
             </label>
             <input
               id="volume-mount-path"
               className={INPUT_CLASS}
               type="text"
               required
-              disabled={pending}
               value={mountPath}
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setMountPath(e.target.value)}
               placeholder="/var/data"
               autoComplete="off"
             />
-            <span className="mt-1 block text-[11px] text-muted-text">Đường dẫn tuyệt đối trong container (bắt đầu bằng /).</span>
+            <span className="mt-1 block text-[11px] text-muted-text">Absolute path in container (must start with /).</span>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={LABEL_CLASS} htmlFor="volume-size">
-                Dung lượng (GiB)
+                Capacity (GiB)
               </label>
               <input
                 id="volume-size"
@@ -176,7 +175,6 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
                 required
                 min="1"
                 step="1"
-                disabled={pending}
                 value={sizeGb}
                 onChange={(e: ChangeEvent<HTMLInputElement>): void => setSizeGb(Number(e.target.value))}
               />
@@ -184,32 +182,30 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
 
             <div>
               <label className={LABEL_CLASS} htmlFor="volume-access-mode">
-                Chế độ truy cập
+                Access mode
               </label>
               <select
                 id="volume-access-mode"
                 className={INPUT_CLASS}
-                disabled={pending}
                 value={accessMode}
                 onChange={(e: ChangeEvent<HTMLSelectElement>): void =>
                   setAccessMode(e.target.value as "ReadWrite" | "ReadOnly")
                 }
               >
-                <option value="ReadWrite">ReadWrite (Đọc & Ghi)</option>
-                <option value="ReadOnly">ReadOnly (Chỉ đọc)</option>
+                <option value="ReadWrite">ReadWrite</option>
+                <option value="ReadOnly">ReadOnly</option>
               </select>
             </div>
           </div>
 
           <div>
             <label className={LABEL_CLASS} htmlFor="volume-sub-path">
-              Thư mục con (subpath) <span className="font-normal text-muted-dark">(tuỳ chọn)</span>
+              Subpath <span className="font-normal text-muted-dark">(optional)</span>
             </label>
             <input
               id="volume-sub-path"
               className={INPUT_CLASS}
               type="text"
-              disabled={pending}
               value={subPath}
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setSubPath(e.target.value)}
               placeholder="e.g. data/uploads"
@@ -224,11 +220,11 @@ export function AttachVolumeModal({ deploymentId, isOpen, onClose }: AttachVolum
           )}
 
           <div className="flex items-center justify-end gap-3 border-t border-surface-border pt-4">
-            <Button type="button" variant="ghost" size="sm" isDisabled={pending} onPress={handleClose}>
-              Huỷ
+            <Button type="button" variant="ghost" size="sm" onPress={handleClose}>
+              Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" isPending={pending} isDisabled={pending}>
-              {pending ? "Đang gắn volume…" : "Gắn volume"}
+            <Button type="submit" variant="primary" size="sm">
+              Attach Volume
             </Button>
           </div>
         </form>

@@ -40,7 +40,7 @@ export function DetachVolumeDialog({
     startTransition(async (): Promise<void> => {
       const result: VolumeActionResult = await detachVolumeAction(deploymentId, volumeName, isDelete);
       if (!result.success) {
-        setErrorMessage(result.error ?? "Không thể thực hiện thao tác. Vui lòng thử lại.");
+        setErrorMessage(result.error ?? "Failed to perform operation. Please try again.");
       } else {
         onClose();
         router.refresh();
@@ -75,19 +75,19 @@ export function DetachVolumeDialog({
           </div>
           <div>
             <h2 id="detach-volume-title" className="text-base font-semibold text-foreground">
-              {isDelete ? "Xoá vĩnh viễn volume & dữ liệu?" : "Gỡ volume khỏi container?"}
+              {isDelete ? "Permanently delete volume & data?" : "Detach volume from container?"}
             </h2>
             <p id="detach-volume-description" className="mt-2 text-xs leading-5 text-muted-text">
               {isDelete ? (
                 <>
-                  Volume <span className="font-mono font-medium text-foreground">{volumeName}</span> sẽ bị gỡ khỏi
-                  container và <strong className="text-red-400">xoá vĩnh viễn toàn bộ dữ liệu</strong> trên Azure Storage
-                  file share. Thao tác này <strong className="text-red-400">không thể khôi phục</strong>.
+                  Volume <span className="font-mono font-medium text-foreground">{volumeName}</span> will be detached
+                  from the container and its <strong className="text-red-400">entire data permanently deleted</strong> on
+                  the Azure Storage file share. This action <strong className="text-red-400">cannot be undone</strong>.
                 </>
               ) : (
                 <>
-                  Volume <span className="font-mono font-medium text-foreground">{volumeName}</span> sẽ được gỡ khỏi
-                  container app. Toàn bộ file và dữ liệu vẫn được <strong className="text-foreground">giữ nguyên an toàn</strong> trên
+                  Volume <span className="font-mono font-medium text-foreground">{volumeName}</span> will be detached
+                  from the container. All files and data remain <strong className="text-foreground">safely preserved</strong> on
                   Azure Storage.
                 </>
               )}
@@ -103,7 +103,7 @@ export function DetachVolumeDialog({
 
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-surface-border pt-4">
           <Button type="button" variant="ghost" size="sm" isDisabled={pending} onPress={handleClose}>
-            Huỷ bỏ
+            Cancel
           </Button>
           <Button
             type="button"
@@ -113,7 +113,7 @@ export function DetachVolumeDialog({
             isDisabled={pending}
             onPress={handleConfirm}
           >
-            {pending ? "Đang xử lý…" : isDelete ? "Xóa vĩnh viễn" : "Gỡ volume"}
+            {pending ? "Processing…" : isDelete ? "Delete Volume" : "Detach Volume"}
           </Button>
         </div>
       </div>

@@ -1,9 +1,12 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { useState, type Dispatch, type JSX, type SetStateAction } from "react";
+import { useState, useTransition, type Dispatch, type JSX, type SetStateAction, type TransitionStartFunction } from "react";
+import { useRouter } from "next/navigation";
+import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { Deployment } from "@/entities/deployment";
-import type { DeploymentVolume } from "../model/types";
+import type { AttachVolumeInput, DeploymentVolume, VolumeActionResult } from "../model/types";
+import { attachVolumeAction } from "../api/actions";
 import { AttachVolumeModal } from "./attach-volume-modal";
 import { DetachVolumeDialog } from "./detach-volume-dialog";
 
@@ -11,13 +14,23 @@ interface StorageVolumesCardProps {
   readonly deployment: Deployment;
 }
 
+interface PendingAttachment {
+  readonly volume: AttachVolumeInput;
+  readonly status: "attaching" | "error";
+  readonly errorMessage?: string;
+}
+
 export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX.Element {
+  const router: AppRouterInstance = useRouter();
   const [isAttachOpen, setIsAttachOpen]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [targetVolume, setTargetVolume]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
   const [dialogMode, setDialogMode]: ["detach" | "delete" | null, Dispatch<SetStateAction<"detach" | "delete" | null>>] = useState<"detach" | "delete" | null>(null);
+  const [pendingAttachment, setPendingAttachment]: [PendingAttachment | null, Dispatch<SetStateAction<PendingAttachment | null>>] = useState<PendingAttachment | null>(null);
+  const [, startTransition]: [boolean, TransitionStartFunction] = useTransition();
 
   const volumes: readonly DeploymentVolume[] = deployment.volumes ?? [];
   const isEditable: boolean = deployment.status === "RUNNING" || deployment.status === "STOPPED";
+  const isAttaching: boolean = pendingAttachment?.status === "attaching";
   const totalDiskGb: number = volumes.reduce((sum: number, vol: DeploymentVolume): number => sum + vol.size_gb, 0);
 
   function openDetachDialog(volumeName: string): void {
@@ -33,6 +46,32 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
   function closeDialog(): void {
     setTargetVolume(null);
     setDialogMode(null);
+  }
+
+  function handleStartAttach(input: AttachVolumeInput): void {
+    setPendingAttachment({ volume: input, status: "attaching" });
+
+    startTransition(async (): Promise<void> => {
+      const result: VolumeActionResult = await attachVolumeAction(deployment.id, input);
+      if (!result.success) {
+        setPendingAttachment({
+          volume: input,
+          status: "error",
+          errorMessage: result.error ?? "Failed to attach volume. Please try again.",
+        });
+      } else {
+        setPendingAttachment(null);
+        router.refresh();
+      }
+    });
+  }
+
+  function handleRetry(): void {
+    setIsAttachOpen(true);
+  }
+
+  function handleDismissError(): void {
+    setPendingAttachment(null);
   }
 
   return (
@@ -60,11 +99,11 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
             type="button"
             variant="secondary"
             size="sm"
-            isDisabled={!isEditable}
+            isDisabled={!isEditable || isAttaching}
             onPress={(): void => setIsAttachOpen(true)}
-            aria-label="Gắn volume mới"
+            aria-label="Attach new volume"
           >
-            + Gắn Volume
+            {isAttaching ? "Attaching Volume…" : "+ Attach Volume"}
           </Button>
         </div>
       </div>
@@ -73,22 +112,81 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
           <span className="font-bold">!</span>
           <span>
-            Volume chỉ có thể thêm, gỡ hoặc xoá khi deployment ở trạng thái <strong>RUNNING</strong> hoặc <strong>STOPPED</strong>.
+            Volumes can only be attached, detached, or deleted when the deployment is in <strong>RUNNING</strong> or <strong>STOPPED</strong> status.
           </span>
         </div>
       )}
 
-      {volumes.length === 0 ? (
+      {pendingAttachment?.status === "error" && (
+        <div
+          role="alert"
+          className="mt-4 flex flex-col justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200 sm:flex-row sm:items-center"
+        >
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-red-400">!</span>
+            <span>{pendingAttachment.errorMessage}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button type="button" variant="ghost" size="sm" onPress={handleRetry}>
+              Retry
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onPress={handleDismissError}>
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {volumes.length === 0 && !isAttaching ? (
         <div className="mt-5 rounded-lg border border-dashed border-surface-border p-6 text-center">
-          <p className="text-xs text-muted-text">Chưa có persistent volume nào được gắn vào deployment này.</p>
+          <p className="text-xs text-muted-text">No persistent storage volumes attached to this deployment.</p>
           {isEditable && (
             <p className="mt-1 text-[11px] text-muted-dark">
-              Nhấn &ldquo;+ Gắn Volume&rdquo; ở trên để tạo và mount volume lưu trữ vĩnh viễn.
+              Click &ldquo;+ Attach Volume&rdquo; above to create and mount persistent storage.
             </p>
           )}
         </div>
       ) : (
         <div className="mt-5 space-y-3">
+          {isAttaching && pendingAttachment && (
+            <div className="flex flex-col justify-between gap-4 rounded-lg border border-accent/40 bg-accent/5 p-4 sm:flex-row sm:items-center">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-sm font-semibold text-foreground">
+                    {pendingAttachment.volume.name}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-blue-300">
+                    <span className="inline-block size-1.5 animate-ping rounded-full bg-blue-400" />
+                    ATTACHING...
+                  </span>
+                  <span className="font-mono text-xs text-muted-text">
+                    {pendingAttachment.volume.size_gb} GiB
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-xs text-muted-text">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase text-muted-dark">Mount:</span>
+                    <span className="rounded bg-surface px-1.5 py-0.5 text-foreground">
+                      {pendingAttachment.volume.mount_path}
+                    </span>
+                  </div>
+
+                  {pendingAttachment.volume.sub_path && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase text-muted-dark">Subpath:</span>
+                      <span className="text-muted-text">{pendingAttachment.volume.sub_path}</span>
+                    </div>
+                  )}
+                </div>
+
+                <p className="pt-1 text-[11px] text-muted-dark">
+                  Provisioning Azure File Share and updating Container App revision… You can continue using Mission Control while this runs.
+                </p>
+              </div>
+            </div>
+          )}
+
           {volumes.map((vol: DeploymentVolume): JSX.Element => {
             const isReadOnly: boolean = vol.access_mode === "ReadOnly";
             return (
@@ -131,21 +229,21 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
                     type="button"
                     variant="ghost"
                     size="sm"
-                    isDisabled={!isEditable}
+                    isDisabled={!isEditable || isAttaching}
                     onPress={(): void => openDetachDialog(vol.name)}
-                    aria-label={`Gỡ volume ${vol.name}`}
+                    aria-label={`Detach volume ${vol.name}`}
                   >
-                    Gỡ volume
+                    Detach
                   </Button>
                   <Button
                     type="button"
                     variant="danger"
                     size="sm"
-                    isDisabled={!isEditable}
+                    isDisabled={!isEditable || isAttaching}
                     onPress={(): void => openDeleteDialog(vol.name)}
-                    aria-label={`Xoá volume và dữ liệu ${vol.name}`}
+                    aria-label={`Delete volume and data ${vol.name}`}
                   >
-                    Xoá
+                    Delete
                   </Button>
                 </div>
               </div>
@@ -155,9 +253,10 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
       )}
 
       <AttachVolumeModal
-        deploymentId={deployment.id}
         isOpen={isAttachOpen}
         onClose={(): void => setIsAttachOpen(false)}
+        onSubmitVolume={handleStartAttach}
+        initialValues={pendingAttachment?.status === "error" ? pendingAttachment.volume : null}
       />
 
       <DetachVolumeDialog

@@ -84,7 +84,7 @@ export async function attachVolumeAction(
         access_mode: accessMode,
       },
       cache: "no-store",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(90_000),
     });
 
     if (!result.response.ok) {
@@ -143,7 +143,7 @@ export async function detachVolumeAction(
         },
         headers: { cookie: cookieHeader },
         cache: "no-store",
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(90_000),
       },
     );
 
