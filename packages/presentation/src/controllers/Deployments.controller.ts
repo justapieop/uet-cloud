@@ -177,6 +177,7 @@ export class DeploymentsController {
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
       if (error instanceof DeploymentQuotaExceeded) throw new ConflictException({ code: "DEPLOYMENT_QUOTA_EXCEEDED", message: error.message });
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
+      if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
       throw error;
     }
   }
@@ -212,6 +213,7 @@ export class DeploymentsController {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
+      if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
       throw error;
     }
   }

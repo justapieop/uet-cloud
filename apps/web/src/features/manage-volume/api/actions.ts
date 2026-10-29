@@ -112,7 +112,11 @@ export async function attachVolumeAction(
         );
         return { success: false, error: message };
       }
-      return { success: false, error: `Failed to attach volume (HTTP ${status})` };
+      const message: string = await parseBackendErrorMessage(
+        result.response,
+        `Failed to attach volume (HTTP ${status})`,
+      );
+      return { success: false, error: message };
     }
 
     revalidatePath(`/dashboard/deployments/${deploymentId}`);
@@ -162,7 +166,11 @@ export async function detachVolumeAction(
         );
         return { success: false, error: message };
       }
-      return { success: false, error: `Failed to detach volume (HTTP ${status})` };
+      const message: string = await parseBackendErrorMessage(
+        result.response,
+        `Failed to detach volume (HTTP ${status})`,
+      );
+      return { success: false, error: message };
     }
 
     revalidatePath(`/dashboard/deployments/${deploymentId}`);

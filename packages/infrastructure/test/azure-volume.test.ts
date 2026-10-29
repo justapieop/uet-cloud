@@ -44,11 +44,9 @@ function createSetup(options: { existingApp?: boolean; storageAccountExists?: bo
       }),
       ...(options.useResourcesCreateOrUpdateById
         ? {
-            createOrUpdateById: ((resourceId: string, _apiVersion: string, parameters: unknown): unknown => {
-              events.push(`resource-createById:${resourceId}:${JSON.stringify(parameters)}`);
-              return {
-                pollUntilDone: async (): Promise<unknown> => parameters,
-              };
+            createOrUpdateById: (async (resourceId: string, apiVersion: string, parameters: unknown): Promise<unknown> => {
+              events.push(`resource-createById:${resourceId}:${apiVersion}:${JSON.stringify(parameters)}`);
+              return parameters;
             }) as NonNullable<AzureProviderClients["resources"]["createOrUpdateById"]>,
           }
         : {}),
@@ -366,6 +364,7 @@ test("AzureProvider.attachVolume registers environment storage via resources.cre
 
   const registeredEvent: string | undefined = events.find((e: string): boolean => e.startsWith("resource-createById:"));
   assert.ok(registeredEvent, "Expected resource-createById event");
+  assert.ok(registeredEvent.includes(":2026-03-02-preview:"), "Expected 2026-03-02-preview apiVersion");
   assert.ok(registeredEvent.includes('"identity":"system"'), "Expected identity system in payload");
   assert.ok(!registeredEvent.includes('"accountKey"'), "Expected no accountKey in payload");
   assert.ok(!events.includes("storage-listKeys"), "Expected no storage-listKeys event");

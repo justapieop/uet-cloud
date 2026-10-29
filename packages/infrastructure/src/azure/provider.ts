@@ -491,7 +491,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
 
       if (this.clients.resources?.createOrUpdateById) {
         await runBuildStep("Managed environment storage link registration", () =>
-          this.clients.resources!.createOrUpdateById!(storageResourceId, "2024-03-01", {
+          this.clients.resources!.createOrUpdateById!(storageResourceId, "2026-03-02-preview", {
             properties: {
               azureFile: {
                 accountName: storageAccountName,
@@ -500,7 +500,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
                 identity: "system",
               },
             },
-          }, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
+          }, { abortSignal: opSignal }),
         );
       } else if (this.clients.managedEnvironmentsStorages) {
         await runBuildStep("Managed environment storage link registration", () =>
