@@ -8,7 +8,7 @@ Nest module factories construct external clients and pass them to infrastructure
 | --- | --- | --- |
 | GitHubModule | KeyClient | KmsProvider, used by GitHubProvider |
 | BuildModule | Injected credential and HTTP transport | AzurePipelinesProvider |
-| DeploymentModule | ResourceManagementClient and ContainerAppsAPIClient | AzureProvider (provisioning), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
+| DeploymentModule | ResourceManagementClient, ContainerAppsAPIClient, and StorageManagementClient | AzureProvider (provisioning and volume management), AzureContainerLifecycleManager (start/stop), AzureDeploymentConfigurationReader (applied settings) |
 | MonitoringModule | MonitorClient | AzureMonitorMetricsReader |
 | AcrModule | ContainerRegistryTasksManagementClient | AcrProvider |
 
@@ -27,3 +27,5 @@ The default injected HTTP transport now applies dependency resilience policies. 
 AzureProvider receives only managed-environment read operations in its client surface. It joins the configured shared environment and never constructs network clients or writes environment/network resources. Shared target parsing and validation live in `azure/shared-environment.ts`; the region reader uses the same validation rules.
 
 The preserved AzureLegacyEnvironmentProvisioner receives writable managed-environment and network clients only when the current LegacyPerUserProvisioning feature flag is enabled. Shared mode constructs neither that adapter nor its NetworkManagementClient; no infrastructure constructor creates SDK fallbacks. RegionsModule injects the live feature configuration into the region reader, which chooses the legacy catalog per operation after refresh. The writable legacy client factory is injected and invoked lazily; infrastructure constructors do not build SDK clients.
+
+Azure storage and volume mounting permissions for `StorageManagementClient` and Container Apps environment storage links are documented in [Azure Storage RBAC](azure-storage-rbac.md).
