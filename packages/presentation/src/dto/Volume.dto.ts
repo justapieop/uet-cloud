@@ -1,7 +1,7 @@
 import type { DeploymentVolume, VolumeAccessMode } from "@kumo/domain";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Exclude, Expose } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Matches, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from "class-validator";
 
 export class DeploymentVolumeDto {
   @ApiProperty({ example: "data", description: "Volume identifier name (2-32 lowercase letters, digits, or hyphens)" })
@@ -19,9 +19,10 @@ export class DeploymentVolumeDto {
   @IsString()
   public sub_path?: string;
 
-  @ApiProperty({ example: 5, description: "Volume capacity in GiB" })
+  @ApiProperty({ example: 32, description: "Volume capacity in GiB (32 to 262,144 GiB)" })
   @IsInt()
-  @Min(1)
+  @Min(32)
+  @Max(262144)
   public size_gb!: number;
 
   @ApiPropertyOptional({ enum: ["ReadWrite", "ReadOnly"], default: "ReadWrite" })

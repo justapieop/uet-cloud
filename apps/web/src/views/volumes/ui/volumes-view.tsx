@@ -1,6 +1,9 @@
 "use client";
 
-import { useState, type Dispatch, type JSX, type SetStateAction } from "react";
+import { useState, useTransition, type Dispatch, type JSX, type SetStateAction, type TransitionStartFunction } from "react";
+import { Button } from "@heroui/react";
+import { useRouter } from "next/navigation";
+import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { VolumeItem } from "@/entities/volume";
 import { CreateVolumeModal } from "./create-volume-modal";
 import { DeleteVolumeModal } from "./delete-volume-modal";
@@ -17,9 +20,18 @@ function formatDate(value: string): string {
 }
 
 export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
+  const router: AppRouterInstance = useRouter();
+  const [isRefreshing, startTransition]: [boolean, TransitionStartFunction] = useTransition();
   const [isCreateOpen, setIsCreateOpen]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [targetDeleteVolume, setTargetDeleteVolume]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
   const [deletedVolumeNames, setDeletedVolumeNames]: [string[], Dispatch<SetStateAction<string[]>>] = useState<string[]>([]);
+
+  function handleRefresh(): void {
+    startTransition((): void => {
+      setDeletedVolumeNames([]);
+      router.refresh();
+    });
+  }
 
   const effectiveVolumes: VolumeItem[] = volumes.filter((vol: VolumeItem): boolean => !deletedVolumeNames.includes(vol.name));
   const totalStorageGb: number = effectiveVolumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.size_gb, 0);
@@ -34,13 +46,38 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
             Persistent Azure File Shares to store files and state across container restarts and revisions.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={(): void => setIsCreateOpen(true)}
-          className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
-        >
-          <span aria-hidden="true">+</span> Create volume
-        </button>
+        <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-10 rounded-lg px-3.5 text-xs font-medium text-foreground"
+            isDisabled={isRefreshing}
+            onPress={handleRefresh}
+          >
+            <svg
+              className={`size-3.5 ${isRefreshing ? "animate-spin text-accent" : "text-muted-text"}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <span>{isRefreshing ? "Refreshing…" : "Refresh"}</span>
+          </Button>
+          <button
+            type="button"
+            onClick={(): void => setIsCreateOpen(true)}
+            className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+          >
+            <span aria-hidden="true">+</span> Create volume
+          </button>
+        </div>
       </div>
 
       {effectiveVolumes.length > 0 && (

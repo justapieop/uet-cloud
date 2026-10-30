@@ -67,7 +67,7 @@ export class InfraVolumeRepository implements VolumeRepository {
       id: record.id,
       userId: record.userId,
       name: record.name,
-      sizeGb: record.sizeGb,
+      sizeGb: typeof record.sizeGb === "number" && record.sizeGb < 32 ? 32 : (record.sizeGb ?? 32),
       region: record.region,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,

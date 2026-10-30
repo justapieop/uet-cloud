@@ -142,7 +142,7 @@ export function PersistentVolumes({ inputClass, labelClass, disabled }: Persiste
                           ))}
                         </select>
                         <input type="hidden" name="volume_name" value={selectedExistingVolume} />
-                        <input type="hidden" name="volume_size_gb" value={chosenVolume ? chosenVolume.size_gb : 5} />
+                        <input type="hidden" name="volume_size_gb" value={chosenVolume ? chosenVolume.size_gb : 32} />
                       </>
                     )}
                   </div>
@@ -237,9 +237,10 @@ export function PersistentVolumes({ inputClass, labelClass, disabled }: Persiste
                       name="volume_size_gb"
                       type="number"
                       required
-                      min="1"
+                      min="32"
+                      max="262144"
                       step="1"
-                      defaultValue="5"
+                      defaultValue="32"
                     />
                   </div>
 

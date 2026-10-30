@@ -2,6 +2,8 @@ import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 
 export const VOLUME_NAME_PATTERN: RegExp = /^[a-z][a-z0-9-]{0,30}[a-z0-9]$/;
+export const MIN_VOLUME_SIZE_GB: number = 32;
+export const MAX_VOLUME_SIZE_GB: number = 262144;
 
 export interface VolumeDetails {
   readonly id: string;
@@ -49,8 +51,14 @@ export class Volume extends Domain<VolumeDetails> {
       );
     }
 
-    if (!Number.isSafeInteger(this.details.sizeGb) || this.details.sizeGb < 1) {
-      return new InvalidDomainParams("Volume.sizeGb must be a positive integer in GiB");
+    if (
+      !Number.isSafeInteger(this.details.sizeGb) ||
+      this.details.sizeGb < MIN_VOLUME_SIZE_GB ||
+      this.details.sizeGb > MAX_VOLUME_SIZE_GB
+    ) {
+      return new InvalidDomainParams(
+        `Volume.sizeGb must be an integer between ${MIN_VOLUME_SIZE_GB} and ${MAX_VOLUME_SIZE_GB} GiB`,
+      );
     }
 
     if (isBlankStr(this.details.region)) {

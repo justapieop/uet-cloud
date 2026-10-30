@@ -34,7 +34,7 @@ export function AttachVolumeModal({
   const [name, setName]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [mountPath, setMountPath]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [subPath, setSubPath]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
-  const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(5);
+  const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(32);
   const [accessMode, setAccessMode]: ["ReadWrite" | "ReadOnly", Dispatch<SetStateAction<"ReadWrite" | "ReadOnly">>] = useState<"ReadWrite" | "ReadOnly">("ReadWrite");
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
 
@@ -71,7 +71,7 @@ export function AttachVolumeModal({
     setName("");
     setMountPath("");
     setSubPath("");
-    setSizeGb(5);
+    setSizeGb(32);
     setAccessMode("ReadWrite");
     setErrorMessage(null);
   }
@@ -94,7 +94,7 @@ export function AttachVolumeModal({
     }
 
     let finalName: string = "";
-    let finalSize: number = 5;
+    let finalSize: number = 32;
 
     if (mode === "existing") {
       const chosenVolume: VolumeItem | undefined = availableVolumes.find((v: VolumeItem): boolean => v.name === selectedVolumeName);
@@ -113,8 +113,8 @@ export function AttachVolumeModal({
         return;
       }
 
-      if (!Number.isInteger(finalSize) || finalSize < 1) {
-        setErrorMessage("Volume capacity must be a positive integer in GiB.");
+      if (!Number.isInteger(finalSize) || finalSize < 32 || finalSize > 262144) {
+        setErrorMessage("Volume capacity must be an integer between 32 and 262,144 GiB (256 TiB).");
         return;
       }
     }
@@ -256,7 +256,8 @@ export function AttachVolumeModal({
                   className={INPUT_CLASS}
                   type="number"
                   required
-                  min="1"
+                  min="32"
+                  max="262144"
                   step="1"
                   value={sizeGb}
                   onChange={(e: ChangeEvent<HTMLInputElement>): void => setSizeGb(Number(e.target.value))}

@@ -190,7 +190,7 @@ test("AzureProvider.createDeployment mounts volumes into template and creates st
   const volume: DeploymentVolume = {
     name: "data",
     mountPath: "/var/data",
-    sizeGb: 5,
+    sizeGb: 32,
     accessMode: "ReadWrite",
   };
 
@@ -210,7 +210,7 @@ test("AzureProvider.createDeployment mounts volumes into template and creates st
 
   assert.ok(events.includes("storage-getProperties"));
   assert.ok(!events.includes("storage-listKeys"));
-  assert.ok(events.includes("share-create:share-vol-data:5"));
+  assert.ok(events.includes("share-create:share-vol-data:32"));
   assert.ok(events.includes("env-storage-create:stg-sample-app-data:identity=system:hasKey=false"));
   assert.ok(events.includes("app-createOrUpdate"));
 });
@@ -221,7 +221,7 @@ test("AzureProvider.createDeployment provisions FileStorage StandardV2_LRS accou
   const volume: DeploymentVolume = {
     name: "data",
     mountPath: "/var/data",
-    sizeGb: 5,
+    sizeGb: 32,
     accessMode: "ReadWrite",
   };
 
@@ -248,7 +248,7 @@ test("AzureProvider.attachVolume adds volume to running app and updates revision
   const volume: DeploymentVolume = {
     name: "logs",
     mountPath: "/var/logs",
-    sizeGb: 3,
+    sizeGb: 32,
     accessMode: "ReadWrite",
   };
 
@@ -275,7 +275,7 @@ test("AzureProvider.detachVolume removes volume and deletes file share when dele
   const { provider, events, apps } = createSetup({ existingApp: true });
 
   // Attach a volume first
-  const volume: DeploymentVolume = { name: "logs", mountPath: "/var/logs", sizeGb: 3 };
+  const volume: DeploymentVolume = { name: "logs", mountPath: "/var/logs", sizeGb: 32 };
   await provider.attachVolume({
     userId: "12345",
     appName: "sample-app",
@@ -350,7 +350,7 @@ test("AzureProvider.attachVolume registers environment storage via resources.cre
   const volume: DeploymentVolume = {
     name: "data",
     mountPath: "/var/data",
-    sizeGb: 10,
+    sizeGb: 32,
     accessMode: "ReadWrite",
   };
 

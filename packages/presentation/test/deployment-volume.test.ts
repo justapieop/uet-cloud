@@ -73,7 +73,7 @@ test("DeploymentsController.attachVolume returns DeploymentResponseDto and inval
   const volumeDto: DeploymentVolumeDto = new DeploymentVolumeDto();
   volumeDto.name = "data";
   volumeDto.mount_path = "/var/data";
-  volumeDto.size_gb = 5;
+  volumeDto.size_gb = 32;
   volumeDto.access_mode = "ReadWrite";
 
   const attachCase: AttachVolumeCase = {
@@ -107,7 +107,7 @@ test("DeploymentsController.attachVolume returns DeploymentResponseDto and inval
   assert.equal(response.volumes.length, 1);
   assert.equal(response.volumes[0]?.name, "data");
   assert.equal(response.volumes[0]?.mountPath, "/var/data");
-  assert.equal(response.volumes[0]?.sizeGb, 5);
+  assert.equal(response.volumes[0]?.sizeGb, 32);
   assert.deepEqual(invalidatedUsers, ["user-123"]);
 });
 
@@ -115,7 +115,7 @@ test("DeploymentsController.attachVolume maps InvalidDeploymentStatusError and D
   const volumeDto: DeploymentVolumeDto = new DeploymentVolumeDto();
   volumeDto.name = "data";
   volumeDto.mount_path = "/var/data";
-  volumeDto.size_gb = 5;
+  volumeDto.size_gb = 32;
 
   const attachStatusErrCase: AttachVolumeCase = {
     exec: async (): Promise<Deployment> => {
@@ -204,7 +204,7 @@ test("DeploymentsController.detachVolume removes volume, returns DeploymentRespo
 
 test("DeploymentsController.listVolumes returns list of DeploymentVolumeResponseDto", async (): Promise<void> => {
   const volumes: DeploymentVolume[] = [
-    { name: "data", mountPath: "/var/data", sizeGb: 5, accessMode: "ReadWrite" },
+    { name: "data", mountPath: "/var/data", sizeGb: 32, accessMode: "ReadWrite" },
   ];
 
   const listCase: ListVolumesCase = {
@@ -235,7 +235,7 @@ test("DeploymentsController.listVolumes returns list of DeploymentVolumeResponse
   assert.equal(response.length, 1);
   assert.equal(response[0]?.name, "data");
   assert.equal(response[0]?.mountPath, "/var/data");
-  assert.equal(response[0]?.sizeGb, 5);
+  assert.equal(response[0]?.sizeGb, 32);
   assert.equal(response[0]?.accessMode, "ReadWrite");
 });
 

@@ -19,7 +19,7 @@ const LABEL_CLASS: string = "block text-xs font-medium text-foreground";
 export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): JSX.Element | null {
   const router: AppRouterInstance = useRouter();
   const [name, setName]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
-  const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(5);
+  const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(32);
   const [isSubmitting, setIsSubmitting]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
 
@@ -27,7 +27,7 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
 
   function resetForm(): void {
     setName("");
-    setSizeGb(5);
+    setSizeGb(32);
     setErrorMessage(null);
     setIsSubmitting(false);
   }
@@ -47,8 +47,8 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
       return;
     }
 
-    if (!Number.isInteger(sizeGb) || sizeGb < 1) {
-      setErrorMessage("Capacity must be a positive integer in GiB.");
+    if (!Number.isInteger(sizeGb) || sizeGb < 32 || sizeGb > 262144) {
+      setErrorMessage("Capacity must be an integer between 32 and 262,144 GiB (256 TiB).");
       return;
     }
 
@@ -133,12 +133,16 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
               className={INPUT_CLASS}
               type="number"
               required
-              min="1"
+              min="32"
+              max="262144"
               step="1"
               value={sizeGb}
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setSizeGb(Number(e.target.value))}
               disabled={isSubmitting}
             />
+            <span className="mt-1 block text-[11px] text-muted-text">
+              Between 32 GiB and 262,144 GiB (256 TiB).
+            </span>
           </div>
 
           {errorMessage && (

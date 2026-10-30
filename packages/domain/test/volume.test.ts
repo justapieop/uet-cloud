@@ -6,7 +6,7 @@ const VALID_DETAILS: VolumeDetails = {
   id: "vol-001",
   userId: "user-123",
   name: "data-volume",
-  sizeGb: 10,
+  sizeGb: 32,
   region: "eastus2",
 };
 
@@ -15,7 +15,7 @@ test("Volume constructs and exposes properties when valid", (): void => {
   assert.equal(volume.id, "vol-001");
   assert.equal(volume.userId, "user-123");
   assert.equal(volume.name, "data-volume");
-  assert.equal(volume.sizeGb, 10);
+  assert.equal(volume.sizeGb, 32);
   assert.equal(volume.region, "eastus2");
   assert.ok(volume.createdAt instanceof Date);
   assert.ok(volume.updatedAt instanceof Date);
@@ -57,7 +57,7 @@ test("Volume rejects invalid names", (): void => {
   }
 });
 
-test("Volume rejects non-positive or non-integer sizeGb", (): void => {
+test("Volume rejects out-of-range or non-integer sizeGb", (): void => {
   assert.throws(
     (): Volume => new Volume({ ...VALID_DETAILS, sizeGb: 0 }),
     (error: unknown): boolean => error instanceof InvalidDomainParams && error.message.includes("Volume.sizeGb"),
@@ -70,6 +70,16 @@ test("Volume rejects non-positive or non-integer sizeGb", (): void => {
 
   assert.throws(
     (): Volume => new Volume({ ...VALID_DETAILS, sizeGb: 2.5 }),
+    (error: unknown): boolean => error instanceof InvalidDomainParams && error.message.includes("Volume.sizeGb"),
+  );
+
+  assert.throws(
+    (): Volume => new Volume({ ...VALID_DETAILS, sizeGb: 31 }),
+    (error: unknown): boolean => error instanceof InvalidDomainParams && error.message.includes("Volume.sizeGb"),
+  );
+
+  assert.throws(
+    (): Volume => new Volume({ ...VALID_DETAILS, sizeGb: 262145 }),
     (error: unknown): boolean => error instanceof InvalidDomainParams && error.message.includes("Volume.sizeGb"),
   );
 });

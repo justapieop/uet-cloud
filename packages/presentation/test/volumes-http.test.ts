@@ -39,7 +39,7 @@ test("VolumesController.list returns list of VolumeItemResponseDto", async (): P
     id: "00000000-0000-4000-8000-000000000001",
     userId: "user-123",
     name: "shared-data",
-    sizeGb: 5,
+    sizeGb: 32,
     region: "eastasia",
   });
   const mockItem: UserVolumeItem = {
@@ -60,7 +60,7 @@ test("VolumesController.list returns list of VolumeItemResponseDto", async (): P
   const result: VolumeItemResponseDto[] = await controller.list(createMockRequest());
   assert.equal(result.length, 1);
   assert.equal(result[0]?.name, "shared-data");
-  assert.equal(result[0]?.sizeGb, 5);
+  assert.equal(result[0]?.sizeGb, 32);
   assert.deepEqual(result[0]?.attachedDeployments, [{ id: "dep-1", name: "my-app" }]);
 });
 
@@ -69,7 +69,7 @@ test("VolumesController.create returns VolumeItemResponseDto", async (): Promise
     id: "00000000-0000-4000-8000-000000000002",
     userId: "user-123",
     name: "new-data",
-    sizeGb: 10,
+    sizeGb: 32,
     region: "eastasia",
   });
 
@@ -85,12 +85,12 @@ test("VolumesController.create returns VolumeItemResponseDto", async (): Promise
 
   const dto: CreateStandaloneVolumeDto = new CreateStandaloneVolumeDto();
   dto.name = "new-data";
-  dto.size_gb = 10;
+  dto.size_gb = 32;
   dto.region = "eastasia";
 
   const result: VolumeItemResponseDto = await controller.create(createMockRequest(), dto);
   assert.equal(result.name, "new-data");
-  assert.equal(result.sizeGb, 10);
+  assert.equal(result.sizeGb, 32);
   assert.deepEqual(result.attachedDeployments, []);
 });
 
@@ -103,7 +103,7 @@ test("VolumesController.create rejects non-eastasia region", async (): Promise<v
 
   const dto: CreateStandaloneVolumeDto = new CreateStandaloneVolumeDto();
   dto.name = "new-data";
-  dto.size_gb = 10;
+  dto.size_gb = 32;
   dto.region = "southeastasia";
 
   await assert.rejects(
@@ -127,7 +127,7 @@ test("VolumesController.create maps VolumeAlreadyExists and DeploymentQuotaExcee
 
   const dto: CreateStandaloneVolumeDto = new CreateStandaloneVolumeDto();
   dto.name = "dup";
-  dto.size_gb = 5;
+  dto.size_gb = 32;
 
   await assert.rejects(
     controllerDuplicate.create(createMockRequest(), dto),

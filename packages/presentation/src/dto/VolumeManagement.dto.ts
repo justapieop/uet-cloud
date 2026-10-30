@@ -2,7 +2,7 @@ import type { UserVolumeItem } from "@kumo/application";
 import type { Volume } from "@kumo/domain";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Exclude, Expose } from "class-transformer";
-import { IsInt, IsOptional, IsString, Matches, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Matches, Max, Min } from "class-validator";
 
 export class CreateStandaloneVolumeDto {
   @ApiProperty({ example: "shared-data", description: "Volume identifier name (2-32 lowercase alphanumeric or hyphens)" })
@@ -10,9 +10,10 @@ export class CreateStandaloneVolumeDto {
   @Matches(/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/)
   public name!: string;
 
-  @ApiProperty({ example: 5, description: "Volume capacity in GiB" })
+  @ApiProperty({ example: 32, description: "Volume capacity in GiB (32 to 262,144 GiB)" })
   @IsInt()
-  @Min(1)
+  @Min(32)
+  @Max(262144)
   public size_gb!: number;
 
   @ApiPropertyOptional({ example: "eastasia", description: "Target deployment region" })

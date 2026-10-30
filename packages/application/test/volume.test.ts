@@ -60,7 +60,7 @@ const TEST_PLAN: Plan = new Plan({
   vcpu: 1,
   memory: 2,
   deployments: 5,
-  disk: 10,
+  disk: 100,
   stripeProductId: "prod_123",
 });
 
@@ -113,7 +113,7 @@ test("AttachVolumeCase attaches volume to a running deployment within quota", as
   const volumeToAttach: DeploymentVolume = {
     name: "data",
     mountPath: "/var/data",
-    sizeGb: 5,
+    sizeGb: 32,
     accessMode: "ReadWrite",
   };
 
@@ -158,7 +158,7 @@ test("AttachVolumeCase rejects attaching when deployment status is invalid", asy
       useCase.exec({
         userId: "user-1",
         deploymentId: "dep-1",
-        volume: { name: "data", mountPath: "/var/data", sizeGb: 2 },
+        volume: { name: "data", mountPath: "/var/data", sizeGb: 32 },
       }),
       (err: unknown): boolean => err instanceof InvalidDeploymentStatusError,
     );
@@ -174,7 +174,7 @@ test("AttachVolumeCase rejects when volume exceeds plan disk quota", async (): P
       maxMemory: 1,
       minScaling: 0,
       maxScaling: 2,
-      volumes: [{ name: "existing", mountPath: "/mnt/existing", sizeGb: 8 }],
+      volumes: [{ name: "existing", mountPath: "/mnt/existing", sizeGb: 64 }],
     },
   });
 
@@ -215,7 +215,7 @@ test("AttachVolumeCase rejects when volume exceeds plan disk quota", async (): P
     useCase.exec({
       userId: "user-1",
       deploymentId: "dep-1",
-      volume: { name: "data2", mountPath: "/mnt/data2", sizeGb: 5 }, // 8 + 5 = 13 > 10
+      volume: { name: "data2", mountPath: "/mnt/data2", sizeGb: 40 }, // 64 + 40 = 104 > 100
     }),
     (err: unknown): boolean => err instanceof DeploymentQuotaExceeded,
   );
@@ -231,8 +231,8 @@ test("DetachVolumeCase detaches volume from deployment", async (): Promise<void>
       minScaling: 0,
       maxScaling: 2,
       volumes: [
-        { name: "data", mountPath: "/var/data", sizeGb: 2 },
-        { name: "logs", mountPath: "/var/logs", sizeGb: 3 },
+        { name: "data", mountPath: "/var/data", sizeGb: 32 },
+        { name: "logs", mountPath: "/var/logs", sizeGb: 32 },
       ],
     },
   });
@@ -244,7 +244,7 @@ test("DetachVolumeCase detaches volume from deployment", async (): Promise<void>
     id: "vol-data-id",
     userId: "user-1",
     name: "data",
-    sizeGb: 2,
+    sizeGb: 32,
     region: "eastasia",
   });
 
@@ -305,7 +305,7 @@ test("DetachVolumeCase throws VolumeInUseError when deleteData=true and volume i
       maxMemory: 1,
       minScaling: 0,
       maxScaling: 2,
-      volumes: [{ name: "shared-data", mountPath: "/data", sizeGb: 5 }],
+      volumes: [{ name: "shared-data", mountPath: "/data", sizeGb: 32 }],
     },
   });
 
@@ -319,7 +319,7 @@ test("DetachVolumeCase throws VolumeInUseError when deleteData=true and volume i
       maxMemory: 1,
       minScaling: 0,
       maxScaling: 2,
-      volumes: [{ name: "shared-data", mountPath: "/data", sizeGb: 5 }],
+      volumes: [{ name: "shared-data", mountPath: "/data", sizeGb: 32 }],
     },
   });
 
@@ -378,7 +378,7 @@ test("DetachVolumeCase throws when volume does not exist or deployment status is
 });
 
 test("ListVolumesCase returns volume list for deployment", async (): Promise<void> => {
-  const volumes: readonly DeploymentVolume[] = [{ name: "data", mountPath: "/var/data", sizeGb: 2 }];
+  const volumes: readonly DeploymentVolume[] = [{ name: "data", mountPath: "/var/data", sizeGb: 32 }];
   const storedDeployment: Deployment = createTestDeployment({
     spec: {
       repo: "https://github.com/owner/repo",
@@ -453,16 +453,16 @@ test("CreateVolumeCase creates standalone volume within disk quota and calls vol
   const created: Volume = await useCase.exec({
     userId: "user-1",
     name: "shared-data",
-    sizeGb: 5,
+    sizeGb: 32,
     region: "eastus2",
   });
 
   assert.equal(created.name, "shared-data");
-  assert.equal(created.sizeGb, 5);
+  assert.equal(created.sizeGb, 32);
   assert.equal(created.region, "eastus2");
   assert.ok(savedVolume !== null);
   assert.equal((savedVolume as Volume).name, "shared-data");
-  assert.deepEqual(storageCreated, [{ volumeName: "shared-data", sizeGb: 5 }]);
+  assert.deepEqual(storageCreated, [{ volumeName: "shared-data", sizeGb: 32 }]);
 });
 
 test("CreateVolumeCase rejects when volume name already exists or quota exceeded", async (): Promise<void> => {
@@ -470,7 +470,7 @@ test("CreateVolumeCase rejects when volume name already exists or quota exceeded
     id: "vol-1",
     userId: "user-1",
     name: "existing-data",
-    sizeGb: 8,
+    sizeGb: 64,
     region: "eastus2",
   });
 
@@ -495,7 +495,7 @@ test("CreateVolumeCase rejects when volume name already exists or quota exceeded
 
   const useCaseDuplicate: CreateVolumeCase = new CreateVolumeCase(uowDuplicate, subscriptions, volumeManager);
   await assert.rejects(
-    useCaseDuplicate.exec({ userId: "user-1", name: "existing-data", sizeGb: 2, region: "eastus2" }),
+    useCaseDuplicate.exec({ userId: "user-1", name: "existing-data", sizeGb: 32, region: "eastus2" }),
     (err: unknown): boolean => err instanceof VolumeAlreadyExists,
   );
 
@@ -511,7 +511,7 @@ test("CreateVolumeCase rejects when volume name already exists or quota exceeded
         volumes: {
           ...emptyRepositories().volumes,
           findByNameAndUserId: async (): Promise<Volume | null> => null,
-          findByUserId: async (): Promise<Volume[]> => [existingVolume], // 8 GiB used out of 10
+          findByUserId: async (): Promise<Volume[]> => [existingVolume], // 64 GiB used out of 100
         },
         plans: { ...emptyRepositories().plans, findActiveByStripeProductIds: async (): Promise<Plan[]> => [TEST_PLAN] },
       };
@@ -521,14 +521,14 @@ test("CreateVolumeCase rejects when volume name already exists or quota exceeded
 
   const useCaseQuota: CreateVolumeCase = new CreateVolumeCase(uowQuota, subscriptions, volumeManager);
   await assert.rejects(
-    useCaseQuota.exec({ userId: "user-1", name: "another-vol", sizeGb: 5, region: "eastus2" }), // 8 + 5 = 13 > 10
+    useCaseQuota.exec({ userId: "user-1", name: "another-vol", sizeGb: 40, region: "eastus2" }), // 64 + 40 = 104 > 100
     (err: unknown): boolean => err instanceof DeploymentQuotaExceeded,
   );
 });
 
 test("ListUserVolumesCase returns user volumes with attached deployment references", async (): Promise<void> => {
-  const volA: Volume = new Volume({ id: "v1", userId: "user-1", name: "vol-a", sizeGb: 5, region: "eastus2" });
-  const volB: Volume = new Volume({ id: "v2", userId: "user-1", name: "vol-b", sizeGb: 2, region: "eastus2" });
+  const volA: Volume = new Volume({ id: "v1", userId: "user-1", name: "vol-a", sizeGb: 32, region: "eastus2" });
+  const volB: Volume = new Volume({ id: "v2", userId: "user-1", name: "vol-b", sizeGb: 32, region: "eastus2" });
 
   const dep1: Deployment = createTestDeployment({
     id: "d1",
@@ -540,7 +540,7 @@ test("ListUserVolumesCase returns user volumes with attached deployment referenc
       maxMemory: 1,
       minScaling: 0,
       maxScaling: 1,
-      volumes: [{ name: "vol-a", mountPath: "/mnt/data", sizeGb: 5 }],
+      volumes: [{ name: "vol-a", mountPath: "/mnt/data", sizeGb: 32 }],
     },
   });
 
@@ -554,7 +554,7 @@ test("ListUserVolumesCase returns user volumes with attached deployment referenc
       maxMemory: 1,
       minScaling: 0,
       maxScaling: 1,
-      volumes: [{ name: "vol-a", mountPath: "/mnt/shared", sizeGb: 5 }],
+      volumes: [{ name: "vol-a", mountPath: "/mnt/shared", sizeGb: 32 }],
     },
   });
 
@@ -584,7 +584,7 @@ test("ListUserVolumesCase returns user volumes with attached deployment referenc
 });
 
 test("DeleteVolumeCase deletes unattached volume and calls volumeManager", async (): Promise<void> => {
-  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "unattached-vol", sizeGb: 5, region: "eastus2" });
+  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "unattached-vol", sizeGb: 32, region: "eastus2" });
   let deletedId: string | null = null;
   let deletedStorageName: string | null = null;
 
@@ -618,7 +618,7 @@ test("DeleteVolumeCase deletes unattached volume and calls volumeManager", async
 });
 
 test("DeleteVolumeCase throws VolumeInUseError when volume is attached to an active deployment", async (): Promise<void> => {
-  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "in-use-vol", sizeGb: 5, region: "eastus2" });
+  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "in-use-vol", sizeGb: 32, region: "eastus2" });
   const dep: Deployment = createTestDeployment({
     id: "d1",
     name: "active-app",
@@ -630,7 +630,7 @@ test("DeleteVolumeCase throws VolumeInUseError when volume is attached to an act
       maxMemory: 1,
       minScaling: 0,
       maxScaling: 1,
-      volumes: [{ name: "in-use-vol", mountPath: "/data", sizeGb: 5 }],
+      volumes: [{ name: "in-use-vol", mountPath: "/data", sizeGb: 32 }],
     },
   });
 

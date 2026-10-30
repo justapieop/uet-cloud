@@ -53,10 +53,10 @@ export async function createStandaloneVolumeAction(input: {
     };
   }
 
-  if (!Number.isInteger(sizeGb) || sizeGb < 1) {
+  if (!Number.isInteger(sizeGb) || sizeGb < 32 || sizeGb > 262144) {
     return {
       success: false,
-      error: "Volume capacity must be a positive integer in GiB.",
+      error: "Volume capacity must be an integer between 32 and 262,144 GiB (256 TiB).",
     };
   }
 

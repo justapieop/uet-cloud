@@ -1,5 +1,6 @@
 import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
+import { MIN_VOLUME_SIZE_GB, MAX_VOLUME_SIZE_GB } from "./volume.js";
 
 export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
 
@@ -36,8 +37,14 @@ export function validateDeploymentVolumes(volumes?: readonly DeploymentVolume[],
     if (vol.subPath !== undefined && (typeof vol.subPath !== "string" || vol.subPath.startsWith("/") || vol.subPath.includes(":") || vol.subPath.includes("\0") || vol.subPath.split("/").includes(".."))) {
       return new InvalidDomainParams("Volume subPath must be a relative path without leading slash, ':' or parent traversal");
     }
-    if (!Number.isInteger(vol.sizeGb) || vol.sizeGb < 1) {
-      return new InvalidDomainParams("Volume sizeGb must be a positive integer");
+    if (
+      !Number.isInteger(vol.sizeGb) ||
+      vol.sizeGb < MIN_VOLUME_SIZE_GB ||
+      vol.sizeGb > MAX_VOLUME_SIZE_GB
+    ) {
+      return new InvalidDomainParams(
+        `Volume sizeGb must be an integer between ${MIN_VOLUME_SIZE_GB} and ${MAX_VOLUME_SIZE_GB} GiB`,
+      );
     }
     if (vol.accessMode !== undefined && vol.accessMode !== "ReadWrite" && vol.accessMode !== "ReadOnly") {
       return new InvalidDomainParams("Volume accessMode must be 'ReadWrite' or 'ReadOnly'");

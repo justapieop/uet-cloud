@@ -81,8 +81,8 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
     if (!/^\/[a-zA-Z0-9_./-]+$/.test(vMountPath)) {
       return { error: `Volume ${index + 1}: mount path must be an absolute path starting with /.` };
     }
-    if (!Number.isInteger(vSize) || vSize < 1) {
-      return { error: `Volume ${index + 1}: capacity must be a positive integer in GiB.` };
+    if (!Number.isInteger(vSize) || vSize < 32 || vSize > 262144) {
+      return { error: `Volume ${index + 1}: capacity must be an integer between 32 and 262,144 GiB (256 TiB).` };
     }
     if (vAccessMode !== "ReadWrite" && vAccessMode !== "ReadOnly") {
       return { error: `Volume ${index + 1}: access mode must be ReadWrite or ReadOnly.` };
