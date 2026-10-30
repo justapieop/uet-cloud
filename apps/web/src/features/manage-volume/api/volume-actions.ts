@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { apiClient } from "@/shared/api/server";
+import type { VolumeItem } from "@/entities/volume";
 import { VOLUME_NAME_REGEX, type VolumeActionResult } from "../model/types";
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -147,4 +148,23 @@ export async function deleteStandaloneVolumeAction(name: string): Promise<Volume
   } catch (error: unknown) {
     return { success: false, error: extractErrorMessage(error, "Failed to connect to volume service. Please try again.") };
   }
+}
+
+export async function getUserVolumesAction(): Promise<VolumeItem[]> {
+  const cookieHeader: string | null = (await headers()).get("cookie");
+  if (!cookieHeader) return [];
+
+  try {
+    const result: { data?: VolumeItem[]; response: Response } = await apiClient.GET("/volumes", {
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (result.response.ok && result.data) {
+      return result.data;
+    }
+  } catch {
+    // Return empty array
+  }
+  return [];
 }
