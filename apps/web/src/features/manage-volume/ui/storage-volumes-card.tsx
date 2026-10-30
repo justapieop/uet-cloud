@@ -34,10 +34,19 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
   const [dialogMode, setDialogMode]: ["detach" | "delete" | null, Dispatch<SetStateAction<"detach" | "delete" | null>>] = useState<"detach" | "delete" | null>(null);
   const [pendingAttachment, setPendingAttachment]: [PendingAttachment | null, Dispatch<SetStateAction<PendingAttachment | null>>] = useState<PendingAttachment | null>(null);
   const [pendingOperation, setPendingOperation]: [PendingVolumeOperation | null, Dispatch<SetStateAction<PendingVolumeOperation | null>>] = useState<PendingVolumeOperation | null>(null);
+  const [attachedVolumes, setAttachedVolumes]: [DeploymentVolume[], Dispatch<SetStateAction<DeploymentVolume[]>>] = useState<DeploymentVolume[]>([]);
   const [removedVolumeNames, setRemovedVolumeNames]: [string[], Dispatch<SetStateAction<string[]>>] = useState<string[]>([]);
   const [, startTransition]: [boolean, TransitionStartFunction] = useTransition();
 
-  const volumes: readonly DeploymentVolume[] = (deployment.volumes ?? []).filter(
+  const baseVolumes: readonly DeploymentVolume[] = deployment.volumes ?? [];
+  const mergedVolumes: DeploymentVolume[] = [
+    ...baseVolumes,
+    ...attachedVolumes.filter(
+      (attached: DeploymentVolume): boolean =>
+        !baseVolumes.some((b: DeploymentVolume): boolean => b.name === attached.name),
+    ),
+  ];
+  const volumes: readonly DeploymentVolume[] = mergedVolumes.filter(
     (vol: DeploymentVolume): boolean => !removedVolumeNames.includes(vol.name),
   );
   const canAttach: boolean = deployment.status === "RUNNING" || deployment.status === "STOPPED";
@@ -65,7 +74,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
   function handleStartAttach(input: AttachVolumeInput): void {
     setPendingAttachment({ volume: input, status: "attaching" });
 
-    startTransition(async (): Promise<void> => {
+    void (async (): Promise<void> => {
       const result: VolumeActionResult = await attachVolumeAction(deployment.id, input);
       if (!result.success) {
         setPendingAttachment({
@@ -74,10 +83,21 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
           errorMessage: result.error ?? "Failed to attach volume. Please try again.",
         });
       } else {
+        const newVolume: DeploymentVolume = {
+          name: input.name,
+          mount_path: input.mount_path,
+          sub_path: input.sub_path,
+          size_gb: Number(input.size_gb),
+          access_mode: input.access_mode ?? "ReadWrite",
+        };
+        setAttachedVolumes((prev: DeploymentVolume[]): DeploymentVolume[] => [...prev, newVolume]);
+        setRemovedVolumeNames((prev: string[]): string[] => prev.filter((name: string): boolean => name !== input.name));
         setPendingAttachment(null);
-        router.refresh();
+        startTransition((): void => {
+          router.refresh();
+        });
       }
-    });
+    })();
   }
 
   function handleRetryAttach(): void {
@@ -92,7 +112,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
     const isDelete: boolean = mode === "delete";
     setPendingOperation({ volumeName, mode, status: "in-progress" });
 
-    startTransition(async (): Promise<void> => {
+    void (async (): Promise<void> => {
       const result: VolumeActionResult = await detachVolumeAction(deployment.id, volumeName, isDelete);
       if (!result.success) {
         setPendingOperation({
@@ -103,10 +123,15 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
         });
       } else {
         setRemovedVolumeNames((prev: string[]): string[] => [...prev, volumeName]);
+        setAttachedVolumes((prev: DeploymentVolume[]): DeploymentVolume[] =>
+          prev.filter((v: DeploymentVolume): boolean => v.name !== volumeName),
+        );
         setPendingOperation(null);
-        router.refresh();
+        startTransition((): void => {
+          router.refresh();
+        });
       }
-    });
+    })();
   }
 
   function handleRetryOperation(): void {
