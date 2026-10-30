@@ -23,6 +23,7 @@
     "dev": "next dev",
     "prebuild": "npm run build --workspace @kumo/rest",
     "build": "next build",
+    "test:metrics": "node --experimental-strip-types --test src/entities/deployment/model/metrics.test.ts",
     "start": "next start"
   }
 }
