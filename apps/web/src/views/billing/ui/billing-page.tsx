@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { Plan } from "@/entities/plan";
 import { getUserPlan, type UserPlanResult } from "@/entities/plan/server";
+import { CancellationControl } from "@/features/manage-own-subscription";
 import {
   getMySubscriptions,
   type CustomerSubscription,
@@ -127,6 +128,14 @@ function SubscriptionContent({ result }: SubscriptionContentProps): JSX.Element 
               ? `Cancellation scheduled: ${formatCancellationDate(subscription.cancel_at)}.`
               : "No period-end cancellation is scheduled."}
           </p>
+          {result.source === "demo" && (
+            <div className="mt-4">
+              <CancellationControl
+                subscriptionId={subscription.id}
+                scheduled={subscription.cancel_at_period_end}
+              />
+            </div>
+          )}
         </article>
       ))}
     </div>
