@@ -40,7 +40,8 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
   const volumes: readonly DeploymentVolume[] = (deployment.volumes ?? []).filter(
     (vol: DeploymentVolume): boolean => !removedVolumeNames.includes(vol.name),
   );
-  const isEditable: boolean = deployment.status === "RUNNING" || deployment.status === "STOPPED";
+  const canAttach: boolean = deployment.status === "RUNNING" || deployment.status === "STOPPED";
+  const canDetachOrDelete: boolean = deployment.status === "RUNNING" || deployment.status === "STOPPED" || deployment.status === "FAILED";
   const isAttaching: boolean = pendingAttachment?.status === "attaching";
   const isModifying: boolean = pendingOperation?.status === "in-progress";
   const isOperating: boolean = isAttaching || isModifying;
@@ -146,7 +147,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
             type="button"
             variant="secondary"
             size="sm"
-            isDisabled={!isEditable || isOperating}
+            isDisabled={!canAttach || isOperating}
             onPress={(): void => setIsAttachOpen(true)}
             aria-label="Attach new volume"
           >
@@ -155,11 +156,20 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
         </div>
       </div>
 
-      {!isEditable && (
+      {!canAttach && !canDetachOrDelete && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
           <span className="font-bold">!</span>
           <span>
-            Volumes can only be attached, detached, or deleted when the deployment is in <strong>RUNNING</strong> or <strong>STOPPED</strong> status.
+            Volumes can only be attached, detached, or deleted when the deployment is in <strong>RUNNING</strong>, <strong>STOPPED</strong>, or <strong>FAILED</strong> status.
+          </span>
+        </div>
+      )}
+
+      {deployment.status === "FAILED" && (
+        <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
+          <span className="font-bold">!</span>
+          <span>
+            Deployment failed. You can detach or delete volumes to release resources, or fix deployment issues.
           </span>
         </div>
       )}
@@ -207,7 +217,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
       {volumes.length === 0 && !isAttaching ? (
         <div className="mt-5 rounded-lg border border-dashed border-surface-border p-6 text-center">
           <p className="text-xs text-muted-text">No persistent storage volumes attached to this deployment.</p>
-          {isEditable && (
+          {canAttach && (
             <p className="mt-1 text-[11px] text-muted-dark">
               Click &ldquo;+ Attach Volume&rdquo; above to create and mount persistent storage.
             </p>
@@ -333,7 +343,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
                     type="button"
                     variant="ghost"
                     size="sm"
-                    isDisabled={!isEditable || isOperating}
+                    isDisabled={!canDetachOrDelete || isOperating}
                     onPress={(): void => openDetachDialog(vol.name)}
                     aria-label={`Detach volume ${vol.name}`}
                   >
@@ -343,7 +353,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
                     type="button"
                     variant="danger"
                     size="sm"
-                    isDisabled={!isEditable || isOperating}
+                    isDisabled={!canDetachOrDelete || isOperating}
                     onPress={(): void => openDeleteDialog(vol.name)}
                     aria-label={`Delete volume and data ${vol.name}`}
                   >

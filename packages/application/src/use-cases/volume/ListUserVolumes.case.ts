@@ -25,6 +25,8 @@ export class ListUserVolumesCase {
       return volumes.map((volume: Volume): UserVolumeItem => {
         const attachedDeployments: { id: string; name: string }[] = deployments
           .filter((d: Deployment): boolean =>
+            d.status !== "DELETED" &&
+            d.status !== "FAILED" &&
             Boolean(d.spec?.volumes?.some((v: DeploymentVolume): boolean => v.name === volume.name)),
           )
           .map((d: Deployment): { id: string; name: string } => ({ id: d.id, name: d.name }));

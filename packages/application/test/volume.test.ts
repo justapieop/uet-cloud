@@ -18,6 +18,7 @@ import {
   type StripeSubscriptionGateway,
   type UnitOfWork,
   type UnitOfWorkRepositories,
+  type UserVolumeItem,
   type VolumeManager,
 } from "../dist/index.js";
 import { emptyRepositories } from "./support/repositories.ts";
@@ -656,4 +657,139 @@ test("DeleteVolumeCase throws VolumeInUseError when volume is attached to an act
     useCase.exec({ userId: "user-1", volumeName: "in-use-vol" }),
     (err: unknown): boolean => err instanceof VolumeInUseError && err.message.includes("active-app"),
   );
+});
+
+test("ListUserVolumesCase ignores FAILED and DELETED deployments", async (): Promise<void> => {
+  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "test1", sizeGb: 32, region: "eastasia" });
+  const failedDep: Deployment = createTestDeployment({
+    id: "d1",
+    name: "test01",
+    status: "FAILED",
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 80,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 1,
+      volumes: [{ name: "test1", mountPath: "/mnt/1", sizeGb: 32 }],
+    },
+  });
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+        volumes: { ...emptyRepositories().volumes, findByUserId: async (): Promise<Volume[]> => [vol] },
+        deployment: { ...emptyRepositories().deployment, findByUserId: async (): Promise<Deployment[]> => [failedDep] },
+      };
+      return operation(repos);
+    },
+  };
+
+  const useCase: ListUserVolumesCase = new ListUserVolumesCase(uow);
+  const items: readonly UserVolumeItem[] = await useCase.exec({ userId: "user-1" });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.volume.name, "test1");
+  assert.deepEqual(items[0]?.attachedDeployments, []);
+});
+
+test("DeleteVolumeCase allows deleting volume when attached deployment is FAILED", async (): Promise<void> => {
+  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "test1", sizeGb: 32, region: "eastasia" });
+  const failedDep: Deployment = createTestDeployment({
+    id: "d1",
+    name: "test01",
+    status: "FAILED",
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 80,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 1,
+      volumes: [{ name: "test1", mountPath: "/mnt/1", sizeGb: 32 }],
+    },
+  });
+  let deletedId: string | null = null;
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => vol,
+          delete: async (id: string): Promise<void> => { deletedId = id; },
+        },
+        deployment: { ...emptyRepositories().deployment, findByUserId: async (): Promise<Deployment[]> => [failedDep] },
+      };
+      return operation(repos);
+    },
+  };
+
+  const volumeManager: VolumeManager = {
+    attachVolume: async (): Promise<void> => {},
+    detachVolume: async (): Promise<void> => {},
+    deleteStorageVolume: async (): Promise<void> => {},
+  };
+  const useCase: DeleteVolumeCase = new DeleteVolumeCase(uow, volumeManager);
+  await useCase.exec({ userId: "user-1", volumeName: "test1" });
+
+  assert.equal(deletedId as string | null, "v1");
+});
+
+test("DetachVolumeCase detaches volume from FAILED deployment even without resourceId", async (): Promise<void> => {
+  const failedDep: Deployment = createTestDeployment({
+    id: "d1",
+    name: "test01",
+    status: "FAILED",
+    resourceId: null,
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 80,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 1,
+      volumes: [{ name: "test1", mountPath: "/mnt/1", sizeGb: 32 }],
+    },
+  });
+  let savedDeployment: Deployment | null = null;
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => null,
+        },
+        deployment: {
+          ...emptyRepositories().deployment,
+          findByIdAndUserId: async (): Promise<Deployment | null> => failedDep,
+          save: async (d: Deployment): Promise<void> => { savedDeployment = d; },
+        },
+      };
+      return operation(repos);
+    },
+  };
+
+  const volumeManager: VolumeManager = {
+    attachVolume: async (): Promise<void> => {},
+    detachVolume: async (): Promise<void> => {},
+  };
+  const useCase: DetachVolumeCase = new DetachVolumeCase(uow, volumeManager);
+  const result: Deployment = await useCase.exec({
+    userId: "user-1",
+    deploymentId: "d1",
+    volumeName: "test1",
+    deleteData: false,
+  });
+
+  assert.equal(result.spec?.volumes?.length, 0);
+  assert.equal(savedDeployment !== null, true);
 });

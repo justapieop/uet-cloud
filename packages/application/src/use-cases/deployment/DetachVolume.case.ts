@@ -31,10 +31,13 @@ export class DetachVolumeCase {
       if (!user || user.suspended) throw new DeploymentSubscriptionRequired("An eligible user is required");
       const deployment: Deployment | null = await repo.deployment.findByIdAndUserId(input.deploymentId, input.userId);
       if (!deployment) throw new DeploymentNotFoundError("Deployment not found");
-      if (deployment.status !== "RUNNING" && deployment.status !== "STOPPED") {
-        throw new InvalidDeploymentStatusError("Deployment must be in RUNNING or STOPPED state to detach volume");
+      if (deployment.status !== "RUNNING" && deployment.status !== "STOPPED" && deployment.status !== "FAILED") {
+        throw new InvalidDeploymentStatusError("Deployment must be in RUNNING, STOPPED, or FAILED state to detach volume");
       }
-      if (!deployment.resourceId || !deployment.spec) {
+      if (!deployment.spec) {
+        throw new InvalidDeploymentStatusError("Deployment has no configuration specification");
+      }
+      if (!deployment.resourceId && deployment.status !== "FAILED") {
         throw new InvalidDeploymentStatusError("Deployment has no provisioned Azure resource");
       }
       const existingVolumes: readonly DeploymentVolume[] = deployment.spec.volumes ?? [];
@@ -49,6 +52,7 @@ export class DetachVolumeCase {
           .filter((d: Deployment): boolean =>
             d.id !== input.deploymentId &&
             d.status !== "DELETED" &&
+            d.status !== "FAILED" &&
             Boolean(d.spec?.volumes?.some((v: DeploymentVolume): boolean => v.name === input.volumeName)),
           )
           .map((d: Deployment): { id: string; name: string } => ({ id: d.id, name: d.name }));
@@ -59,15 +63,22 @@ export class DetachVolumeCase {
         }
       }
 
-      await this.volumeManager.detachVolume({
-        userId: input.userId,
-        appName: deployment.name,
-        deploymentId: deployment.id,
-        resourceId: deployment.resourceId,
-        volumeName: input.volumeName,
-        existingVolumes,
-        deleteData: input.deleteData,
-      });
+      if (deployment.resourceId) {
+        await this.volumeManager.detachVolume({
+          userId: input.userId,
+          appName: deployment.name,
+          deploymentId: deployment.id,
+          resourceId: deployment.resourceId,
+          volumeName: input.volumeName,
+          existingVolumes,
+          deleteData: input.deleteData,
+        });
+      } else if (input.deleteData && this.volumeManager.deleteStorageVolume) {
+        await this.volumeManager.deleteStorageVolume({
+          userId: input.userId,
+          volumeName: input.volumeName,
+        });
+      }
 
       if (input.deleteData) {
         const existingVolRecord: Volume | null = await repo.volumes.findByNameAndUserId(input.volumeName, input.userId);

@@ -28,7 +28,9 @@ export class DeleteVolumeCase {
       const deployments: Deployment[] = await repo.deployment.findByUserId(input.userId);
       const attachedDeployments: { id: string; name: string }[] = deployments
         .filter((d: Deployment): boolean =>
-          d.status !== "DELETED" && Boolean(d.spec?.volumes?.some((v: DeploymentVolume): boolean => v.name === input.volumeName)),
+          d.status !== "DELETED" &&
+          d.status !== "FAILED" &&
+          Boolean(d.spec?.volumes?.some((v: DeploymentVolume): boolean => v.name === input.volumeName)),
         )
         .map((d: Deployment): { id: string; name: string } => ({ id: d.id, name: d.name }));
 
