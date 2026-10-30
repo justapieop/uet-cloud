@@ -22,6 +22,7 @@ import {
   TriggerBuildCase,
   UNIT_OF_WORK,
   UpdateDeploymentCase,
+  VolumeOperationCoordinator,
   type UnitOfWork,
 } from "@kumo/application";
 import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
@@ -166,17 +167,18 @@ import { RouteReadCache } from "../common/ReadCache.js";
         UNIT_OF_WORK,
       ],
     },
+    VolumeOperationCoordinator,
     {
       provide: AttachVolumeCase,
-      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider): AttachVolumeCase =>
-        new AttachVolumeCase(uow, subscriptions, provider),
-      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider],
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider, coordinator: VolumeOperationCoordinator): AttachVolumeCase =>
+        new AttachVolumeCase(uow, subscriptions, provider, coordinator),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider, VolumeOperationCoordinator],
     },
     {
       provide: DetachVolumeCase,
-      useFactory: (uow: UnitOfWork, provider: AzureProvider): DetachVolumeCase =>
-        new DetachVolumeCase(uow, provider),
-      inject: [UNIT_OF_WORK, AzureProvider],
+      useFactory: (uow: UnitOfWork, provider: AzureProvider, coordinator: VolumeOperationCoordinator): DetachVolumeCase =>
+        new DetachVolumeCase(uow, provider, coordinator),
+      inject: [UNIT_OF_WORK, AzureProvider, VolumeOperationCoordinator],
     },
     {
       provide: ListVolumesCase,

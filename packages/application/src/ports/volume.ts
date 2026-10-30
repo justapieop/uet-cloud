@@ -21,3 +21,25 @@ export class VolumeInUseError extends Error {
     super(message);
   }
 }
+
+export class VolumeOperationConflictError extends Error {
+  public constructor(message?: string) {
+    super(message ?? "Another volume operation is already in progress for this deployment. Please wait until it completes.");
+    this.name = "VolumeOperationConflictError";
+  }
+}
+
+export class VolumeOperationCoordinator {
+  private readonly activeOperations: Map<string, string> = new Map<string, string>();
+
+  public tryAcquire(deploymentId: string, operation: "attach" | "detach"): void {
+    if (this.activeOperations.has(deploymentId)) {
+      throw new VolumeOperationConflictError();
+    }
+    this.activeOperations.set(deploymentId, operation);
+  }
+
+  public release(deploymentId: string): void {
+    this.activeOperations.delete(deploymentId);
+  }
+}

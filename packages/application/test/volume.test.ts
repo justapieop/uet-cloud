@@ -253,7 +253,7 @@ test("DetachVolumeCase detaches volume from deployment", async (): Promise<void>
     run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
       const repos: UnitOfWorkRepositories = {
         ...emptyRepositories(),
-        users: { ...emptyRepositories().users, findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser(), findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
         deployment: {
           ...emptyRepositories().deployment,
           findByIdAndUserId: async (): Promise<Deployment | null> => storedDeployment,
@@ -328,7 +328,7 @@ test("DetachVolumeCase throws VolumeInUseError when deleteData=true and volume i
     run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
       const repos: UnitOfWorkRepositories = {
         ...emptyRepositories(),
-        users: { ...emptyRepositories().users, findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser(), findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
         deployment: {
           ...emptyRepositories().deployment,
           findByIdAndUserId: async (): Promise<Deployment | null> => currentDeployment,
@@ -363,7 +363,7 @@ test("DetachVolumeCase throws when volume does not exist or deployment status is
     run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
       const repos: UnitOfWorkRepositories = {
         ...emptyRepositories(),
-        users: { ...emptyRepositories().users, findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser(), findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
         deployment: { ...emptyRepositories().deployment, findByIdAndUserId: async (): Promise<Deployment | null> => storedDeployment },
       };
       return operation(repos);
@@ -763,7 +763,7 @@ test("DetachVolumeCase detaches volume from FAILED deployment even without resou
     run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
       const repos: UnitOfWorkRepositories = {
         ...emptyRepositories(),
-        users: { ...emptyRepositories().users, findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser(), findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
         volumes: {
           ...emptyRepositories().volumes,
           findByNameAndUserId: async (): Promise<Volume | null> => null,

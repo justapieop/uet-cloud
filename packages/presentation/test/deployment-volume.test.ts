@@ -7,6 +7,8 @@ import {
   DeploymentNotFoundError,
   InvalidDeploymentStatusError,
   DeploymentQuotaExceeded,
+  VolumeOperationConflictError,
+  VolumeOperationCoordinator,
   type AttachVolumeCase,
   type AttachVolumeInput,
   type DetachVolumeCase,
@@ -265,4 +267,75 @@ test("DeploymentResponseDto preserves volume sizeGb and accessMode from spec whe
   assert.equal(response.volumes[0]?.mountPath, "/var/data");
   assert.equal(response.volumes[0]?.sizeGb, 32);
   assert.equal(response.volumes[0]?.accessMode, "ReadWrite");
+});
+
+test("DeploymentsController.attachVolume and detachVolume map VolumeOperationConflictError to 409", async (): Promise<void> => {
+  const attachConflictCase: AttachVolumeCase = {
+    exec: async (): Promise<Deployment> => {
+      throw new VolumeOperationConflictError("Another volume operation is already in progress for this deployment. Please wait until it completes.");
+    },
+  } as unknown as AttachVolumeCase;
+
+  const detachConflictCase: DetachVolumeCase = {
+    exec: async (): Promise<Deployment> => {
+      throw new VolumeOperationConflictError("Another volume operation is already in progress for this deployment. Please wait until it completes.");
+    },
+  } as unknown as DetachVolumeCase;
+
+  const controller: DeploymentsController = new DeploymentsController(
+    {} as CreateDeploymentCase,
+    {} as GetDeploymentCase,
+    {} as StartDeploymentCase,
+    {} as StopDeploymentCase,
+    {} as RouteReadCache,
+    {} as GetBuildCase,
+    attachConflictCase,
+    detachConflictCase,
+  );
+
+  const volumeDto: DeploymentVolumeDto = new DeploymentVolumeDto();
+  volumeDto.name = "data";
+  volumeDto.mount_path = "/var/data";
+  volumeDto.size_gb = 32;
+
+  await assert.rejects(
+    controller.attachVolume(createMockRequest(), "00000000-0000-4000-8000-000000000001", volumeDto),
+    (err: unknown): boolean => {
+      assert.ok(err instanceof ConflictException);
+      const res: unknown = err.getResponse();
+      assert.equal(typeof res, "object");
+      assert.equal((res as { code: string }).code, "VOLUME_OPERATION_IN_PROGRESS");
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    controller.detachVolume(createMockRequest(), "00000000-0000-4000-8000-000000000001", "data"),
+    (err: unknown): boolean => {
+      assert.ok(err instanceof ConflictException);
+      const res: unknown = err.getResponse();
+      assert.equal(typeof res, "object");
+      assert.equal((res as { code: string }).code, "VOLUME_OPERATION_IN_PROGRESS");
+      return true;
+    },
+  );
+});
+
+test("VolumeOperationCoordinator prevents concurrent operations on the same deployment", (): void => {
+  const coordinator: VolumeOperationCoordinator = new VolumeOperationCoordinator();
+  coordinator.tryAcquire("dep-123", "attach");
+
+  assert.throws(
+    (): void => coordinator.tryAcquire("dep-123", "detach"),
+    VolumeOperationConflictError,
+  );
+
+  // Different deployment can acquire concurrently
+  coordinator.tryAcquire("dep-456", "detach");
+
+  coordinator.release("dep-123");
+  // Now dep-123 can acquire again
+  coordinator.tryAcquire("dep-123", "detach");
+  coordinator.release("dep-123");
+  coordinator.release("dep-456");
 });

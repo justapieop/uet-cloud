@@ -12,6 +12,7 @@ import {
   DetachVolumeCase,
   ListVolumesCase,
   VolumeInUseError,
+  VolumeOperationConflictError,
   type DeploymentReadResult,
 } from "@kumo/application";
 import {
@@ -173,6 +174,9 @@ export class DeploymentsController {
       await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
     } catch (error: unknown) {
+      if (error instanceof VolumeOperationConflictError) {
+        throw new ConflictException({ code: "VOLUME_OPERATION_IN_PROGRESS", message: error.message });
+      }
       if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
@@ -211,6 +215,9 @@ export class DeploymentsController {
       await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
     } catch (error: unknown) {
+      if (error instanceof VolumeOperationConflictError) {
+        throw new ConflictException({ code: "VOLUME_OPERATION_IN_PROGRESS", message: error.message });
+      }
       if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
