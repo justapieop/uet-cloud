@@ -409,6 +409,46 @@ export interface paths {
         patch: operations["UserSubscriptionsController_setCancellation"];
         trace?: never;
     };
+    "/subscriptions/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in user's Stripe subscriptions
+         * @description Lists all statuses for the customer linked to the session user. Customer and user IDs are never accepted from the caller.
+         */
+        get: operations["MySubscriptionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/subscriptions/me/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Schedule or undo cancellation for the signed-in user's subscription
+         * @description Only changes cancel_at_period_end; does not immediately cancel, change prices, or remove metered items.
+         */
+        patch: operations["MySubscriptionsController_setCancellation"];
+        trace?: never;
+    };
     "/roles": {
         parameters: {
             query?: never;
@@ -821,6 +861,20 @@ export interface components {
             next_cursor: string | null;
         };
         AdminCancellationDto: {
+            /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
+            cancel_at_period_end: boolean;
+        };
+        MySubscriptionResponseDto: {
+            id: string;
+            status: string;
+            cancel_at_period_end: boolean;
+            /** @description Unix timestamp from Stripe */
+            cancel_at: number | null;
+        };
+        MySubscriptionsResponseDto: {
+            subscriptions: components["schemas"]["MySubscriptionResponseDto"][];
+        };
+        MyCancellationDto: {
             /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
             cancel_at_period_end: boolean;
         };
@@ -2058,6 +2112,137 @@ export interface operations {
                 content?: never;
             };
             /** @description Stripe subscription management unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MySubscriptionsController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySubscriptionsResponseDto"];
+                };
+            };
+            /** @description Invalid subscription ID, payload, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A signed-in session is required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended signed-in user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription not found for the signed-in user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription service unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MySubscriptionsController_setCancellation: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MyCancellationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid subscription ID, payload, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A signed-in session is required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended signed-in user is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription not found for the signed-in user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription service unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

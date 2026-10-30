@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { Plan } from "@/entities/plan";
 import { getUserPlan, type UserPlanResult } from "@/entities/plan/server";
+import { getDeployments, type DeploymentsResult } from "@/entities/deployment/server";
 import { CancellationControl } from "@/features/manage-own-subscription";
 import {
   getMySubscriptions,
@@ -11,6 +12,11 @@ import { Navbar } from "@/widgets/navbar";
 
 interface PlanContentProps {
   readonly result: UserPlanResult;
+}
+
+interface AccountUsageContentProps {
+  readonly planResult: UserPlanResult;
+  readonly deploymentsResult: DeploymentsResult;
 }
 
 interface SubscriptionContentProps {
@@ -81,7 +87,7 @@ function PlanContent({ result }: PlanContentProps): JSX.Element {
               <dd>{plan.memory} GiB</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-muted-text">Deployments</dt>
+              <dt className="text-muted-text">Deployment slots</dt>
               <dd>{plan.deployments}</dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -92,6 +98,27 @@ function PlanContent({ result }: PlanContentProps): JSX.Element {
         </article>
       ))}
     </div>
+  );
+}
+
+function AccountUsageContent({ planResult, deploymentsResult }: AccountUsageContentProps): JSX.Element {
+  const deploymentCount: number = deploymentsResult.kind === "success" ? deploymentsResult.deployments.length : 0;
+  const deploymentLimit: number | null = planResult.kind === "success"
+    ? planResult.data.plans.reduce((total: number, plan: Plan): number => total + plan.deployments, 0)
+    : null;
+
+  return (
+    <section aria-labelledby="account-usage-heading" className="overflow-hidden rounded-xl border border-surface-border bg-surface/40">
+      <div className="border-b border-surface-border px-5 py-4 sm:px-6">
+        <h2 id="account-usage-heading" className="text-sm font-medium">Account usage</h2>
+      </div>
+      <div className="p-5 sm:px-6">
+        <p className="text-sm text-muted-text">Deployments (used / total plan slots)</p>
+        <p className="mt-2 text-2xl font-semibold tabular-nums">
+          {deploymentCount} / {deploymentLimit === null ? "—" : deploymentLimit}
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -143,8 +170,8 @@ function SubscriptionContent({ result }: SubscriptionContentProps): JSX.Element 
 }
 
 export async function BillingPage(): Promise<JSX.Element> {
-  const [planResult, subscriptionsResult]: [UserPlanResult, MySubscriptionsResult] =
-    await Promise.all([getUserPlan(), getMySubscriptions()]);
+  const [planResult, subscriptionsResult, deploymentsResult]: [UserPlanResult, MySubscriptionsResult, DeploymentsResult] =
+    await Promise.all([getUserPlan(), getMySubscriptions(), getDeployments({})]);
 
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
@@ -164,6 +191,8 @@ export async function BillingPage(): Promise<JSX.Element> {
         </header>
 
         <div className="space-y-8">
+          <AccountUsageContent planResult={planResult} deploymentsResult={deploymentsResult} />
+
           <section aria-labelledby="current-plan-heading" className="overflow-hidden rounded-xl border border-surface-border bg-surface/40">
             <div className="border-b border-surface-border px-5 py-4 sm:px-6">
               <h2 id="current-plan-heading" className="text-sm font-medium">Current plan</h2>
