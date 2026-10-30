@@ -2,25 +2,21 @@
 
 import { Button } from "@heroui/react";
 import { useState, type ChangeEvent, type Dispatch, type FormEvent, type JSX, type SetStateAction } from "react";
-import { VOLUME_NAME_REGEX, type VolumeActionResult } from "@/features/manage-volume";
-import { createStandaloneVolumeAction } from "@/features/manage-volume/api/volume-actions";
-import { useRouter } from "next/navigation";
-import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { VOLUME_NAME_REGEX } from "@/features/manage-volume";
 
 interface CreateVolumeModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
+  readonly onCreateVolume: (volume: { name: string; sizeGb: number; region: string }) => void;
 }
 
 const INPUT_CLASS: string =
   "mt-1.5 h-10 w-full rounded-lg border border-surface-border bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-dark focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-60";
 const LABEL_CLASS: string = "block text-xs font-medium text-foreground";
 
-export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): JSX.Element | null {
-  const router: AppRouterInstance = useRouter();
+export function CreateVolumeModal({ isOpen, onClose, onCreateVolume }: CreateVolumeModalProps): JSX.Element | null {
   const [name, setName]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(32);
-  const [isSubmitting, setIsSubmitting]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -29,7 +25,6 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
     setName("");
     setSizeGb(32);
     setErrorMessage(null);
-    setIsSubmitting(false);
   }
 
   function handleClose(): void {
@@ -37,7 +32,7 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
     onClose();
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     setErrorMessage(null);
 
@@ -52,21 +47,12 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
       return;
     }
 
-    setIsSubmitting(true);
-    const result: VolumeActionResult = await createStandaloneVolumeAction({
+    onCreateVolume({
       name: trimmedName,
-      size_gb: sizeGb,
+      sizeGb,
       region: "eastasia",
     });
-
-    if (!result.success) {
-      setIsSubmitting(false);
-      setErrorMessage(result.error ?? "Failed to create volume. Please try again.");
-    } else {
-      setIsSubmitting(false);
-      handleClose();
-      router.refresh();
-    }
+    handleClose();
   }
 
   return (
@@ -116,7 +102,6 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
               placeholder="e.g. shared-database"
               value={name}
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setName(e.target.value.toLowerCase())}
-              disabled={isSubmitting}
               autoComplete="off"
             />
             <span className="mt-1 block text-[11px] text-muted-text">
@@ -138,7 +123,6 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
               step="1"
               value={sizeGb}
               onChange={(e: ChangeEvent<HTMLInputElement>): void => setSizeGb(Number(e.target.value))}
-              disabled={isSubmitting}
             />
             <span className="mt-1 block text-[11px] text-muted-text">
               Between 32 GiB and 262,144 GiB (256 TiB).
@@ -152,11 +136,11 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
           )}
 
           <div className="mt-6 flex items-center justify-end gap-3 border-t border-surface-border pt-4">
-            <Button type="button" variant="ghost" size="sm" onPress={handleClose} isDisabled={isSubmitting}>
+            <Button type="button" variant="ghost" size="sm" onPress={handleClose}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" isDisabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create Volume"}
+            <Button type="submit" variant="primary" size="sm">
+              Create Volume
             </Button>
           </div>
         </form>

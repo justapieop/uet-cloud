@@ -1,39 +1,21 @@
 "use client";
 
 import { Button } from "@heroui/react";
-import { useState, type Dispatch, type JSX, type SetStateAction } from "react";
-import { deleteStandaloneVolumeAction } from "@/features/manage-volume/api/volume-actions";
-import { useRouter } from "next/navigation";
-import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import type { JSX } from "react";
 
 interface DeleteVolumeModalProps {
   readonly volumeName: string | null;
   readonly onClose: () => void;
-  readonly onDeleted?: (name: string) => void;
+  readonly onConfirmDelete: (volumeName: string) => void;
 }
 
-export function DeleteVolumeModal({ volumeName, onClose, onDeleted }: DeleteVolumeModalProps): JSX.Element | null {
-  const router: AppRouterInstance = useRouter();
-  const [isDeleting, setIsDeleting]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
-
+export function DeleteVolumeModal({ volumeName, onClose, onConfirmDelete }: DeleteVolumeModalProps): JSX.Element | null {
   if (!volumeName) return null;
 
-  async function handleConfirmDelete(): Promise<void> {
+  function handleConfirm(): void {
     if (!volumeName) return;
-    setIsDeleting(true);
-    setErrorMessage(null);
-
-    const result = await deleteStandaloneVolumeAction(volumeName);
-    if (!result.success) {
-      setIsDeleting(false);
-      setErrorMessage(result.error ?? "Failed to delete volume.");
-    } else {
-      setIsDeleting(false);
-      onDeleted?.(volumeName);
-      onClose();
-      router.refresh();
-    }
+    onConfirmDelete(volumeName);
+    onClose();
   }
 
   return (
@@ -67,18 +49,12 @@ export function DeleteVolumeModal({ volumeName, onClose, onDeleted }: DeleteVolu
           </div>
         </div>
 
-        {errorMessage && (
-          <div role="alert" className="mt-4 rounded-lg border border-red-400/20 bg-red-400/10 p-3 text-xs text-red-300">
-            {errorMessage}
-          </div>
-        )}
-
         <div className="mt-6 flex items-center justify-end gap-3 border-t border-surface-border pt-4">
-          <Button type="button" variant="ghost" size="sm" onPress={onClose} isDisabled={isDeleting}>
+          <Button type="button" variant="ghost" size="sm" onPress={onClose}>
             Cancel
           </Button>
-          <Button type="button" variant="danger" size="sm" onPress={handleConfirmDelete} isDisabled={isDeleting}>
-            {isDeleting ? "Deleting..." : "Delete Volume"}
+          <Button type="button" variant="danger" size="sm" onPress={handleConfirm}>
+            Delete Volume
           </Button>
         </div>
       </div>

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useTransition, type Dispatch, type JSX, type SetStateAction, type TransitionStartFunction } from "react";
-import { Button } from "@heroui/react";
+import { Button, toast } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { VolumeItem } from "@/entities/volume";
+import { createStandaloneVolumeAction, deleteStandaloneVolumeAction } from "@/features/manage-volume/api/volume-actions";
+import type { VolumeActionResult } from "@/features/manage-volume";
 import { CreateVolumeModal } from "./create-volume-modal";
 import { DeleteVolumeModal } from "./delete-volume-modal";
 
@@ -24,16 +26,78 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
   const [isRefreshing, startTransition]: [boolean, TransitionStartFunction] = useTransition();
   const [isCreateOpen, setIsCreateOpen]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [targetDeleteVolume, setTargetDeleteVolume]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
+  const [pendingVolumes, setPendingVolumes]: [VolumeItem[], Dispatch<SetStateAction<VolumeItem[]>>] = useState<VolumeItem[]>([]);
+  const [deletingVolumeNames, setDeletingVolumeNames]: [string[], Dispatch<SetStateAction<string[]>>] = useState<string[]>([]);
   const [deletedVolumeNames, setDeletedVolumeNames]: [string[], Dispatch<SetStateAction<string[]>>] = useState<string[]>([]);
 
   function handleRefresh(): void {
     startTransition((): void => {
       setDeletedVolumeNames([]);
+      setPendingVolumes([]);
       router.refresh();
     });
   }
 
-  const effectiveVolumes: VolumeItem[] = volumes.filter((vol: VolumeItem): boolean => !deletedVolumeNames.includes(vol.name));
+  async function handleCreateVolume(input: { readonly name: string; readonly sizeGb: number; readonly region: string }): Promise<void> {
+    const now: string = new Date().toISOString();
+    const optimisticVolume: VolumeItem = {
+      id: `pending-${input.name}-${Date.now()}`,
+      name: input.name,
+      size_gb: input.sizeGb,
+      region: input.region,
+      created_at: now,
+      updated_at: now,
+      attached_deployments: [],
+    };
+
+    setPendingVolumes((prev: VolumeItem[]): VolumeItem[] => [optimisticVolume, ...prev]);
+    toast.info(`Creating volume "${input.name}"...`);
+
+    const result: VolumeActionResult = await createStandaloneVolumeAction({
+      name: input.name,
+      size_gb: input.sizeGb,
+      region: input.region,
+    });
+
+    if (result.success) {
+      toast.success(`Volume "${input.name}" created successfully.`);
+      startTransition((): void => {
+        router.refresh();
+      });
+    } else {
+      setPendingVolumes((prev: VolumeItem[]): VolumeItem[] => prev.filter((v: VolumeItem): boolean => v.name !== input.name));
+      toast.danger(result.error ?? `Failed to create volume "${input.name}".`);
+    }
+  }
+
+  async function handleDeleteVolume(volumeName: string): Promise<void> {
+    setDeletingVolumeNames((prev: string[]): string[] => [...prev, volumeName]);
+    toast.info(`Deleting volume "${volumeName}"...`);
+
+    const result: VolumeActionResult = await deleteStandaloneVolumeAction(volumeName);
+
+    if (result.success) {
+      setDeletingVolumeNames((prev: string[]): string[] => prev.filter((n: string): boolean => n !== volumeName));
+      setDeletedVolumeNames((prev: string[]): string[] => [...prev, volumeName]);
+      toast.success(`Volume "${volumeName}" deleted.`);
+      startTransition((): void => {
+        router.refresh();
+      });
+    } else {
+      setDeletingVolumeNames((prev: string[]): string[] => prev.filter((n: string): boolean => n !== volumeName));
+      toast.danger(result.error ?? `Failed to delete volume "${volumeName}".`);
+    }
+  }
+
+  const activePendingVolumes: VolumeItem[] = pendingVolumes.filter(
+    (pending: VolumeItem): boolean => !volumes.some((serverVol: VolumeItem): boolean => serverVol.name === pending.name),
+  );
+
+  const effectiveVolumes: VolumeItem[] = [
+    ...activePendingVolumes,
+    ...volumes.filter((vol: VolumeItem): boolean => !deletedVolumeNames.includes(vol.name)),
+  ];
+
   const totalStorageGb: number = effectiveVolumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.size_gb, 0);
   const totalAttachments: number = effectiveVolumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.attached_deployments.length, 0);
 
@@ -159,12 +223,20 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
               </thead>
               <tbody className="divide-y divide-surface-border">
                 {effectiveVolumes.map((volume: VolumeItem): JSX.Element => {
+                  const isCreating: boolean = activePendingVolumes.some((pv: VolumeItem): boolean => pv.name === volume.name);
+                  const isDeleting: boolean = deletingVolumeNames.includes(volume.name);
                   const isMounted: boolean = volume.attached_deployments.length > 0;
+                  const rowClass: string = isDeleting
+                    ? "align-top transition-all opacity-50 pointer-events-none"
+                    : isCreating
+                      ? "align-top transition-colors bg-accent/[0.02]"
+                      : "align-top transition-colors hover:bg-white/[0.02]";
+
                   return (
-                    <tr key={volume.id} className="align-top transition-colors hover:bg-white/[0.02]">
+                    <tr key={volume.id} className={rowClass}>
                       <td className="px-6 py-5">
                         <div className="flex items-center gap-3">
-                          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-surface-border bg-background/50 font-mono text-xs text-accent">
+                          <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg border border-surface-border font-mono text-xs ${isCreating ? "animate-pulse bg-accent/10 text-accent" : "bg-background/50 text-accent"}`}>
                             vol
                           </div>
                           <div className="min-w-0 flex-1">
@@ -185,7 +257,17 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
                       </td>
 
                       <td className="px-6 py-5">
-                        {isMounted ? (
+                        {isCreating ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs text-accent font-medium animate-pulse">
+                            <span className="size-1.5 rounded-full bg-accent animate-ping" />
+                            <span>Creating…</span>
+                          </span>
+                        ) : isDeleting ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs text-red-400 font-medium animate-pulse">
+                            <span className="size-1.5 rounded-full bg-red-400" />
+                            <span>Deleting…</span>
+                          </span>
+                        ) : isMounted ? (
                           <div className="flex flex-wrap gap-1.5">
                             {volume.attached_deployments.map((dep): JSX.Element => (
                               <a
@@ -207,7 +289,15 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
                       </td>
 
                       <td className="px-6 py-5 text-right">
-                        {isMounted ? (
+                        {isCreating ? (
+                          <span className="text-xs text-muted-dark">
+                            Provisioning…
+                          </span>
+                        ) : isDeleting ? (
+                          <span className="text-xs text-red-400/70">
+                            Deleting…
+                          </span>
+                        ) : isMounted ? (
                           <span
                             className="cursor-not-allowed text-xs text-muted-dark"
                             title="Volume is currently mounted to active containers. Detach it from all containers before deleting."
@@ -233,11 +323,15 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
         )}
       </section>
 
-      <CreateVolumeModal isOpen={isCreateOpen} onClose={(): void => setIsCreateOpen(false)} />
+      <CreateVolumeModal
+        isOpen={isCreateOpen}
+        onClose={(): void => setIsCreateOpen(false)}
+        onCreateVolume={handleCreateVolume}
+      />
       <DeleteVolumeModal
         volumeName={targetDeleteVolume}
         onClose={(): void => setTargetDeleteVolume(null)}
-        onDeleted={(deletedName: string): void => setDeletedVolumeNames((prev: string[]): string[] => [...prev, deletedName])}
+        onConfirmDelete={handleDeleteVolume}
       />
     </>
   );
