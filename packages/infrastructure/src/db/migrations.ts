@@ -679,6 +679,31 @@ export class RootLoginLimits1793059200000 implements MigrationInterface {
   }
 }
 
+export class Volumes1793100000000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({
+      name: "volumes",
+      columns: [
+        { name: "id", type: "nvarchar", length: "255", isPrimary: true },
+        { name: "user_id", type: "nvarchar", length: "255", isNullable: false },
+        { name: "name", type: "nvarchar", length: "64", isNullable: false },
+        { name: "size_gb", type: "int", isNullable: false },
+        { name: "region", type: "nvarchar", length: "64", isNullable: false },
+        { name: "created_at", type: "datetime2", precision: 7, default: "SYSUTCDATETIME()", isNullable: false },
+        { name: "updated_at", type: "datetime2", precision: 7, default: "SYSUTCDATETIME()", isNullable: false },
+      ],
+      indices: [
+        new TableIndex({ name: "IDX_volumes_user_id", columnNames: ["user_id"] }),
+        new TableIndex({ name: "UQ_volumes_user_name", columnNames: ["user_id", "name"], isUnique: true }),
+      ],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("volumes", true);
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -698,5 +723,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   RoleActive1792540800004,
   DatabaseLoadIndexes1792627200000,
   RootLoginLimits1793059200000,
+  Volumes1793100000000,
 ];
 

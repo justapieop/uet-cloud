@@ -64,6 +64,18 @@ export interface VolumeManager {
     readonly existingVolumes: readonly DeploymentVolume[];
     readonly deleteData?: boolean;
   }): Promise<void>;
+
+  createStorageVolume?(input: {
+    readonly userId: string;
+    readonly volumeName: string;
+    readonly sizeGb: number;
+    readonly region: string;
+  }): Promise<void>;
+
+  deleteStorageVolume?(input: {
+    readonly userId: string;
+    readonly volumeName: string;
+  }): Promise<void>;
 }
 
 export const VOLUME_MANAGER: symbol = Symbol("VOLUME_MANAGER");

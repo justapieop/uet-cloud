@@ -1,0 +1,12 @@
+import type { Volume } from "@kumo/domain";
+
+export interface VolumeRepository {
+  findById(id: string): Promise<Volume | null>;
+  findByIdAndUserId(id: string, userId: string): Promise<Volume | null>;
+  findByNameAndUserId(name: string, userId: string): Promise<Volume | null>;
+  findByUserId(userId: string): Promise<Volume[]>;
+  save(volume: Volume): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+
+export const VOLUME_REPOSITORY: symbol = Symbol("VOLUME_REPOSITORY");

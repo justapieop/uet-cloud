@@ -427,8 +427,14 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     if (input.deleteData && this.clients.fileShares) {
       const storageAccountName: string = this.userStorageAccountName(input.userId);
       const shareName: string = this.volumeShareName(input.appName, input.volumeName);
+      const standaloneShare: string = this.standaloneVolumeShareName(input.volumeName);
       try {
         await this.clients.fileShares.delete(rgName, storageAccountName, shareName, { abortSignal: signal });
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+      try {
+        await this.clients.fileShares.delete(rgName, storageAccountName, standaloneShare, { abortSignal: signal });
       } catch (error: unknown) {
         if (!this.isNotFound(error)) throw error;
       }
@@ -444,8 +450,68 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     return `share-${appName.slice(0, 25)}-${volumeName.slice(0, 25)}`;
   }
 
+  public standaloneVolumeShareName(volumeName: string): string {
+    return `share-vol-${volumeName.slice(0, 50)}`;
+  }
+
   public storageLinkName(appName: string, volumeName: string): string {
     return `stg-${appName.slice(0, 13)}-${volumeName.slice(0, 13)}`;
+  }
+
+  public async createStorageVolume(input: {
+    readonly userId: string;
+    readonly volumeName: string;
+    readonly sizeGb: number;
+    readonly region: string;
+  }): Promise<void> {
+    const rgName: string = this.userResourceGroup(input.userId);
+    const storageAccountName: string = this.userStorageAccountName(input.userId);
+    const shareName: string = this.standaloneVolumeShareName(input.volumeName);
+    const opSignal: AbortSignal = this.operationSignal();
+
+    if (this.clients.storageAccounts && this.clients.fileShares) {
+      let accountExists: boolean = false;
+      try {
+        await this.clients.storageAccounts.getProperties(rgName, storageAccountName, { abortSignal: opSignal });
+        accountExists = true;
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+      if (!accountExists) {
+        await runBuildStep("Storage Account creation", () =>
+          this.clients.storageAccounts!.create(rgName, storageAccountName, {
+            location: normalizeAzureRegion(input.region),
+            sku: { name: "StandardV2_LRS" },
+            kind: "FileStorage",
+            minimumTlsVersion: "TLS1_2",
+          }, { abortSignal: opSignal }).pollUntilDone({ abortSignal: opSignal }),
+        );
+      }
+
+      await runBuildStep("File share creation", () =>
+        this.clients.fileShares!.create(rgName, storageAccountName, shareName, {
+          shareQuota: input.sizeGb,
+        }, { abortSignal: opSignal }),
+      );
+    }
+  }
+
+  public async deleteStorageVolume(input: {
+    readonly userId: string;
+    readonly volumeName: string;
+  }): Promise<void> {
+    const rgName: string = this.userResourceGroup(input.userId);
+    const storageAccountName: string = this.userStorageAccountName(input.userId);
+    const shareName: string = this.standaloneVolumeShareName(input.volumeName);
+    const opSignal: AbortSignal = this.operationSignal();
+
+    if (this.clients.fileShares) {
+      try {
+        await this.clients.fileShares.delete(rgName, storageAccountName, shareName, { abortSignal: opSignal });
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+    }
   }
 
   private async ensureVolumeStorage(
