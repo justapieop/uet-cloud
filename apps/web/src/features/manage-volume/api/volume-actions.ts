@@ -18,16 +18,17 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-async function parseBackendErrorMessage(response: Response, fallback: string): Promise<string> {
-  try {
-    const data: unknown = await response.json();
-    if (data && typeof data === "object") {
-      const record: Record<string, unknown> = data as Record<string, unknown>;
-      if (typeof record.message === "string") return record.message;
-      if (Array.isArray(record.message) && typeof record.message[0] === "string") return record.message[0];
+function extractBackendErrorMessage(errorData: unknown, fallback: string): string {
+  if (errorData && typeof errorData === "object") {
+    const record: Record<string, unknown> = errorData as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) return record.message;
+    if (Array.isArray(record.message) && typeof record.message[0] === "string" && record.message[0].trim()) {
+      return record.message[0];
     }
-  } catch {
-    // If response body is not JSON or cannot be read, fall back
+    if (typeof record.error === "string" && record.error.trim()) return record.error;
+  }
+  if (typeof errorData === "string" && errorData.trim()) {
+    return errorData;
   }
   return fallback;
 }
@@ -61,7 +62,7 @@ export async function createStandaloneVolumeAction(input: {
   }
 
   try {
-    const result: { response: Response } = await apiClient.POST("/volumes", {
+    const result: { data?: unknown; error?: unknown; response: Response } = await apiClient.POST("/volumes", {
       headers: { cookie: cookieHeader },
       body: {
         name,
@@ -75,24 +76,28 @@ export async function createStandaloneVolumeAction(input: {
     if (!result.response.ok) {
       const status: number = result.response.status;
       if (status === 400) {
-        const message: string = await parseBackendErrorMessage(
-          result.response,
+        const message: string = extractBackendErrorMessage(
+          result.error,
           "Invalid volume parameters. Please check the name and size.",
         );
         return { success: false, error: message };
       }
       if (status === 403) {
-        return { success: false, error: "Volume creation requires an active subscription linked to a Kumo plan." };
+        const message: string = extractBackendErrorMessage(
+          result.error,
+          "Volume creation requires an active subscription linked to a Kumo plan.",
+        );
+        return { success: false, error: message };
       }
       if (status === 409) {
-        const message: string = await parseBackendErrorMessage(
-          result.response,
+        const message: string = extractBackendErrorMessage(
+          result.error,
           "Volume name already exists or plan disk quota exceeded.",
         );
         return { success: false, error: message };
       }
-      const message: string = await parseBackendErrorMessage(
-        result.response,
+      const message: string = extractBackendErrorMessage(
+        result.error,
         `Volume creation failed (${status}). Please try again.`,
       );
       return { success: false, error: message };
@@ -118,7 +123,7 @@ export async function deleteStandaloneVolumeAction(name: string): Promise<Volume
   }
 
   try {
-    const result: { response: Response } = await apiClient.DELETE("/volumes/{name}", {
+    const result: { data?: unknown; error?: unknown; response: Response } = await apiClient.DELETE("/volumes/{name}", {
       params: { path: { name: volumeName } },
       headers: { cookie: cookieHeader },
       cache: "no-store",
@@ -128,17 +133,21 @@ export async function deleteStandaloneVolumeAction(name: string): Promise<Volume
     if (!result.response.ok) {
       const status: number = result.response.status;
       if (status === 404) {
-        return { success: false, error: "Volume not found." };
+        const message: string = extractBackendErrorMessage(
+          result.error,
+          "Volume not found.",
+        );
+        return { success: false, error: message };
       }
       if (status === 409) {
-        const message: string = await parseBackendErrorMessage(
-          result.response,
+        const message: string = extractBackendErrorMessage(
+          result.error,
           "Volume cannot be deleted while attached to one or more active deployments.",
         );
         return { success: false, error: message };
       }
-      const message: string = await parseBackendErrorMessage(
-        result.response,
+      const message: string = extractBackendErrorMessage(
+        result.error,
         `Failed to delete volume (${status}).`,
       );
       return { success: false, error: message };

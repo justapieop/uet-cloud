@@ -22,16 +22,17 @@ function extractErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-async function parseBackendErrorMessage(response: Response, fallback: string): Promise<string> {
-  try {
-    const data: unknown = await response.json();
-    if (data && typeof data === "object") {
-      const record: Record<string, unknown> = data as Record<string, unknown>;
-      if (typeof record.message === "string") return record.message;
-      if (Array.isArray(record.message) && typeof record.message[0] === "string") return record.message[0];
+function extractBackendErrorMessage(errorData: unknown, fallback: string): string {
+  if (errorData && typeof errorData === "object") {
+    const record: Record<string, unknown> = errorData as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.trim()) return record.message;
+    if (Array.isArray(record.message) && typeof record.message[0] === "string" && record.message[0].trim()) {
+      return record.message[0];
     }
-  } catch {
-    // If response body is not JSON or cannot be read, fall back
+    if (typeof record.error === "string" && record.error.trim()) return record.error;
+  }
+  if (typeof errorData === "string" && errorData.trim()) {
+    return errorData;
   }
   return fallback;
 }
@@ -73,7 +74,7 @@ export async function attachVolumeAction(
   }
 
   try {
-    const result: { response: Response } = await apiClient.POST("/deployments/{id}/volumes", {
+    const result: { data?: unknown; error?: unknown; response: Response } = await apiClient.POST("/deployments/{id}/volumes", {
       params: { path: { id: deploymentId } },
       headers: { cookie: cookieHeader },
       body: {
@@ -90,30 +91,35 @@ export async function attachVolumeAction(
     if (!result.response.ok) {
       const status: number = result.response.status;
       if (status === 400) {
-        const message: string = await parseBackendErrorMessage(
-          result.response,
+        const message: string = extractBackendErrorMessage(
+          result.error,
           "Invalid volume parameters. Check volume name, mount path, and size.",
         );
         return { success: false, error: message };
       }
       if (status === 403) {
-        return {
-          success: false,
-          error: "An active plan subscription is required to attach persistent storage volumes.",
-        };
+        const message: string = extractBackendErrorMessage(
+          result.error,
+          "An active plan subscription is required to attach persistent storage volumes.",
+        );
+        return { success: false, error: message };
       }
       if (status === 404) {
-        return { success: false, error: "Deployment was not found." };
+        const message: string = extractBackendErrorMessage(
+          result.error,
+          "Deployment was not found.",
+        );
+        return { success: false, error: message };
       }
       if (status === 409) {
-        const message: string = await parseBackendErrorMessage(
-          result.response,
+        const message: string = extractBackendErrorMessage(
+          result.error,
           "Cannot attach volume. Deployment must be in RUNNING or STOPPED status, or disk quota was exceeded.",
         );
         return { success: false, error: message };
       }
-      const message: string = await parseBackendErrorMessage(
-        result.response,
+      const message: string = extractBackendErrorMessage(
+        result.error,
         `Failed to attach volume (HTTP ${status})`,
       );
       return { success: false, error: message };
@@ -139,7 +145,7 @@ export async function detachVolumeAction(
   }
 
   try {
-    const result: { response: Response } = await apiClient.DELETE(
+    const result: { data?: unknown; error?: unknown; response: Response } = await apiClient.DELETE(
       "/deployments/{id}/volumes/{volumeName}",
       {
         params: {
@@ -155,20 +161,28 @@ export async function detachVolumeAction(
     if (!result.response.ok) {
       const status: number = result.response.status;
       if (status === 400) {
-        return { success: false, error: "Invalid deployment identifier or volume name." };
+        const message: string = extractBackendErrorMessage(
+          result.error,
+          "Invalid deployment identifier or volume name.",
+        );
+        return { success: false, error: message };
       }
       if (status === 404) {
-        return { success: false, error: "Deployment or volume was not found." };
+        const message: string = extractBackendErrorMessage(
+          result.error,
+          "Deployment or volume was not found.",
+        );
+        return { success: false, error: message };
       }
       if (status === 409) {
-        const message: string = await parseBackendErrorMessage(
-          result.response,
+        const message: string = extractBackendErrorMessage(
+          result.error,
           "Cannot detach volume. Deployment must be in RUNNING or STOPPED status.",
         );
         return { success: false, error: message };
       }
-      const message: string = await parseBackendErrorMessage(
-        result.response,
+      const message: string = extractBackendErrorMessage(
+        result.error,
         `Failed to detach volume (HTTP ${status})`,
       );
       return { success: false, error: message };
