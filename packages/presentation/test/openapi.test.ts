@@ -23,10 +23,11 @@ import { RedeploymentsController } from "../dist/controllers/Redeployments.contr
 import { GitHubWebhookController } from "../dist/controllers/GitHubWebhook.controller.js";
 import { RootLoginController } from "../dist/controllers/RootLogin.controller.js";
 import { RootController } from "../dist/controllers/Root.controller.js";
+import { VolumesController } from "../dist/controllers/Volumes.controller.js";
 import { createOpenApiConfig } from "../dist/common/OpenApi.js";
 
 test("OpenAPI covers controller operations, session authentication, and generated client paths", async (context: TestContext): Promise<void> => {
-  const controllers: Type<object>[] = [RootLoginController, AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController, GitHubWebhookController, RootController];
+  const controllers: Type<object>[] = [RootLoginController, AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController, GitHubWebhookController, RootController, VolumesController];
   // Resolve controllers without starting SQL, sessions, workers, or cloud clients.
   const tokens: Set<Type<object> | string | symbol> = new Set([
     CheckPermissionsCase, CACHE_MANAGER,
@@ -48,7 +49,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       count++;
       assert.ok(client.includes(`"${path}":`), `Generated client lacks ${method} ${path}`);
       assert.ok(client.includes(`operations["${operation.operationId}"]`), `Generated client lacks operation ${operation.operationId}`);
-      if (path === "/regions" || path.startsWith("/auth/github/") || path.startsWith("/user/") || (path === "/plans" && method !== "get") || path.startsWith("/deployments") || path.startsWith("/deployment/") || path.startsWith("/plans/") || path === "/user/me" || path.startsWith("/roles")) {
+      if (path === "/regions" || path.startsWith("/auth/github/") || path.startsWith("/user/") || (path === "/plans" && method !== "get") || path.startsWith("/deployments") || path.startsWith("/deployment/") || path.startsWith("/plans/") || path === "/user/me" || path.startsWith("/roles") || path.startsWith("/volumes")) {
         assert.deepEqual(operation.security, [{ session: [] }], `${method} ${path} must document the session cookie`);
       } else if (path.startsWith("/builds/")) {
         assert.deepEqual(operation.security, [{ "build-source": [] }]);
@@ -57,7 +58,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 39);
+  assert.equal(count, 42);
   const webhook: OperationObject = document.paths["/github/webhook"]!.post!;
   assert.ok(webhook.responses["200"]);
   assert.ok(webhook.responses["401"]);

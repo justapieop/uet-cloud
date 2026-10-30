@@ -8,6 +8,9 @@ import {
   AttachVolumeCase,
   DetachVolumeCase,
   ListVolumesCase,
+  CreateVolumeCase,
+  ListUserVolumesCase,
+  DeleteVolumeCase,
   CreateDeploymentCase,
   RedeployDeploymentCase,
   DeleteDeploymentCase,
@@ -33,6 +36,7 @@ import { StripeModule } from "./Stripe.module.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
+import { VolumesController } from "../controllers/Volumes.controller.js";
 import { RouteReadCache } from "../common/ReadCache.js";
 
 @Module({
@@ -41,6 +45,7 @@ import { RouteReadCache } from "../common/ReadCache.js";
     BuildSourceController,
     DeploymentsController,
     RedeploymentsController,
+    VolumesController,
   ],
   providers: [
     DeploymentWorker,
@@ -178,6 +183,23 @@ import { RouteReadCache } from "../common/ReadCache.js";
       useFactory: (uow: UnitOfWork): ListVolumesCase => new ListVolumesCase(uow),
       inject: [UNIT_OF_WORK],
     },
+    {
+      provide: CreateVolumeCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider): CreateVolumeCase =>
+        new CreateVolumeCase(uow, subscriptions, provider),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider],
+    },
+    {
+      provide: ListUserVolumesCase,
+      useFactory: (uow: UnitOfWork): ListUserVolumesCase => new ListUserVolumesCase(uow),
+      inject: [UNIT_OF_WORK],
+    },
+    {
+      provide: DeleteVolumeCase,
+      useFactory: (uow: UnitOfWork, provider: AzureProvider): DeleteVolumeCase =>
+        new DeleteVolumeCase(uow, provider),
+      inject: [UNIT_OF_WORK, AzureProvider],
+    },
   ],
   exports: [
     RedeployDeploymentCase,
@@ -189,6 +211,9 @@ import { RouteReadCache } from "../common/ReadCache.js";
     AttachVolumeCase,
     DetachVolumeCase,
     ListVolumesCase,
+    CreateVolumeCase,
+    ListUserVolumesCase,
+    DeleteVolumeCase,
   ],
 })
 export class DeploymentModule {}

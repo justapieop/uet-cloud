@@ -236,6 +236,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all persistent volumes owned by the current user */
+        get: operations["VolumesController_list"];
+        put?: never;
+        /** Create a new standalone persistent storage volume */
+        post: operations["VolumesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/volumes/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an unattached persistent volume and its underlying Azure File Share */
+        delete: operations["VolumesController_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/deployment/build/{id}": {
         parameters: {
             query?: never;
@@ -708,6 +743,32 @@ export interface components {
             size_gb: number;
             /** @enum {string} */
             access_mode: "ReadWrite" | "ReadOnly";
+        };
+        CreateStandaloneVolumeDto: {
+            /** @description Volume identifier name (2-32 lowercase alphanumeric or hyphens) */
+            name: string;
+            /** @description Volume capacity in GiB */
+            size_gb: number;
+            /** @description Target deployment region */
+            region?: string;
+        };
+        VolumeAttachedDeploymentDto: {
+            /** @example 00000000-0000-4000-8000-000000000001 */
+            id: string;
+            /** @example my-app */
+            name: string;
+        };
+        VolumeItemResponseDto: {
+            /** @example 00000000-0000-4000-8000-000000000001 */
+            id: string;
+            /** @example shared-data */
+            name: string;
+            size_gb: number;
+            /** @example eastus2 */
+            region: string;
+            attached_deployments: components["schemas"]["VolumeAttachedDeploymentDto"][];
+            created_at: string;
+            updated_at: string;
         };
         DeploymentResponseDto: {
             /** @description Requested region, or null when omitted */
@@ -2729,6 +2790,109 @@ export interface operations {
                 content: {
                     "text/plain": string;
                 };
+            };
+        };
+    };
+    VolumesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolumeItemResponseDto"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VolumesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStandaloneVolumeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolumeItemResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VolumesController_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
