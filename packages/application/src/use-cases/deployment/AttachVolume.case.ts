@@ -95,7 +95,7 @@ export class AttachVolumeCase {
           userId: input.userId,
           name: input.volume.name,
           sizeGb: input.volume.sizeGb,
-          region: deployment.spec?.region ?? "eastus2",
+          region: deployment.spec?.region ?? "eastasia",
         });
         await repo.volumes.save(newVolRecord);
       }

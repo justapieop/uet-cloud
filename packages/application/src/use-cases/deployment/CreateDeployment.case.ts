@@ -77,7 +77,7 @@ export class CreateDeploymentCase {
               userId: input.userId,
               name: vol.name,
               sizeGb: vol.sizeGb,
-              region: input.spec.region ?? "eastus2",
+              region: input.spec.region ?? "eastasia",
             });
             await repo.volumes.save(newVol);
           }

@@ -2,7 +2,7 @@
 
 import { Button } from "@heroui/react";
 import { useState, type ChangeEvent, type Dispatch, type FormEvent, type JSX, type SetStateAction } from "react";
-import { VOLUME_NAME_REGEX } from "@/features/manage-volume";
+import { VOLUME_NAME_REGEX, type VolumeActionResult } from "@/features/manage-volume";
 import { createStandaloneVolumeAction } from "@/features/manage-volume/api/volume-actions";
 import { useRouter } from "next/navigation";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
@@ -20,7 +20,6 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
   const router: AppRouterInstance = useRouter();
   const [name, setName]: [string, Dispatch<SetStateAction<string>>] = useState<string>("");
   const [sizeGb, setSizeGb]: [number, Dispatch<SetStateAction<number>>] = useState<number>(5);
-  const [region, setRegion]: [string, Dispatch<SetStateAction<string>>] = useState<string>("eastus2");
   const [isSubmitting, setIsSubmitting]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
 
@@ -29,7 +28,6 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
   function resetForm(): void {
     setName("");
     setSizeGb(5);
-    setRegion("eastus2");
     setErrorMessage(null);
     setIsSubmitting(false);
   }
@@ -55,10 +53,10 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
     }
 
     setIsSubmitting(true);
-    const result = await createStandaloneVolumeAction({
+    const result: VolumeActionResult = await createStandaloneVolumeAction({
       name: trimmedName,
       size_gb: sizeGb,
-      region,
+      region: "eastasia",
     });
 
     if (!result.success) {
@@ -126,42 +124,21 @@ export function CreateVolumeModal({ isOpen, onClose }: CreateVolumeModalProps): 
             </span>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className={LABEL_CLASS} htmlFor="volume-size">
-                Capacity (GiB)
-              </label>
-              <input
-                id="volume-size"
-                className={INPUT_CLASS}
-                type="number"
-                required
-                min="1"
-                step="1"
-                value={sizeGb}
-                onChange={(e: ChangeEvent<HTMLInputElement>): void => setSizeGb(Number(e.target.value))}
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div>
-              <label className={LABEL_CLASS} htmlFor="volume-region">
-                Region
-              </label>
-              <select
-                id="volume-region"
-                className={INPUT_CLASS}
-                value={region}
-                onChange={(e: ChangeEvent<HTMLSelectElement>): void => setRegion(e.target.value)}
-                disabled={isSubmitting}
-              >
-                <option value="eastus2">East US 2</option>
-                <option value="centralus">Central US</option>
-                <option value="westeurope">West Europe</option>
-                <option value="southeastasia">Southeast Asia</option>
-                <option value="japaneast">Japan East</option>
-              </select>
-            </div>
+          <div>
+            <label className={LABEL_CLASS} htmlFor="volume-size">
+              Capacity (GiB)
+            </label>
+            <input
+              id="volume-size"
+              className={INPUT_CLASS}
+              type="number"
+              required
+              min="1"
+              step="1"
+              value={sizeGb}
+              onChange={(e: ChangeEvent<HTMLInputElement>): void => setSizeGb(Number(e.target.value))}
+              disabled={isSubmitting}
+            />
           </div>
 
           {errorMessage && (

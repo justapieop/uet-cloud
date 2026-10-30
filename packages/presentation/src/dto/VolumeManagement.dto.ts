@@ -15,7 +15,7 @@ export class CreateStandaloneVolumeDto {
   @Min(1)
   public size_gb!: number;
 
-  @ApiPropertyOptional({ example: "eastus2", description: "Target deployment region" })
+  @ApiPropertyOptional({ example: "eastasia", description: "Target deployment region" })
   @IsOptional()
   @IsString()
   public region?: string;
@@ -32,7 +32,7 @@ export class VolumeItemResponseDto {
   @Expose() @ApiProperty({ example: "00000000-0000-4000-8000-000000000001" }) public readonly id: string;
   @Expose() @ApiProperty({ example: "shared-data" }) public readonly name: string;
   @Expose({ name: "size_gb" }) @ApiProperty({ name: "size_gb", example: 5 }) public readonly sizeGb: number;
-  @Expose() @ApiProperty({ example: "eastus2" }) public readonly region: string;
+  @Expose() @ApiProperty({ example: "eastasia" }) public readonly region: string;
   @Expose({ name: "attached_deployments" })
   @ApiProperty({ name: "attached_deployments", type: [VolumeAttachedDeploymentDto] })
   public readonly attachedDeployments: readonly VolumeAttachedDeploymentDto[];

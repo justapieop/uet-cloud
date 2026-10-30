@@ -85,7 +85,10 @@ export class VolumesController {
     @Body(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true })) input: CreateStandaloneVolumeDto,
   ): Promise<VolumeItemResponseDto> {
     const user: User = this.owner(request);
-    const region: string = input.region?.trim() || "eastus2";
+    const region: string = input.region?.trim() || "eastasia";
+    if (region !== "eastasia") {
+      throw new BadRequestException("Only 'eastasia' region is currently supported on this account.");
+    }
 
     try {
       const volume: Volume = await this.createVolumeCase.exec({

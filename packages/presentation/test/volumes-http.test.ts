@@ -40,7 +40,7 @@ test("VolumesController.list returns list of VolumeItemResponseDto", async (): P
     userId: "user-123",
     name: "shared-data",
     sizeGb: 5,
-    region: "eastus2",
+    region: "eastasia",
   });
   const mockItem: UserVolumeItem = {
     volume: vol,
@@ -70,7 +70,7 @@ test("VolumesController.create returns VolumeItemResponseDto", async (): Promise
     userId: "user-123",
     name: "new-data",
     sizeGb: 10,
-    region: "eastus2",
+    region: "eastasia",
   });
 
   const createCase: CreateVolumeCase = {
@@ -86,12 +86,30 @@ test("VolumesController.create returns VolumeItemResponseDto", async (): Promise
   const dto: CreateStandaloneVolumeDto = new CreateStandaloneVolumeDto();
   dto.name = "new-data";
   dto.size_gb = 10;
-  dto.region = "eastus2";
+  dto.region = "eastasia";
 
   const result: VolumeItemResponseDto = await controller.create(createMockRequest(), dto);
   assert.equal(result.name, "new-data");
   assert.equal(result.sizeGb, 10);
   assert.deepEqual(result.attachedDeployments, []);
+});
+
+test("VolumesController.create rejects non-eastasia region", async (): Promise<void> => {
+  const controller: VolumesController = new VolumesController(
+    {} as unknown as ListUserVolumesCase,
+    {} as unknown as CreateVolumeCase,
+    {} as unknown as DeleteVolumeCase,
+  );
+
+  const dto: CreateStandaloneVolumeDto = new CreateStandaloneVolumeDto();
+  dto.name = "new-data";
+  dto.size_gb = 10;
+  dto.region = "southeastasia";
+
+  await assert.rejects(
+    async (): Promise<VolumeItemResponseDto> => controller.create(createMockRequest(), dto),
+    { name: "BadRequestException" },
+  );
 });
 
 test("VolumesController.create maps VolumeAlreadyExists and DeploymentQuotaExceeded to 409", async (): Promise<void> => {

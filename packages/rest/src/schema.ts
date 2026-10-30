@@ -764,7 +764,7 @@ export interface components {
             /** @example shared-data */
             name: string;
             size_gb: number;
-            /** @example eastus2 */
+            /** @example eastasia */
             region: string;
             attached_deployments: components["schemas"]["VolumeAttachedDeploymentDto"][];
             created_at: string;
