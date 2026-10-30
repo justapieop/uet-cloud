@@ -11,6 +11,7 @@ import {
   AttachVolumeCase,
   DetachVolumeCase,
   ListVolumesCase,
+  VolumeInUseError,
   type DeploymentReadResult,
 } from "@kumo/application";
 import {
@@ -200,11 +201,12 @@ export class DeploymentsController {
     const user: User = this.owner(request);
     if (!this.detachVolumeCase) throw new ServiceUnavailableException("Volume management is not available");
     try {
+      const shouldDeleteData: boolean = deleteData === "true" || deleteData === "1" || (deleteData as unknown) === true;
       const deployment: Deployment = await this.detachVolumeCase.exec({
         userId: user.id,
         deploymentId: id,
         volumeName,
-        deleteData: deleteData === "true",
+        deleteData: shouldDeleteData,
       });
       await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResponseDto(deployment);
@@ -212,6 +214,13 @@ export class DeploymentsController {
       if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
+      if (error instanceof VolumeInUseError) {
+        throw new ConflictException({
+          code: "VOLUME_IN_USE",
+          message: error.message,
+          attachedDeployments: error.attachedDeployments,
+        });
+      }
       if (error instanceof InvalidDomainParams) throw new BadRequestException(error.message);
       if (error instanceof BuildProviderError) throw new BadGatewayException(error.message);
       throw error;

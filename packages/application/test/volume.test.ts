@@ -238,6 +238,15 @@ test("DetachVolumeCase detaches volume from deployment", async (): Promise<void>
   });
 
   const detachedCalls: { volumeName: string; deleteData?: boolean }[] = [];
+  const deletedVolumeIds: string[] = [];
+
+  const testVolume: Volume = new Volume({
+    id: "vol-data-id",
+    userId: "user-1",
+    name: "data",
+    sizeGb: 2,
+    region: "eastasia",
+  });
 
   const uow: UnitOfWork = {
     run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
@@ -247,8 +256,16 @@ test("DetachVolumeCase detaches volume from deployment", async (): Promise<void>
         deployment: {
           ...emptyRepositories().deployment,
           findByIdAndUserId: async (): Promise<Deployment | null> => storedDeployment,
+          findByUserId: async (): Promise<Deployment[]> => [storedDeployment],
           save: async (dep: Deployment): Promise<void> => {
             storedDeployment = dep;
+          },
+        },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (name: string): Promise<Volume | null> => (name === "data" ? testVolume : null),
+          delete: async (id: string): Promise<void> => {
+            deletedVolumeIds.push(id);
           },
         },
       };
@@ -274,6 +291,69 @@ test("DetachVolumeCase detaches volume from deployment", async (): Promise<void>
   assert.equal(updated.spec?.volumes?.length, 1);
   assert.equal(updated.spec?.volumes?.[0]?.name, "logs");
   assert.deepEqual(detachedCalls, [{ volumeName: "data", deleteData: true }]);
+  assert.deepEqual(deletedVolumeIds, ["vol-data-id"]);
+});
+
+test("DetachVolumeCase throws VolumeInUseError when deleteData=true and volume is in use by another deployment", async (): Promise<void> => {
+  const currentDeployment: Deployment = createTestDeployment({
+    id: "dep-1",
+    name: "app-1",
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 8080,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 2,
+      volumes: [{ name: "shared-data", mountPath: "/data", sizeGb: 5 }],
+    },
+  });
+
+  const otherDeployment: Deployment = createTestDeployment({
+    id: "dep-2",
+    name: "app-2",
+    spec: {
+      repo: "https://github.com/owner/repo2",
+      targetPort: 8080,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 2,
+      volumes: [{ name: "shared-data", mountPath: "/data", sizeGb: 5 }],
+    },
+  });
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
+        deployment: {
+          ...emptyRepositories().deployment,
+          findByIdAndUserId: async (): Promise<Deployment | null> => currentDeployment,
+          findByUserId: async (): Promise<Deployment[]> => [currentDeployment, otherDeployment],
+        },
+      };
+      return operation(repos);
+    },
+  };
+
+  const volumeManager: VolumeManager = {
+    attachVolume: async (): Promise<void> => {},
+    detachVolume: async (): Promise<void> => {},
+  };
+
+  const useCase: DetachVolumeCase = new DetachVolumeCase(uow, volumeManager);
+  await assert.rejects(
+    async (): Promise<Deployment> =>
+      useCase.exec({
+        userId: "user-1",
+        deploymentId: "dep-1",
+        volumeName: "shared-data",
+        deleteData: true,
+      }),
+    (err: unknown): boolean => err instanceof VolumeInUseError,
+  );
 });
 
 test("DetachVolumeCase throws when volume does not exist or deployment status is invalid", async (): Promise<void> => {

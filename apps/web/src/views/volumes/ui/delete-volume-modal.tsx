@@ -9,9 +9,10 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 interface DeleteVolumeModalProps {
   readonly volumeName: string | null;
   readonly onClose: () => void;
+  readonly onDeleted?: (name: string) => void;
 }
 
-export function DeleteVolumeModal({ volumeName, onClose }: DeleteVolumeModalProps): JSX.Element | null {
+export function DeleteVolumeModal({ volumeName, onClose, onDeleted }: DeleteVolumeModalProps): JSX.Element | null {
   const router: AppRouterInstance = useRouter();
   const [isDeleting, setIsDeleting]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
@@ -29,6 +30,7 @@ export function DeleteVolumeModal({ volumeName, onClose }: DeleteVolumeModalProp
       setErrorMessage(result.error ?? "Failed to delete volume.");
     } else {
       setIsDeleting(false);
+      onDeleted?.(volumeName);
       onClose();
       router.refresh();
     }

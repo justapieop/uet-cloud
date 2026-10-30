@@ -34,9 +34,12 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
   const [dialogMode, setDialogMode]: ["detach" | "delete" | null, Dispatch<SetStateAction<"detach" | "delete" | null>>] = useState<"detach" | "delete" | null>(null);
   const [pendingAttachment, setPendingAttachment]: [PendingAttachment | null, Dispatch<SetStateAction<PendingAttachment | null>>] = useState<PendingAttachment | null>(null);
   const [pendingOperation, setPendingOperation]: [PendingVolumeOperation | null, Dispatch<SetStateAction<PendingVolumeOperation | null>>] = useState<PendingVolumeOperation | null>(null);
+  const [removedVolumeNames, setRemovedVolumeNames]: [string[], Dispatch<SetStateAction<string[]>>] = useState<string[]>([]);
   const [, startTransition]: [boolean, TransitionStartFunction] = useTransition();
 
-  const volumes: readonly DeploymentVolume[] = deployment.volumes ?? [];
+  const volumes: readonly DeploymentVolume[] = (deployment.volumes ?? []).filter(
+    (vol: DeploymentVolume): boolean => !removedVolumeNames.includes(vol.name),
+  );
   const isEditable: boolean = deployment.status === "RUNNING" || deployment.status === "STOPPED";
   const isAttaching: boolean = pendingAttachment?.status === "attaching";
   const isModifying: boolean = pendingOperation?.status === "in-progress";
@@ -98,6 +101,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
           errorMessage: result.error ?? `Failed to ${mode} volume. Please try again.`,
         });
       } else {
+        setRemovedVolumeNames((prev: string[]): string[] => [...prev, volumeName]);
         setPendingOperation(null);
         router.refresh();
       }

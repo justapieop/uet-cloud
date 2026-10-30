@@ -43,13 +43,13 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
 }
 
 export interface AzureProviderClients {
-  resources: Pick<ResourceManagementClient["resources"], "getById"> & Partial<Pick<ResourceManagementClient["resources"], "createOrUpdateById">>;
+  resources: Pick<ResourceManagementClient["resources"], "getById"> & Partial<Pick<ResourceManagementClient["resources"], "createOrUpdateById" | "deleteById">>;
   resourceGroups: Pick<ResourceManagementClient["resourceGroups"], "checkExistence" | "get" | "createOrUpdate">;
   managedEnvironments: Pick<ContainerAppsAPIClient["managedEnvironments"], "get">;
   containerApps: Pick<ContainerAppsAPIClient["containerApps"], "get" | "createOrUpdate" | "update">;
   managedEnvironmentsStorages?: Pick<ContainerAppsAPIClient["managedEnvironmentsStorages"], "createOrUpdate" | "delete" | "get">;
   storageAccounts?: Pick<StorageManagementClient["storageAccounts"], "create" | "getProperties"> & Partial<Pick<StorageManagementClient["storageAccounts"], "listKeys">>;
-  fileShares?: Pick<StorageManagementClient["fileShares"], "create" | "get" | "delete">;
+  fileShares?: Pick<StorageManagementClient["fileShares"], "create" | "get" | "delete"> & Partial<Pick<StorageManagementClient["fileShares"], "list">>;
 }
 
 @Injectable()
@@ -423,20 +423,49 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
         if (!this.isNotFound(error)) throw error;
       }
     }
+    if (this.clients.resources?.deleteById) {
+      try {
+        const storageResourceId: string = `${environment.id}/storages/${storageLinkName}`;
+        await this.clients.resources.deleteById(storageResourceId, "2026-03-02-preview");
+      } catch (error: unknown) {
+        if (!this.isNotFound(error)) throw error;
+      }
+    }
 
     if (input.deleteData && this.clients.fileShares) {
       const storageAccountName: string = this.userStorageAccountName(input.userId);
-      const shareName: string = this.volumeShareName(input.appName, input.volumeName);
-      const standaloneShare: string = this.standaloneVolumeShareName(input.volumeName);
+      const shareName: string = this.volumeShareName(input.volumeName);
+      const legacyShareName: string = `share-${input.appName.slice(0, 25)}-${input.volumeName.slice(0, 25)}`;
       try {
         await this.clients.fileShares.delete(rgName, storageAccountName, shareName, { abortSignal: signal });
       } catch (error: unknown) {
         if (!this.isNotFound(error)) throw error;
       }
       try {
-        await this.clients.fileShares.delete(rgName, storageAccountName, standaloneShare, { abortSignal: signal });
+        await this.clients.fileShares.delete(rgName, storageAccountName, legacyShareName, { abortSignal: signal });
       } catch (error: unknown) {
         if (!this.isNotFound(error)) throw error;
+      }
+      if (this.clients.fileShares.list) {
+        try {
+          for await (const share of this.clients.fileShares.list(rgName, storageAccountName)) {
+            const shareItemName: string | undefined = share.name;
+            if (
+              shareItemName &&
+              (shareItemName === shareName ||
+                shareItemName === legacyShareName ||
+                shareItemName.endsWith(`-${input.volumeName}`))
+            ) {
+              try {
+                await this.clients.fileShares.delete(rgName, storageAccountName, shareItemName, { abortSignal: signal });
+              } catch (err: unknown) {
+                if (!this.isNotFound(err)) throw err;
+              }
+            }
+          }
+        } catch (error: unknown) {
+          if (!this.isNotFound(error)) throw error;
+        }
       }
     }
   }
@@ -446,12 +475,15 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     return `stkumo${sanitized.slice(0, 18).padEnd(3, "0")}`;
   }
 
-  public volumeShareName(appName: string, volumeName: string): string {
-    return `share-${appName.slice(0, 25)}-${volumeName.slice(0, 25)}`;
+  public volumeShareName(volumeName: string): string;
+  public volumeShareName(appName: string, volumeName: string): string;
+  public volumeShareName(appNameOrVolumeName: string, volumeName?: string): string {
+    const finalName: string = volumeName ?? appNameOrVolumeName;
+    return `share-vol-${finalName.slice(0, 50)}`;
   }
 
   public standaloneVolumeShareName(volumeName: string): string {
-    return `share-vol-${volumeName.slice(0, 50)}`;
+    return this.volumeShareName(volumeName);
   }
 
   public storageLinkName(appName: string, volumeName: string): string {
@@ -466,7 +498,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   }): Promise<void> {
     const rgName: string = this.userResourceGroup(input.userId);
     const storageAccountName: string = this.userStorageAccountName(input.userId);
-    const shareName: string = this.standaloneVolumeShareName(input.volumeName);
+    const shareName: string = this.volumeShareName(input.volumeName);
     const opSignal: AbortSignal = this.operationSignal();
 
     if (this.clients.storageAccounts && this.clients.fileShares) {
@@ -502,7 +534,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   }): Promise<void> {
     const rgName: string = this.userResourceGroup(input.userId);
     const storageAccountName: string = this.userStorageAccountName(input.userId);
-    const shareName: string = this.standaloneVolumeShareName(input.volumeName);
+    const shareName: string = this.volumeShareName(input.volumeName);
     const opSignal: AbortSignal = this.operationSignal();
 
     if (this.clients.fileShares) {
@@ -510,6 +542,26 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
         await this.clients.fileShares.delete(rgName, storageAccountName, shareName, { abortSignal: opSignal });
       } catch (error: unknown) {
         if (!this.isNotFound(error)) throw error;
+      }
+
+      if (this.clients.fileShares.list) {
+        try {
+          for await (const share of this.clients.fileShares.list(rgName, storageAccountName)) {
+            const shareItemName: string | undefined = share.name;
+            if (
+              shareItemName &&
+              (shareItemName === shareName || shareItemName.endsWith(`-${input.volumeName}`))
+            ) {
+              try {
+                await this.clients.fileShares.delete(rgName, storageAccountName, shareItemName, { abortSignal: opSignal });
+              } catch (err: unknown) {
+                if (!this.isNotFound(err)) throw err;
+              }
+            }
+          }
+        } catch (error: unknown) {
+          if (!this.isNotFound(error)) throw error;
+        }
       }
     }
   }
@@ -523,7 +575,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   ): Promise<string> {
     const rgName: string = this.userResourceGroup(userId);
     const storageAccountName: string = this.userStorageAccountName(userId);
-    const shareName: string = this.volumeShareName(appName, volume.name);
+    const shareName: string = this.volumeShareName(volume.name);
     const storageLinkName: string = this.storageLinkName(appName, volume.name);
     const opSignal: AbortSignal = this.operationSignal(signal);
 

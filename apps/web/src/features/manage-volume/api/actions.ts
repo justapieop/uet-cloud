@@ -121,6 +121,7 @@ export async function attachVolumeAction(
 
     revalidatePath(`/dashboard/deployments/${deploymentId}`);
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/volumes");
     return { success: true };
   } catch (error: unknown) {
     return { success: false, error: extractErrorMessage(error, "Failed to connect to volume service") };
@@ -175,6 +176,7 @@ export async function detachVolumeAction(
 
     revalidatePath(`/dashboard/deployments/${deploymentId}`);
     revalidatePath("/dashboard");
+    revalidatePath("/dashboard/volumes");
     return { success: true };
   } catch (error: unknown) {
     return { success: false, error: extractErrorMessage(error, "Failed to connect to volume service") };

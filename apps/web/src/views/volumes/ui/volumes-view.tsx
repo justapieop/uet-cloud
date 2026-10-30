@@ -19,9 +19,11 @@ function formatDate(value: string): string {
 export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
   const [isCreateOpen, setIsCreateOpen]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const [targetDeleteVolume, setTargetDeleteVolume]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
+  const [deletedVolumeNames, setDeletedVolumeNames]: [string[], Dispatch<SetStateAction<string[]>>] = useState<string[]>([]);
 
-  const totalStorageGb: number = volumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.size_gb, 0);
-  const totalAttachments: number = volumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.attached_deployments.length, 0);
+  const effectiveVolumes: VolumeItem[] = volumes.filter((vol: VolumeItem): boolean => !deletedVolumeNames.includes(vol.name));
+  const totalStorageGb: number = effectiveVolumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.size_gb, 0);
+  const totalAttachments: number = effectiveVolumes.reduce((sum: number, vol: VolumeItem): number => sum + vol.attached_deployments.length, 0);
 
   return (
     <>
@@ -41,11 +43,11 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
         </button>
       </div>
 
-      {volumes.length > 0 && (
+      {effectiveVolumes.length > 0 && (
         <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-surface-border bg-surface/40 p-4">
             <span className="text-xs text-muted-text">Total Volumes</span>
-            <p className="mt-1 text-2xl font-semibold tracking-tight">{volumes.length}</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight">{effectiveVolumes.length}</p>
           </div>
           <div className="rounded-xl border border-surface-border bg-surface/40 p-4">
             <span className="text-xs text-muted-text">Total Allocated Storage</span>
@@ -63,13 +65,13 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
           <div className="flex items-center gap-2.5">
             <h2 className="text-sm font-medium">All persistent volumes</h2>
             <span className="rounded-md bg-white/5 px-2 py-0.5 font-mono text-[11px] text-muted-text">
-              {volumes.length}
+              {effectiveVolumes.length}
             </span>
           </div>
           <span className="text-xs text-muted-dark">Newest first</span>
         </div>
 
-        {volumes.length === 0 ? (
+        {effectiveVolumes.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center px-6 py-16 text-center">
             <div className="mb-4 flex size-12 items-center justify-center rounded-2xl border border-surface-border bg-background/60 text-muted-text">
               <svg className="size-6 text-muted-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -119,7 +121,7 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-border">
-                {volumes.map((volume: VolumeItem): JSX.Element => {
+                {effectiveVolumes.map((volume: VolumeItem): JSX.Element => {
                   const isMounted: boolean = volume.attached_deployments.length > 0;
                   return (
                     <tr key={volume.id} className="align-top transition-colors hover:bg-white/[0.02]">
@@ -195,7 +197,11 @@ export function VolumesView({ volumes }: VolumesViewProps): JSX.Element {
       </section>
 
       <CreateVolumeModal isOpen={isCreateOpen} onClose={(): void => setIsCreateOpen(false)} />
-      <DeleteVolumeModal volumeName={targetDeleteVolume} onClose={(): void => setTargetDeleteVolume(null)} />
+      <DeleteVolumeModal
+        volumeName={targetDeleteVolume}
+        onClose={(): void => setTargetDeleteVolume(null)}
+        onDeleted={(deletedName: string): void => setDeletedVolumeNames((prev: string[]): string[] => [...prev, deletedName])}
+      />
     </>
   );
 }

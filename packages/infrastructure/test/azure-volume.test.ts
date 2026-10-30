@@ -13,6 +13,7 @@ function createSetup(options: { existingApp?: boolean; storageAccountExists?: bo
   provider: AzureProvider;
   events: string[];
   apps: Map<string, ContainerApp>;
+  clients: AzureProviderClients;
 } {
   const events: string[] = [];
   const apps: Map<string, ContainerApp> = new Map<string, ContainerApp>();
@@ -180,7 +181,7 @@ function createSetup(options: { existingApp?: boolean; storageAccountExists?: bo
     { feature_flags: [] },
   );
 
-  return { provider, events, apps };
+  return { provider, events, apps, clients };
 }
 
 test("AzureProvider.createDeployment mounts volumes into template and creates storage resources", async (): Promise<void> => {
@@ -209,7 +210,7 @@ test("AzureProvider.createDeployment mounts volumes into template and creates st
 
   assert.ok(events.includes("storage-getProperties"));
   assert.ok(!events.includes("storage-listKeys"));
-  assert.ok(events.includes("share-create:share-sample-app-data:5"));
+  assert.ok(events.includes("share-create:share-vol-data:5"));
   assert.ok(events.includes("env-storage-create:stg-sample-app-data:identity=system:hasKey=false"));
   assert.ok(events.includes("app-createOrUpdate"));
 });
@@ -299,7 +300,7 @@ test("AzureProvider.detachVolume removes volume and deletes file share when dele
   assert.equal(updated.template?.volumes?.length, 0);
   assert.equal(updated.template?.containers?.[0]?.volumeMounts?.length, 0);
   assert.ok(events.includes("env-storage-delete:stg-sample-app-logs"));
-  assert.ok(events.includes("share-delete:share-sample-app-logs"));
+  assert.ok(events.includes("share-delete:share-vol-logs"));
 });
 
 test("AzureDeploymentConfigurationReader reads applied volumes from container", async (): Promise<void> => {
@@ -368,4 +369,30 @@ test("AzureProvider.attachVolume registers environment storage via resources.cre
   assert.ok(registeredEvent.includes('"identity":"system"'), "Expected identity system in payload");
   assert.ok(!registeredEvent.includes('"accountKey"'), "Expected no accountKey in payload");
   assert.ok(!events.includes("storage-listKeys"), "Expected no storage-listKeys event");
+});
+
+test("AzureProvider.deleteStorageVolume deletes standalone share and matching app shares", async (): Promise<void> => {
+  const setup: ReturnType<typeof createSetup> = createSetup({ existingApp: true });
+  const deletedShares: string[] = [];
+  setup.clients.fileShares = {
+    create: async (): Promise<any> => ({}),
+    get: async (): Promise<any> => ({}),
+    delete: async (_rg: string, _acct: string, name: string): Promise<void> => {
+      deletedShares.push(name);
+    },
+    list: (async function* (): AsyncGenerator<{ readonly name: string }> {
+      yield { name: "share-vol-logs" };
+      yield { name: "share-my-test-logs" };
+      yield { name: "share-other-unrelated" };
+    }) as any,
+  };
+
+  await setup.provider.deleteStorageVolume({
+    userId: "12345",
+    volumeName: "logs",
+  });
+
+  assert.ok(deletedShares.includes("share-vol-logs"));
+  assert.ok(deletedShares.includes("share-my-test-logs"));
+  assert.ok(!deletedShares.includes("share-other-unrelated"));
 });

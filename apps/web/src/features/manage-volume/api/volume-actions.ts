@@ -99,6 +99,7 @@ export async function createStandaloneVolumeAction(input: {
     }
 
     revalidatePath("/dashboard/volumes");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (error: unknown) {
     return { success: false, error: extractErrorMessage(error, "Failed to connect to volume service. Please try again.") };
@@ -144,6 +145,7 @@ export async function deleteStandaloneVolumeAction(name: string): Promise<Volume
     }
 
     revalidatePath("/dashboard/volumes");
+    revalidatePath("/dashboard");
     return { success: true };
   } catch (error: unknown) {
     return { success: false, error: extractErrorMessage(error, "Failed to connect to volume service. Please try again.") };
