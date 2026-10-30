@@ -2,11 +2,13 @@ import {
   Deployment,
   InvalidDomainParams,
   validateDeploymentVolumes,
+  Volume,
   type DeploymentSpec,
   type DeploymentVolume,
   type Plan,
   type User,
 } from "@kumo/domain";
+import { randomUUID } from "node:crypto";
 import { DeploymentNotFoundError, type VolumeManager } from "../../ports/deployment.js";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, type StripeSubscriptionGateway } from "../../ports/stripe.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
@@ -85,6 +87,18 @@ export class AttachVolumeCase {
         volume: input.volume,
         existingVolumes,
       });
+
+      const existingVolRecord: Volume | null = await repo.volumes.findByNameAndUserId(input.volume.name, input.userId);
+      if (!existingVolRecord) {
+        const newVolRecord: Volume = new Volume({
+          id: randomUUID(),
+          userId: input.userId,
+          name: input.volume.name,
+          sizeGb: input.volume.sizeGb,
+          region: deployment.spec?.region ?? "eastus2",
+        });
+        await repo.volumes.save(newVolRecord);
+      }
 
       const updatedVolumes: readonly DeploymentVolume[] = [...existingVolumes, input.volume];
       const updatedSpec: DeploymentSpec = { ...deployment.spec, volumes: updatedVolumes };

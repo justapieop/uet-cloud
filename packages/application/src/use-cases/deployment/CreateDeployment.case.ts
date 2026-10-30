@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Deployment, InvalidDomainParams, type DeploymentSpec, type DeploymentVolume, type Plan, type User } from "@kumo/domain";
+import { Deployment, InvalidDomainParams, Volume, type DeploymentSpec, type DeploymentVolume, type Plan, type User } from "@kumo/domain";
 import { DeploymentRequestKeyReused, type DeploymentRequestReceipt } from "../../ports/deployment-request.js";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, type StripeSubscriptionGateway } from "../../ports/stripe.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
@@ -67,6 +67,23 @@ export class CreateDeploymentCase {
       if (!eligible) throw new DeploymentQuotaExceeded("The request exceeds the plan's deployment-count, per-deployment CPU, RAM, disk, or replica limit");
 
       await repo.deployment.insert(deployment);
+
+      if (input.spec.volumes && input.spec.volumes.length > 0) {
+        for (const vol of input.spec.volumes) {
+          const existing: Volume | null = await repo.volumes.findByNameAndUserId(vol.name, input.userId);
+          if (!existing) {
+            const newVol: Volume = new Volume({
+              id: randomUUID(),
+              userId: input.userId,
+              name: vol.name,
+              sizeGb: vol.sizeGb,
+              region: input.spec.region ?? "eastus2",
+            });
+            await repo.volumes.save(newVol);
+          }
+        }
+      }
+
       if (keyHash && fingerprint) {
         await repo.deploymentRequests.save(keyHash, {
           fingerprint, deployment: { ...deployment.getDetails(), spec: { ...input.spec, envVars: undefined } },

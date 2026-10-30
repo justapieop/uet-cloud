@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deployment, InvalidDomainParams, Plan, User, type DeploymentDetails, type DeploymentVolume } from "@kumo/domain";
+import { Deployment, InvalidDomainParams, Plan, User, Volume, type DeploymentDetails, type DeploymentVolume } from "@kumo/domain";
 import {
   AttachVolumeCase,
   DetachVolumeCase,
   ListVolumesCase,
+  CreateVolumeCase,
+  DeleteVolumeCase,
+  ListUserVolumesCase,
+  VolumeAlreadyExists,
+  VolumeInUseError,
+  VolumeNotFoundError,
   DeploymentNotFoundError,
   InvalidDeploymentStatusError,
   DeploymentQuotaExceeded,
@@ -81,6 +87,11 @@ test("AttachVolumeCase attaches volume to a running deployment within quota", as
         plans: {
           ...emptyRepositories().plans,
           findActiveByStripeProductIds: async (): Promise<Plan[]> => [TEST_PLAN],
+        },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => null,
+          save: async (): Promise<void> => {},
         },
       };
       return operation(repos);
@@ -183,6 +194,11 @@ test("AttachVolumeCase rejects when volume exceeds plan disk quota", async (): P
         plans: {
           ...emptyRepositories().plans,
           findActiveByStripeProductIds: async (): Promise<Plan[]> => [TEST_PLAN],
+        },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => null,
+          save: async (): Promise<void> => {},
         },
       };
       return operation(repos);
@@ -309,4 +325,255 @@ test("ListVolumesCase returns volume list for deployment", async (): Promise<voi
   const useCase: ListVolumesCase = new ListVolumesCase(uow);
   const result: readonly DeploymentVolume[] = await useCase.exec({ userId: "user-1", deploymentId: "dep-1" });
   assert.deepEqual(result, volumes);
+});
+
+test("CreateVolumeCase creates standalone volume within disk quota and calls volumeManager", async (): Promise<void> => {
+  let savedVolume: Volume | null = null;
+  const storageCreated: { volumeName: string; sizeGb: number }[] = [];
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: {
+          ...emptyRepositories().users,
+          findById: async (): Promise<User | null> => createTestUser(),
+          findByIdForUpdate: async (): Promise<User | null> => createTestUser(),
+        },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => null,
+          findByUserId: async (): Promise<Volume[]> => [],
+          save: async (vol: Volume): Promise<void> => {
+            savedVolume = vol;
+          },
+        },
+        plans: {
+          ...emptyRepositories().plans,
+          findActiveByStripeProductIds: async (): Promise<Plan[]> => [TEST_PLAN],
+        },
+      };
+      return operation(repos);
+    },
+  };
+
+  const subscriptions: StripeSubscriptionGateway = {
+    getActiveSubscriptionProductIds: async (): Promise<readonly string[]> => ["prod_123"],
+  };
+
+  const volumeManager: VolumeManager = {
+    attachVolume: async (): Promise<void> => {},
+    detachVolume: async (): Promise<void> => {},
+    createStorageVolume: async (input): Promise<void> => {
+      storageCreated.push({ volumeName: input.volumeName, sizeGb: input.sizeGb });
+    },
+  };
+
+  const useCase: CreateVolumeCase = new CreateVolumeCase(uow, subscriptions, volumeManager);
+  const created: Volume = await useCase.exec({
+    userId: "user-1",
+    name: "shared-data",
+    sizeGb: 5,
+    region: "eastus2",
+  });
+
+  assert.equal(created.name, "shared-data");
+  assert.equal(created.sizeGb, 5);
+  assert.equal(created.region, "eastus2");
+  assert.ok(savedVolume !== null);
+  assert.equal((savedVolume as Volume).name, "shared-data");
+  assert.deepEqual(storageCreated, [{ volumeName: "shared-data", sizeGb: 5 }]);
+});
+
+test("CreateVolumeCase rejects when volume name already exists or quota exceeded", async (): Promise<void> => {
+  const existingVolume: Volume = new Volume({
+    id: "vol-1",
+    userId: "user-1",
+    name: "existing-data",
+    sizeGb: 8,
+    region: "eastus2",
+  });
+
+  const uowDuplicate: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => existingVolume,
+        },
+      };
+      return operation(repos);
+    },
+  };
+
+  const subscriptions: StripeSubscriptionGateway = {
+    getActiveSubscriptionProductIds: async (): Promise<readonly string[]> => ["prod_123"],
+  };
+  const volumeManager: VolumeManager = { attachVolume: async (): Promise<void> => {}, detachVolume: async (): Promise<void> => {} };
+
+  const useCaseDuplicate: CreateVolumeCase = new CreateVolumeCase(uowDuplicate, subscriptions, volumeManager);
+  await assert.rejects(
+    useCaseDuplicate.exec({ userId: "user-1", name: "existing-data", sizeGb: 2, region: "eastus2" }),
+    (err: unknown): boolean => err instanceof VolumeAlreadyExists,
+  );
+
+  const uowQuota: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: {
+          ...emptyRepositories().users,
+          findById: async (): Promise<User | null> => createTestUser(),
+          findByIdForUpdate: async (): Promise<User | null> => createTestUser(),
+        },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => null,
+          findByUserId: async (): Promise<Volume[]> => [existingVolume], // 8 GiB used out of 10
+        },
+        plans: { ...emptyRepositories().plans, findActiveByStripeProductIds: async (): Promise<Plan[]> => [TEST_PLAN] },
+      };
+      return operation(repos);
+    },
+  };
+
+  const useCaseQuota: CreateVolumeCase = new CreateVolumeCase(uowQuota, subscriptions, volumeManager);
+  await assert.rejects(
+    useCaseQuota.exec({ userId: "user-1", name: "another-vol", sizeGb: 5, region: "eastus2" }), // 8 + 5 = 13 > 10
+    (err: unknown): boolean => err instanceof DeploymentQuotaExceeded,
+  );
+});
+
+test("ListUserVolumesCase returns user volumes with attached deployment references", async (): Promise<void> => {
+  const volA: Volume = new Volume({ id: "v1", userId: "user-1", name: "vol-a", sizeGb: 5, region: "eastus2" });
+  const volB: Volume = new Volume({ id: "v2", userId: "user-1", name: "vol-b", sizeGb: 2, region: "eastus2" });
+
+  const dep1: Deployment = createTestDeployment({
+    id: "d1",
+    name: "frontend",
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 80,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 1,
+      volumes: [{ name: "vol-a", mountPath: "/mnt/data", sizeGb: 5 }],
+    },
+  });
+
+  const dep2: Deployment = createTestDeployment({
+    id: "d2",
+    name: "backend",
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 8080,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 1,
+      volumes: [{ name: "vol-a", mountPath: "/mnt/shared", sizeGb: 5 }],
+    },
+  });
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+        volumes: { ...emptyRepositories().volumes, findByUserId: async (): Promise<Volume[]> => [volA, volB] },
+        deployment: { ...emptyRepositories().deployment, findByUserId: async (): Promise<Deployment[]> => [dep1, dep2] },
+      };
+      return operation(repos);
+    },
+  };
+
+  const useCase: ListUserVolumesCase = new ListUserVolumesCase(uow);
+  const items = await useCase.exec({ userId: "user-1" });
+
+  assert.equal(items.length, 2);
+  assert.equal(items[0]?.volume.name, "vol-a");
+  assert.deepEqual(items[0]?.attachedDeployments, [
+    { id: "d1", name: "frontend" },
+    { id: "d2", name: "backend" },
+  ]);
+  assert.equal(items[1]?.volume.name, "vol-b");
+  assert.deepEqual(items[1]?.attachedDeployments, []);
+});
+
+test("DeleteVolumeCase deletes unattached volume and calls volumeManager", async (): Promise<void> => {
+  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "unattached-vol", sizeGb: 5, region: "eastus2" });
+  let deletedId: string | null = null;
+  let deletedStorageName: string | null = null;
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => vol,
+          delete: async (id: string): Promise<void> => { deletedId = id; },
+        },
+        deployment: { ...emptyRepositories().deployment, findByUserId: async (): Promise<Deployment[]> => [] },
+      };
+      return operation(repos);
+    },
+  };
+
+  const volumeManager: VolumeManager = {
+    attachVolume: async (): Promise<void> => {},
+    detachVolume: async (): Promise<void> => {},
+    deleteStorageVolume: async (input): Promise<void> => { deletedStorageName = input.volumeName; },
+  };
+
+  const useCase: DeleteVolumeCase = new DeleteVolumeCase(uow, volumeManager);
+  await useCase.exec({ userId: "user-1", volumeName: "unattached-vol" });
+
+  assert.equal(deletedId as string | null, "v1");
+  assert.equal(deletedStorageName as string | null, "unattached-vol");
+});
+
+test("DeleteVolumeCase throws VolumeInUseError when volume is attached to an active deployment", async (): Promise<void> => {
+  const vol: Volume = new Volume({ id: "v1", userId: "user-1", name: "in-use-vol", sizeGb: 5, region: "eastus2" });
+  const dep: Deployment = createTestDeployment({
+    id: "d1",
+    name: "active-app",
+    status: "RUNNING",
+    spec: {
+      repo: "https://github.com/owner/repo",
+      targetPort: 80,
+      maxVcpu: 0.5,
+      maxMemory: 1,
+      minScaling: 0,
+      maxScaling: 1,
+      volumes: [{ name: "in-use-vol", mountPath: "/data", sizeGb: 5 }],
+    },
+  });
+
+  const uow: UnitOfWork = {
+    run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
+      const repos: UnitOfWorkRepositories = {
+        ...emptyRepositories(),
+        users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+        volumes: {
+          ...emptyRepositories().volumes,
+          findByNameAndUserId: async (): Promise<Volume | null> => vol,
+        },
+        deployment: { ...emptyRepositories().deployment, findByUserId: async (): Promise<Deployment[]> => [dep] },
+      };
+      return operation(repos);
+    },
+  };
+
+  const volumeManager: VolumeManager = { attachVolume: async (): Promise<void> => {}, detachVolume: async (): Promise<void> => {} };
+  const useCase: DeleteVolumeCase = new DeleteVolumeCase(uow, volumeManager);
+
+  await assert.rejects(
+    useCase.exec({ userId: "user-1", volumeName: "in-use-vol" }),
+    (err: unknown): boolean => err instanceof VolumeInUseError && err.message.includes("active-app"),
+  );
 });

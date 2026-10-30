@@ -10,3 +10,14 @@ export interface VolumeRepository {
 }
 
 export const VOLUME_REPOSITORY: symbol = Symbol("VOLUME_REPOSITORY");
+
+export class VolumeAlreadyExists extends Error {}
+export class VolumeNotFoundError extends Error {}
+export class VolumeInUseError extends Error {
+  public constructor(
+    message: string,
+    public readonly attachedDeployments: readonly { readonly id: string; readonly name: string }[] = [],
+  ) {
+    super(message);
+  }
+}
