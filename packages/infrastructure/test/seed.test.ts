@@ -5,7 +5,7 @@ import { defaultSeedRoles, parseDatabaseSeedInput, seedDatabase, type DatabaseSe
 import type { DataSource } from "typeorm";
 import { addGithubAdmin, AdminBootstrapError, validateGithubUserId } from "../dist/db/add-admin.js";
 
-const PLAN: PlanDetails = { id: "example", name: "Example", price: 5, vcpu: 0.5, memory: 1, deployments: 1, disk: 10, active: false };
+const PLAN: PlanDetails = { id: "example", name: "Example", price: 5, vcpu: 0.5, memory: 1, deployments: 1, disk: 64, active: false };
 
 test("admin bootstrap accepts only canonical numeric GitHub IDs before touching the database", async (): Promise<void> => {
   validateGithubUserId("12345678901234567890");

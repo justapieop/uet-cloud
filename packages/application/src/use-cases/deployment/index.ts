@@ -12,3 +12,6 @@ export * from "./StartDeployment.case.js";
 export * from "./StopDeployment.case.js";
 export * from "./RedeployDeployment.case.js";
 export * from "./ProcessGitHubPush.case.js";
+export * from "./AttachVolume.case.js";
+export * from "./DetachVolume.case.js";
+export * from "./ListVolumes.case.js";

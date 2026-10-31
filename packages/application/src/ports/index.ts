@@ -17,3 +17,4 @@ export * from "./github-repositories.js";
 export * from "./github-webhook.js";
 export * from "./deployment-regions.js";
 export * from "./root-login.js";
+export * from "./volume.js";

@@ -1,7 +1,69 @@
 import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
+import { MIN_VOLUME_SIZE_GB, MAX_VOLUME_SIZE_GB } from "./volume.js";
 
 export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
+
+export type VolumeAccessMode = "ReadWrite" | "ReadOnly";
+
+export interface DeploymentVolume {
+  readonly name: string;
+  readonly mountPath: string;
+  readonly subPath?: string;
+  readonly sizeGb: number;
+  readonly accessMode?: VolumeAccessMode;
+}
+
+export function validateDeploymentVolumes(volumes?: readonly DeploymentVolume[], maxDiskGb?: number): InvalidDomainParams | null {
+  if (volumes === undefined) return null;
+  if (!Array.isArray(volumes)) return new InvalidDomainParams("Deployment volumes must be an array");
+  const names: Set<string> = new Set<string>();
+  const paths: Set<string> = new Set<string>();
+  let totalDisk: number = 0;
+  for (let index: number = 0; index < volumes.length; index += 1) {
+    const vol: DeploymentVolume = volumes[index]!;
+    if (!vol || typeof vol !== "object") return new InvalidDomainParams("Invalid volume specification");
+    if (typeof vol.name !== "string" || !/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(vol.name)) {
+      return new InvalidDomainParams("Volume name must be 2-32 lowercase letters, digits, or hyphens, starting and ending with an alphanumeric character");
+    }
+    if (typeof vol.mountPath !== "string" || !/^\/[a-zA-Z0-9_./-]*$/.test(vol.mountPath) || vol.mountPath.includes(":") || vol.mountPath.includes("\0") || vol.mountPath.split("/").includes("..")) {
+      return new InvalidDomainParams("Volume mountPath must be a valid absolute Linux path without ':' or relative traversals");
+    }
+    const normalizedPath: string = vol.mountPath.replace(/\/+$/, "") || "/";
+    const reservedRoots: readonly string[] = ["/", "/bin", "/sbin", "/etc", "/dev", "/proc", "/sys", "/root", "/usr"];
+    if (reservedRoots.includes(normalizedPath)) {
+      return new InvalidDomainParams(`Volume mountPath cannot be a critical system path: ${normalizedPath}`);
+    }
+    if (vol.subPath !== undefined && (typeof vol.subPath !== "string" || vol.subPath.startsWith("/") || vol.subPath.includes(":") || vol.subPath.includes("\0") || vol.subPath.split("/").includes(".."))) {
+      return new InvalidDomainParams("Volume subPath must be a relative path without leading slash, ':' or parent traversal");
+    }
+    if (
+      !Number.isInteger(vol.sizeGb) ||
+      vol.sizeGb < MIN_VOLUME_SIZE_GB ||
+      vol.sizeGb > MAX_VOLUME_SIZE_GB
+    ) {
+      return new InvalidDomainParams(
+        `Volume sizeGb must be an integer between ${MIN_VOLUME_SIZE_GB} and ${MAX_VOLUME_SIZE_GB} GiB`,
+      );
+    }
+    if (vol.accessMode !== undefined && vol.accessMode !== "ReadWrite" && vol.accessMode !== "ReadOnly") {
+      return new InvalidDomainParams("Volume accessMode must be 'ReadWrite' or 'ReadOnly'");
+    }
+    if (names.has(vol.name)) {
+      return new InvalidDomainParams(`Duplicate volume name: ${vol.name}`);
+    }
+    if (paths.has(normalizedPath)) {
+      return new InvalidDomainParams(`Duplicate volume mountPath: ${normalizedPath}`);
+    }
+    names.add(vol.name);
+    paths.add(normalizedPath);
+    totalDisk += vol.sizeGb;
+  }
+  if (maxDiskGb !== undefined && totalDisk > maxDiskGb) {
+    return new InvalidDomainParams(`Total volume size ${totalDisk}Gi exceeds disk quota of ${maxDiskGb}Gi`);
+  }
+  return null;
+}
 
 export interface DeploymentPortMapping {
   readonly targetPort: number;
@@ -48,6 +110,7 @@ export interface DeploymentSpec {
   readonly minScaling: number;
   readonly maxScaling: number;
   readonly envVars?: Readonly<Record<string, string>>;
+  readonly volumes?: readonly DeploymentVolume[];
 }
 
 export class Deployment extends Domain<DeploymentDetails> {
@@ -76,6 +139,7 @@ export class Deployment extends Domain<DeploymentDetails> {
     this.spec = details.spec ? {
       ...details.spec, envVars: { ...details.spec.envVars },
       additionalPorts: details.spec.additionalPorts?.map((port: DeploymentPortMapping): DeploymentPortMapping => ({ ...port })),
+      ...(details.spec.volumes !== undefined ? { volumes: details.spec.volumes.map((vol: DeploymentVolume): DeploymentVolume => ({ ...vol })) } : {}),
     } : null;
     this.image = details.image ?? null;
     this.buildId = details.buildId ?? null;
@@ -113,6 +177,8 @@ export class Deployment extends Domain<DeploymentDetails> {
       }
       const portError: InvalidDomainParams | null = validateDeploymentPorts(spec.targetPort, spec.additionalPorts, spec.external);
       if (portError) return portError;
+      const volumeError: InvalidDomainParams | null = validateDeploymentVolumes(spec.volumes);
+      if (volumeError) return volumeError;
       if (typeof spec.repo !== "string" || isBlankStr(spec.repo) || spec.repo.length > 2048) {
         return new InvalidDomainParams("A repository is required");
       }

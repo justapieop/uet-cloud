@@ -10,5 +10,6 @@ export function emptyRepositories(): UnitOfWorkRepositories {
     deployment: { findById: unused, findByIdAndUserId: unused, findByUserId: unused, save: unused, insert: unused, countReservedByUserId: unused, update: unused, updateProgress: unused, transitionStatus: unused, delete: unused },
     deploymentRequests: { findForUpdate: unused, save: unused },
     plans: { findActiveByStripeProductIds: unused },
+    volumes: { findById: unused, findByIdAndUserId: unused, findByNameAndUserId: unused, findByUserId: unused, save: unused, delete: unused },
   };
 }

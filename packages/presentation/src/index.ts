@@ -3,6 +3,8 @@ export * from "./modules/Root.module.js";
 export * from "./modules/Deployment.module.js";
 export * from "./modules/Build.module.js";
 export * from "./controllers/Deployments.controller.js";
+export * from "./dto/Deployment.dto.js";
+export * from "./dto/Volume.dto.js";
 export * from "./dto/BuildResponse.dto.js";
 export * from "./controllers/BuildSource.controller.js";
 export * from "./modules/Stripe.module.js";

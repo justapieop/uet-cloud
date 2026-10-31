@@ -4,6 +4,7 @@ import type { RoleRepository } from "./role.js";
 import type { UserRoleRepository } from "./user-role.js";
 import type { UserRepository } from "./user.js";
 import type { PlanRepository } from "./plan.js";
+import type { VolumeRepository } from "./volume.js";
 
 export interface UnitOfWorkRepositories {
   users: UserRepository;
@@ -12,6 +13,7 @@ export interface UnitOfWorkRepositories {
   deployment: DeploymentRepository;
   deploymentRequests: DeploymentRequestRepository;
   plans: PlanRepository;
+  volumes: VolumeRepository;
 }
 
 export interface UnitOfWork {

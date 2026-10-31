@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@azure/arm-network": "^39.1.0",
+    "@azure/arm-storage": "^21.0.0",
     "@azure/core-rest-pipeline": "^1.25.0",
     "@nestjs/idempotency": "^0.0.2",
     "@nestjs/resilience": "^0.0.2"
