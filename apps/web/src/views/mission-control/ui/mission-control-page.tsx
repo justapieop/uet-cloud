@@ -6,6 +6,7 @@ import { ComputeSpecCard } from "./compute-spec-card";
 import { NetworkTopologyCard } from "./network-topology-card";
 import { InfrastructureMetaCard } from "./infrastructure-meta-card";
 import { MetricsTelemetrySlot } from "./metrics-telemetry-slot";
+import { StorageVolumesCard } from "@/features/manage-volume";
 
 interface MissionControlPageProps {
   readonly deployment: Deployment;
@@ -26,6 +27,8 @@ export function MissionControlPage({ deployment }: MissionControlPageProps): JSX
             <ComputeSpecCard deployment={deployment} />
             <NetworkTopologyCard deployment={deployment} />
           </div>
+
+          <StorageVolumesCard deployment={deployment} />
 
           <InfrastructureMetaCard deployment={deployment} />
         </div>

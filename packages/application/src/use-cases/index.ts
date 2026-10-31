@@ -8,3 +8,4 @@ export * from "./plan/GetUserPlans.case.js";
 export * from "./plan/AdminPlans.case.js";
 export * from "./plan/AdminSubscriptions.case.js";
 export * from "./deployment/GetDeploymentRegions.case.js";
+export * from "./volume/index.js";

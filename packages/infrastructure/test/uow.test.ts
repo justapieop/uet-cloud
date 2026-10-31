@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Role, User } from "@kumo/domain";
 import type { DataSource, EntityManager } from "typeorm";
-import { InfraDeployment, InfraPlan, InfraRole, InfraUser, InfraUserRole, TypeOrmUnitOfWork } from "../dist/db/index.js";
+import { InfraDeployment, InfraPlan, InfraRole, InfraUser, InfraUserRole, InfraVolume, TypeOrmUnitOfWork } from "../dist/db/index.js";
 
 test("unit of work shares one transaction across user and role writes", async (): Promise<void> => {
   const writes: string[] = [];
@@ -41,7 +41,7 @@ test("unit of work shares one transaction across user and role writes", async ()
 
   assert.equal(result, "saved");
   assert.equal(transactionCalls, 1);
-  assert.deepEqual(requestedEntities, [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan]);
+  assert.deepEqual(requestedEntities, [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraVolume]);
   assert.deepEqual(writes, ["user-1", "role-1"]);
 });
 

@@ -53,6 +53,57 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
     additionalPorts.push({ target_port: target, exposed_port: exposedPort, external });
   }
   if (additionalPorts.length) data.additional_ports = additionalPorts;
+  const volumeNames: FormDataEntryValue[] = form.getAll("volume_name");
+  const volumeMountPaths: FormDataEntryValue[] = form.getAll("volume_mount_path");
+  const volumeSubPaths: FormDataEntryValue[] = form.getAll("volume_sub_path");
+  const volumeSizes: FormDataEntryValue[] = form.getAll("volume_size_gb");
+  const volumeAccessModes: FormDataEntryValue[] = form.getAll("volume_access_mode");
+  if (volumeNames.length > 5) return { error: "Add no more than five persistent volumes." };
+  if (
+    volumeNames.length !== volumeMountPaths.length ||
+    volumeNames.length !== volumeSizes.length ||
+    volumeNames.length !== volumeAccessModes.length
+  ) {
+    return { error: "Each volume requires a name, mount path, capacity, and access mode." };
+  }
+  const volumes: NonNullable<DeploymentInput["volumes"]> = [];
+  const names: Set<string> = new Set<string>();
+  const mountPaths: Set<string> = new Set<string>();
+  for (let index: number = 0; index < volumeNames.length; index++) {
+    const vName: string = String(volumeNames[index]).trim();
+    const vMountPath: string = String(volumeMountPaths[index]).trim();
+    const vSubPath: string = String(volumeSubPaths[index] ?? "").trim();
+    const vSize: number = Number(String(volumeSizes[index]).trim());
+    const vAccessMode: string = String(volumeAccessModes[index]).trim();
+    if (!/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(vName)) {
+      return { error: `Volume ${index + 1}: name must use 2–32 lowercase letters, numbers, or hyphens, starting and ending with a letter or number.` };
+    }
+    if (!/^\/[a-zA-Z0-9_./-]+$/.test(vMountPath)) {
+      return { error: `Volume ${index + 1}: mount path must be an absolute path starting with /.` };
+    }
+    if (!Number.isInteger(vSize) || vSize < 32 || vSize > 262144) {
+      return { error: `Volume ${index + 1}: capacity must be an integer between 32 and 262,144 GiB (256 TiB).` };
+    }
+    if (vAccessMode !== "ReadWrite" && vAccessMode !== "ReadOnly") {
+      return { error: `Volume ${index + 1}: access mode must be ReadWrite or ReadOnly.` };
+    }
+    if (names.has(vName)) {
+      return { error: `Volume ${index + 1}: volume name "${vName}" is duplicated.` };
+    }
+    if (mountPaths.has(vMountPath)) {
+      return { error: `Volume ${index + 1}: mount path "${vMountPath}" is duplicated.` };
+    }
+    names.add(vName);
+    mountPaths.add(vMountPath);
+    volumes.push({
+      name: vName,
+      mount_path: vMountPath,
+      ...(vSubPath ? { sub_path: vSubPath } : {}),
+      size_gb: vSize,
+      access_mode: vAccessMode as "ReadWrite" | "ReadOnly",
+    });
+  }
+  if (volumes.length) data.volumes = volumes;
   if (region) data.region = region;
   for (const [field, limit] of [["ref", 255], ["dockerfile_path", 1024], ["image_name", 128]] as const) {
     const value: string = text(field);

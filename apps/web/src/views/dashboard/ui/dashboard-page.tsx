@@ -5,6 +5,7 @@ import { getDeployments, type DeploymentsResult } from "@/entities/deployment/se
 import { DeploymentFilters } from "@/features/filter-deployments";
 import { DeploymentActionButton } from "@/features/manage-deployment";
 import { LoginButton } from "@/features/auth";
+import { DashboardNav } from "@/widgets/dashboard-nav";
 
 interface DashboardPageProps {
   readonly searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -50,6 +51,7 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
           </div>
           <a href="/dashboard/create" className="inline-flex h-10 items-center gap-2 rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"><span aria-hidden="true">+</span> Create deployment</a>
         </div>
+        <DashboardNav activeTab="deployments" />
         {typeof params.created === "string" && result.kind === "success" && result.deployments.some((deployment: Deployment): boolean => deployment.id === params.created) && <p role="status" className="mb-5 rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-5 py-4 text-sm text-emerald-200">Deployment accepted. Its current status is shown below. Refresh the list to check progress.</p>}
         <section aria-label="Deployments" className="overflow-hidden rounded-xl border border-surface-border bg-surface/40">
           <div className="flex min-h-16 items-center justify-between gap-4 border-b border-surface-border px-5 sm:px-6">

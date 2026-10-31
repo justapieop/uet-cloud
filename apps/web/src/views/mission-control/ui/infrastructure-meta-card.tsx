@@ -41,7 +41,7 @@ export function InfrastructureMetaCard({ deployment }: InfrastructureMetaCardPro
         <div className="rounded-lg border border-surface-border bg-background/50 p-4">
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-text">Region</span>
           <p className="mt-1.5 font-mono text-sm font-medium text-foreground">
-            {deployment.region ?? "Default (southeastasia)"}
+            {deployment.region ?? "Default (eastasia)"}
           </p>
           <p className="mt-1 text-[11px] text-muted-dark">Deployment workload region</p>
         </div>

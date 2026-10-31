@@ -1,8 +1,9 @@
-import type { Deployment, DeploymentPortMapping, DeploymentStatus } from "@kumo/domain";
+import type { Deployment, DeploymentPortMapping, DeploymentStatus, DeploymentVolume } from "@kumo/domain";
 import type { DeploymentConfiguration } from "@kumo/application";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Exclude, Expose, Type } from "class-transformer";
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsNumber, IsObject, ValidateIf, ValidateNested, IsString, Matches, Max, MaxLength, Min } from "class-validator";
+import { DeploymentVolumeDto, DeploymentVolumeResponseDto } from "./Volume.dto.js";
 
 export class AdditionalDeploymentPortDto {
   @ApiProperty({ example: 8080, description: "Additional TCP port the container listens on" })
@@ -108,6 +109,13 @@ export class CreateDeploymentDto {
   @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
   @IsObject()
   public env_vars?: Record<string, string>;
+
+  @ApiPropertyOptional({ type: [DeploymentVolumeDto], description: "Persistent storage volumes to mount into the container" })
+  @ValidateIf((_input: CreateDeploymentDto, value: unknown): boolean => value !== undefined)
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DeploymentVolumeDto)
+  public volumes?: DeploymentVolumeDto[];
 }
 
 @Exclude()
@@ -117,6 +125,7 @@ export class DeploymentResponseDto {
   @Expose() @ApiProperty() public readonly name: string;
   @Expose({ name: "target_port" }) @ApiProperty({ name: "target_port", type: Number, nullable: true }) public readonly targetPort: number | null;
   @Expose({ name: "additional_ports" }) @ApiProperty({ name: "additional_ports", type: [AdditionalDeploymentPortResponseDto] }) public readonly additionalPorts: AdditionalDeploymentPortResponseDto[];
+  @Expose({ name: "volumes" }) @ApiProperty({ name: "volumes", type: [DeploymentVolumeResponseDto] }) public readonly volumes: DeploymentVolumeResponseDto[];
   @Expose() @ApiProperty({ type: Boolean, nullable: true, description: "Whether ingress is external; applied Azure value for provisioned deployment reads" }) public readonly external: boolean | null;
   @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
   @Expose() @ApiProperty({ type: String, nullable: true }) public readonly image: string | null;
@@ -138,6 +147,18 @@ export class DeploymentResponseDto {
     this.targetPort = configuration ? configuration.targetPort : deployment.spec?.targetPort ?? null;
     this.external = configuration ? configuration.external : deployment.spec ? deployment.spec.external ?? true : null;
     this.additionalPorts = (configuration ? configuration.additionalPorts : deployment.spec?.additionalPorts ?? []).map((port: DeploymentPortMapping): AdditionalDeploymentPortResponseDto => new AdditionalDeploymentPortResponseDto(port));
+    const specVolumes: readonly DeploymentVolume[] = deployment.spec?.volumes ?? [];
+    const effectiveVolumes: readonly DeploymentVolume[] = configuration?.volumes
+      ? configuration.volumes.map((vol: DeploymentVolume): DeploymentVolume => {
+          const specVol: DeploymentVolume | undefined = specVolumes.find(
+            (item: DeploymentVolume): boolean => item.name === vol.name,
+          );
+          return specVol
+            ? { ...vol, sizeGb: specVol.sizeGb, accessMode: specVol.accessMode ?? vol.accessMode }
+            : vol;
+        })
+      : specVolumes;
+    this.volumes = effectiveVolumes.map((vol: DeploymentVolume): DeploymentVolumeResponseDto => new DeploymentVolumeResponseDto(vol));
     this.status = deployment.status;
     this.image = configuration ? configuration.image : deployment.image;
     this.buildId = deployment.buildId;

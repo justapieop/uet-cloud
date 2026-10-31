@@ -2,8 +2,15 @@ import { ResilienceService } from "@nestjs/resilience";
 import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import { NetworkManagementClient } from "@azure/arm-network";
 import { ResourceManagementClient } from "@azure/arm-resources";
+import { StorageManagementClient } from "@azure/arm-storage";
 import { Module } from "@nestjs/common";
 import {
+  AttachVolumeCase,
+  DetachVolumeCase,
+  ListVolumesCase,
+  CreateVolumeCase,
+  ListUserVolumesCase,
+  DeleteVolumeCase,
   CreateDeploymentCase,
   RedeployDeploymentCase,
   DeleteDeploymentCase,
@@ -15,6 +22,7 @@ import {
   TriggerBuildCase,
   UNIT_OF_WORK,
   UpdateDeploymentCase,
+  VolumeOperationCoordinator,
   type UnitOfWork,
 } from "@kumo/application";
 import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
@@ -29,6 +37,7 @@ import { StripeModule } from "./Stripe.module.js";
 import { BuildSourceController } from "../controllers/BuildSource.controller.js";
 import { DeploymentsController } from "../controllers/Deployments.controller.js";
 import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
+import { VolumesController } from "../controllers/Volumes.controller.js";
 import { RouteReadCache } from "../common/ReadCache.js";
 
 @Module({
@@ -37,6 +46,7 @@ import { RouteReadCache } from "../common/ReadCache.js";
     BuildSourceController,
     DeploymentsController,
     RedeploymentsController,
+    VolumesController,
   ],
   providers: [
     DeploymentWorker,
@@ -91,14 +101,25 @@ import { RouteReadCache } from "../common/ReadCache.js";
       inject: [InfraDeploymentRepository, AzureProvider],
     },
     {
+      provide: StorageManagementClient,
+      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): StorageManagementClient =>
+        new StorageManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), {
+          retryOptions: { maxRetries: 0 },
+          additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }],
+        }),
+      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
+    },
+    {
       provide: AzureProvider,
       useFactory: (
         config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase,
-        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService,
+        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, storage: StorageManagementClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService,
       ): AzureProvider => {
         const clients: AzureProviderClients = {
           resources: resources.resources, resourceGroups: resources.resourceGroups,
           managedEnvironments: apps.managedEnvironments, containerApps: apps.containerApps,
+          managedEnvironmentsStorages: apps.managedEnvironmentsStorages,
+          storageAccounts: storage.storageAccounts, fileShares: storage.fileShares,
         };
         const createLegacy: () => AzureLegacyEnvironmentProvisioner = (): AzureLegacyEnvironmentProvisioner => {
           const network: NetworkManagementClient = new NetworkManagementClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), {
@@ -109,7 +130,7 @@ import { RouteReadCache } from "../common/ReadCache.js";
         };
         return new AzureProvider(config, triggerBuild, getBuild, clients, createLegacy, flags);
       },
-      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService],
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, StorageManagementClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService],
     },
     {
       provide: CreateDeploymentCase,
@@ -146,6 +167,41 @@ import { RouteReadCache } from "../common/ReadCache.js";
         UNIT_OF_WORK,
       ],
     },
+    VolumeOperationCoordinator,
+    {
+      provide: AttachVolumeCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider, coordinator: VolumeOperationCoordinator): AttachVolumeCase =>
+        new AttachVolumeCase(uow, subscriptions, provider, coordinator),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider, VolumeOperationCoordinator],
+    },
+    {
+      provide: DetachVolumeCase,
+      useFactory: (uow: UnitOfWork, provider: AzureProvider, coordinator: VolumeOperationCoordinator): DetachVolumeCase =>
+        new DetachVolumeCase(uow, provider, coordinator),
+      inject: [UNIT_OF_WORK, AzureProvider, VolumeOperationCoordinator],
+    },
+    {
+      provide: ListVolumesCase,
+      useFactory: (uow: UnitOfWork): ListVolumesCase => new ListVolumesCase(uow),
+      inject: [UNIT_OF_WORK],
+    },
+    {
+      provide: CreateVolumeCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider): CreateVolumeCase =>
+        new CreateVolumeCase(uow, subscriptions, provider),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider],
+    },
+    {
+      provide: ListUserVolumesCase,
+      useFactory: (uow: UnitOfWork): ListUserVolumesCase => new ListUserVolumesCase(uow),
+      inject: [UNIT_OF_WORK],
+    },
+    {
+      provide: DeleteVolumeCase,
+      useFactory: (uow: UnitOfWork, provider: AzureProvider): DeleteVolumeCase =>
+        new DeleteVolumeCase(uow, provider),
+      inject: [UNIT_OF_WORK, AzureProvider],
+    },
   ],
   exports: [
     RedeployDeploymentCase,
@@ -154,6 +210,12 @@ import { RouteReadCache } from "../common/ReadCache.js";
     GetDeploymentCase,
     UpdateDeploymentCase,
     DeleteDeploymentCase,
+    AttachVolumeCase,
+    DetachVolumeCase,
+    ListVolumesCase,
+    CreateVolumeCase,
+    ListUserVolumesCase,
+    DeleteVolumeCase,
   ],
 })
 export class DeploymentModule {}

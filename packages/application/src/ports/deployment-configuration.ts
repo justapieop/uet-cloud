@@ -1,4 +1,4 @@
-import type { Deployment, DeploymentPortMapping } from "@kumo/domain";
+import type { Deployment, DeploymentPortMapping, DeploymentVolume } from "@kumo/domain";
 
 export interface DeploymentConfiguration {
   readonly region: string;
@@ -9,6 +9,7 @@ export interface DeploymentConfiguration {
   readonly targetPort: number | null;
   readonly external: boolean | null;
   readonly additionalPorts: readonly DeploymentPortMapping[];
+  readonly volumes?: readonly DeploymentVolume[];
   readonly image: string | null;
   readonly fqdn: string | null;
 }

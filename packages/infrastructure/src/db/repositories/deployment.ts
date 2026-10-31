@@ -1,5 +1,5 @@
 import { DeploymentAlreadyExists, type DeploymentListFilters, type DeploymentQueueRepository } from "@kumo/application";
-import { Deployment, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
+import { Deployment, type DeploymentSpec, type DeploymentStatus, type DeploymentVolume } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Column, Entity, Index, PrimaryColumn, Repository, type SelectQueryBuilder } from "typeorm";
@@ -115,9 +115,26 @@ export class InfraDeploymentRepository implements DeploymentQueueRepository {
   }
 
   private toDomain(record: InfraDeployment): Deployment {
+    let spec: DeploymentSpec | null = null;
+    if (record.requestJson) {
+      try {
+        const parsed: DeploymentSpec = JSON.parse(record.requestJson) as DeploymentSpec;
+        spec = parsed.volumes && Array.isArray(parsed.volumes)
+          ? {
+              ...parsed,
+              volumes: parsed.volumes.map((v: DeploymentVolume): DeploymentVolume => ({
+                ...v,
+                sizeGb: typeof v?.sizeGb === "number" && v.sizeGb < 32 ? 32 : (v?.sizeGb ?? 32),
+              })),
+            }
+          : parsed;
+      } catch {
+        spec = null;
+      }
+    }
     return new Deployment({
       id: record.id, userId: record.userId, name: record.name, status: record.status,
-      spec: record.requestJson ? JSON.parse(record.requestJson) as DeploymentSpec : null,
+      spec,
       image: record.image, buildId: record.buildId, resourceId: record.resourceId,
       fqdn: record.fqdn, error: record.error, createdAt: record.createdAt, updatedAt: record.updatedAt,
     });

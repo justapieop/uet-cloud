@@ -7,7 +7,7 @@
       "vcpu": 0.5,
       "memory": 1,
       "deployments": 1,
-      "disk": 10,
+      "disk": 64,
       "maxReplicas": 1,
       "active": false,
       "stripeProductId": null

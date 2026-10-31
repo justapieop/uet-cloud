@@ -184,6 +184,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployments/{id}/volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List mounted volumes of a deployment */
+        get: operations["DeploymentsController_listVolumes"];
+        put?: never;
+        /** Attach a persistent volume to an existing deployment */
+        post: operations["DeploymentsController_attachVolume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/volumes/{volumeName}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Detach a persistent volume from an existing deployment */
+        delete: operations["DeploymentsController_detachVolume"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/deployments/{id}": {
         parameters: {
             query?: never;
@@ -196,6 +231,41 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all persistent volumes owned by the current user */
+        get: operations["VolumesController_list"];
+        put?: never;
+        /** Create a new standalone persistent storage volume */
+        post: operations["VolumesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/volumes/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an unattached persistent volume and its underlying Azure File Share */
+        delete: operations["VolumesController_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -635,6 +705,33 @@ export interface components {
              */
             external?: boolean;
         };
+        DeploymentVolumeDto: {
+            /**
+             * @description Volume identifier name (2-32 lowercase letters, digits, or hyphens)
+             * @example data
+             */
+            name: string;
+            /**
+             * @description Mount path inside the container
+             * @example /var/data
+             */
+            mount_path: string;
+            /**
+             * @description Relative subpath within the file share
+             * @example subfolder
+             */
+            sub_path?: string;
+            /**
+             * @description Volume capacity in GiB
+             * @example 5
+             */
+            size_gb: number;
+            /**
+             * @default ReadWrite
+             * @enum {string}
+             */
+            access_mode: "ReadWrite" | "ReadOnly";
+        };
         CreateDeploymentDto: {
             /**
              * @description Must match the configured shared environment region; omitted requests use that region
@@ -671,11 +768,47 @@ export interface components {
             env_vars?: {
                 [key: string]: string;
             };
+            /** @description Persistent storage volumes to mount into the container */
+            volumes?: components["schemas"]["DeploymentVolumeDto"][];
         };
         AdditionalDeploymentPortResponseDto: {
             target_port: number;
             exposed_port: number;
             external: boolean;
+        };
+        DeploymentVolumeResponseDto: {
+            name: string;
+            mount_path: string;
+            sub_path?: string;
+            size_gb: number;
+            /** @enum {string} */
+            access_mode: "ReadWrite" | "ReadOnly";
+        };
+        CreateStandaloneVolumeDto: {
+            /** @description Volume identifier name (2-32 lowercase alphanumeric or hyphens) */
+            name: string;
+            /** @description Volume capacity in GiB */
+            size_gb: number;
+            /** @description Target deployment region */
+            region?: string;
+        };
+        VolumeAttachedDeploymentDto: {
+            /** @example 00000000-0000-4000-8000-000000000001 */
+            id: string;
+            /** @example my-app */
+            name: string;
+        };
+        VolumeItemResponseDto: {
+            /** @example 00000000-0000-4000-8000-000000000001 */
+            id: string;
+            /** @example shared-data */
+            name: string;
+            size_gb: number;
+            /** @example eastasia */
+            region: string;
+            attached_deployments: components["schemas"]["VolumeAttachedDeploymentDto"][];
+            created_at: string;
+            updated_at: string;
         };
         DeploymentResponseDto: {
             /** @description Requested region, or null when omitted */
@@ -685,6 +818,7 @@ export interface components {
             name: string;
             target_port: number | null;
             additional_ports: components["schemas"]["AdditionalDeploymentPortResponseDto"][];
+            volumes: components["schemas"]["DeploymentVolumeResponseDto"][];
             /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
             external: boolean | null;
             /** @enum {string} */
@@ -1363,6 +1497,153 @@ export interface operations {
                 content?: never;
             };
             /** @description Deployment is not in a running state */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_listVolumes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentVolumeResponseDto"][];
+                };
+            };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_attachVolume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentVolumeDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description Invalid deployment UUID or volume specification */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active Stripe subscription required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not in RUNNING or STOPPED state, or disk quota exceeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_detachVolume: {
+        parameters: {
+            query: {
+                delete_data: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+                volumeName: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description Invalid deployment UUID or volume name */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not in RUNNING or STOPPED state */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -2694,6 +2975,109 @@ export interface operations {
                 content: {
                     "text/plain": string;
                 };
+            };
+        };
+    };
+    VolumesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolumeItemResponseDto"][];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VolumesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStandaloneVolumeDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VolumeItemResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    VolumesController_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
