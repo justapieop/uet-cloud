@@ -68,6 +68,9 @@ export function UserAvatar({ displayName }: UserAvatarProps): JSX.Element {
           <p className="truncate text-sm font-medium text-white">{displayName}</p>
         </div>
         <Dropdown.Menu aria-label="Account actions">
+          <Dropdown.Item id="billing" textValue="Billing" href="/account/billing">
+            <Label>Billing</Label>
+          </Dropdown.Item>
           <Dropdown.Item id="administration" textValue="Administration" href="/admin">
             <Label>Administration</Label>
           </Dropdown.Item>

@@ -144,6 +144,10 @@ vite.config.ts.timestamp-*
 # heroui-agents-md
 .heroui-docs/
 
+# Local-only agent guidance and billing learning plan
+/apps/web/AGENTS.md
+/docs/plans/billing-frontend-plan.md
+
 # macOS
 .DS_Store
 .AppleDouble
