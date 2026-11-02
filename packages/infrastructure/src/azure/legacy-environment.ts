@@ -77,6 +77,7 @@ export class AzureLegacyEnvironmentProvisioner {
       const subnetId: string = await this.getUserInfrastructureSubnet(input.userId, location, signal);
       environment = await runBuildStep("Managed environment creation", () => this.clients.managedEnvironments.createOrUpdate(rgName, acaEnvName, {
         location,
+        identity: { type: "SystemAssigned" },
         environmentMode: "WorkloadProfiles",
         workloadProfiles: [{ name: "Consumption", workloadProfileType: "Consumption" }],
         vnetConfiguration: { infrastructureSubnetId: subnetId, internal: false },

@@ -34,6 +34,7 @@ function fixture(options: { enabled?: boolean; group?: boolean; network?: Virtua
       createOrUpdate: (group: string, name: string, input: ManagedEnvironment): ReturnType<LegacyEnvironmentClients["managedEnvironments"]["createOrUpdate"]> => {
         assert.equal(group, "user-rg-123"); assert.equal(name, "user-aca-env-123");
         assert.equal(input.location, "westeurope");
+        assert.deepEqual(input.identity, { type: "SystemAssigned" });
         assert.equal(input.environmentMode, "WorkloadProfiles");
         assert.deepEqual(input.workloadProfiles, [{ name: "Consumption", workloadProfileType: "Consumption" }]);
         assert.deepEqual(input.vnetConfiguration, { infrastructureSubnetId: SUBNET_ID, internal: false });
