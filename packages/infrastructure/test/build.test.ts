@@ -143,7 +143,7 @@ test("source download denies another user's repository before reading its source
   const calls: string[] = [];
   context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
     calls.push(url);
-    if (url.endsWith("/user/123")) return Response.json({ login: "alice" });
+    if (url.endsWith("/user/123")) return Response.json({ id: 123, login: "alice" });
     if (url.endsWith("/collaborators/alice")) return new Response(null, { status: 404 });
     assert.fail("Source must not be downloaded for an unauthorized user");
   });
@@ -158,7 +158,7 @@ test("source download pins the commit and keeps the token off the archive redire
   const sha: string = "a".repeat(40);
   context.mock.method(globalThis, "fetch", async (value: string | URL, options: RequestInit): Promise<Response> => {
     const url: string = String(value);
-    if (url.endsWith("/user/123")) return Response.json({ login: "alice" });
+    if (url.endsWith("/user/123")) return Response.json({ id: 123, login: "alice" });
     if (url.endsWith("/collaborators/alice")) return new Response(null, { status: 204 });
     if (url.endsWith("/commits/main")) return Response.json({ sha });
     if (url.endsWith(`/tarball/${sha}`)) return new Response(null, { status: 302, headers: { location: "https://codeload.github.com/owner/repo/legacy.tar.gz/sha?token=temporary" } });

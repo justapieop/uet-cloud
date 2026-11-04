@@ -4,12 +4,14 @@ import { Injectable } from "@nestjs/common";
 import { CreateUserCase } from "@kumo/application";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "@kumo/domain";
+import { GitHubProvider } from "../github/provider.js";
 
 @Injectable()
 export class PassportProvider extends PassportStrategy(Strategy, "github") {
   public constructor(
     configService: ConfigService,
     private readonly createUserCase: CreateUserCase,
+    private readonly github: GitHubProvider,
   ) {
     super({
       clientID: configService.getOrThrow("GITHUB_OAUTH2_CLIENT_ID"),
@@ -19,9 +21,11 @@ export class PassportProvider extends PassportStrategy(Strategy, "github") {
     });
   }
 
-  public validate(_accessToken: string, _refreshToken: string, profile: Profile): Promise<User> {
+  public async validate(_accessToken: string, _refreshToken: string, profile: Profile): Promise<User> {
     const displayName: string = profile.displayName?.trim() || profile.username?.trim() || profile.id;
 
-    return this.createUserCase.exec(profile.id, displayName);
+    const user: User = await this.createUserCase.exec(profile.id, displayName);
+    this.github.rememberAccount(profile.id, profile.username);
+    return user;
   }
 }

@@ -185,6 +185,99 @@ test("repository listing uses only the session account installation and filters 
     page: 2, perPage: 3, hasNextPage: false,
   });
   assert.equal(requests.some((url: string): boolean => url.includes("/app/installations?")), false);
+  assert.equal(requests.filter((url: string): boolean => url.endsWith("/user/123")).length, 1);
+  assert.equal(requests.filter((url: string): boolean => url.endsWith("/access_tokens")).length, 2);
+});
+
+test("OAuth username hints skip public profile reads while installation ownership remains live", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  provider.rememberAccount("123", "alice");
+  let installationReads: number = 0;
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    assert.equal(url, "https://api.github.com/users/alice/installation");
+    installationReads++;
+    return Response.json({ id: 456, account: { id: 999, type: "User" } });
+  });
+  await assert.rejects(provider.listOwnInstalledRepositories("123", 1, 30), /outside the current account/);
+  assert.equal(installationReads, 1);
+});
+
+test("renamed OAuth hints refresh by immutable ID instead of following another account", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  provider.rememberAccount("123", "old-name");
+  const calls: string[] = [];
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    calls.push(url);
+    if (url.endsWith("/users/old-name/installation")) return new Response(null, { status: 404 });
+    if (url.endsWith("/user/123")) return Response.json({ id: 123, login: "alice", type: "User" });
+    if (url.endsWith("/users/alice/installation")) return Response.json({ id: 456, account: { id: 123, type: "User" } });
+    if (url.endsWith("/access_tokens")) return Response.json({ token: "token", expires_at: new Date(Date.now() + 60_000).toISOString() });
+    assert.ok(url.includes("/installation/repositories?"));
+    return Response.json({ total_count: 0, repositories: [] });
+  });
+  assert.deepEqual((await provider.listOwnInstalledRepositories("123", 1, 30)).repositories, []);
+  assert.deepEqual(calls.slice(0, 3), ["https://api.github.com/users/old-name/installation", "https://api.github.com/user/123", "https://api.github.com/users/alice/installation"]);
+});
+
+test("expired account hints resolve again; missing installations do not cache an access grant", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  let now: number = Date.now();
+  context.mock.method(Date, "now", (): number => now);
+  provider.rememberAccount("123", "stale");
+  now += 3_600_001;
+  let profileReads: number = 0;
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    if (url.endsWith("/user/123")) { profileReads++; return Response.json({ id: 123, login: "alice", type: "User" }); }
+    assert.ok(url.endsWith("/users/alice/installation"));
+    return new Response(null, { status: 404 });
+  });
+  await provider.listOwnInstalledRepositories("123", 1, 30);
+  await provider.listOwnInstalledRepositories("123", 1, 30);
+  assert.equal(profileReads, 2);
+});
+
+test("overlapping identical listings share work, release failures, and retain no token between operations", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  provider.rememberAccount("123", "alice");
+  let fail: boolean = true;
+  let installationReads: number = 0;
+  let tokens: number = 0;
+  context.mock.method(globalThis, "fetch", async (url: string): Promise<Response> => {
+    if (url.endsWith("/installation")) { installationReads++; return fail ? new Response(null, { status: 503 }) : Response.json({ id: 456, account: { id: 123, type: "User" } }); }
+    if (url.endsWith("/access_tokens")) { tokens++; return Response.json({ token: `fresh-token-${tokens}`, expires_at: new Date(Date.now() + 60_000).toISOString() }); }
+    return Response.json({ total_count: 0, repositories: [] });
+  });
+  const failures: PromiseSettledResult<unknown>[] = await Promise.allSettled([
+    provider.listOwnInstalledRepositories("123", 1, 30), provider.listOwnInstalledRepositories("123", 1, 30),
+  ]);
+  assert.ok(failures.every((result: PromiseSettledResult<unknown>): boolean => result.status === "rejected"));
+  assert.equal(installationReads, 1);
+  fail = false;
+  const pages: Awaited<ReturnType<GitHubProvider["listOwnInstalledRepositories"]>>[] = await Promise.all([
+    provider.listOwnInstalledRepositories("123", 1, 30), provider.listOwnInstalledRepositories("123", 1, 30),
+  ]);
+  assert.notStrictEqual(pages[0], pages[1]);
+  assert.notStrictEqual(pages[0]!.repositories, pages[1]!.repositories);
+  assert.equal(tokens, 1);
+  await provider.listOwnInstalledRepositories("123", 1, 30);
+  assert.equal(tokens, 2);
+  assert.equal(installationReads, 3);
+});
+
+test("app metadata uses authenticated ETags without retaining the JWT", async (context: TestContext): Promise<void> => {
+  const provider: GitHubProvider = createProvider(context);
+  let reads: number = 0;
+  context.mock.method(globalThis, "fetch", async (_url: string, init: RequestInit): Promise<Response> => {
+    reads++;
+    const headers: Headers = new Headers(init.headers);
+    assert.ok(headers.get("authorization")?.startsWith("Bearer "));
+    if (reads === 1) { assert.equal(headers.get("if-none-match"), null); return Response.json({ slug: "kumo" }, { headers: { etag: '"public-metadata"' } }); }
+    assert.equal(headers.get("if-none-match"), '"public-metadata"');
+    return new Response(null, { status: 304 });
+  });
+  assert.equal(await provider.getInstallationUrl(), "https://github.com/apps/kumo/installations/new");
+  assert.equal(await provider.getInstallationUrl(), "https://github.com/apps/kumo/installations/new");
+  assert.equal(reads, 2);
 });
 
 test("foreign installations and mismatched account lookups fail before minting a repository token", async (context: TestContext): Promise<void> => {

@@ -5,6 +5,7 @@ import { CreateUserCase, type UnitOfWork, type UnitOfWorkRepositories } from "@k
 import { Role, User } from "@kumo/domain";
 import type { Profile } from "passport-github2";
 import { PassportProvider } from "../dist/auth/provider.js";
+import type { GitHubProvider } from "../dist/github/provider.js";
 import { emptyRepositories } from "../../application/test/support/repositories.ts";
 
 test("GitHub strategy returns the user created in one unit of work", async (): Promise<void> => {
@@ -35,7 +36,9 @@ test("GitHub strategy returns the user created in one unit of work", async (): P
       ? "http://localhost:3000/auth/callback"
       : "test-value",
   } as unknown as ConfigService;
-  const provider: PassportProvider = new PassportProvider(configService, new CreateUserCase(unitOfWork, { exec: async (id: string): Promise<User> => savedUsers.find((user: User): boolean => user.id === id)! }));
+  const hints: [string, string | undefined][] = [];
+  const github: GitHubProvider = { rememberAccount: (id: string, login: string | undefined): void => { hints.push([id, login]); } } as unknown as GitHubProvider;
+  const provider: PassportProvider = new PassportProvider(configService, new CreateUserCase(unitOfWork, { exec: async (id: string): Promise<User> => savedUsers.find((user: User): boolean => user.id === id)! }), github);
   const profile: Profile = {
     provider: "github",
     id: "123",
@@ -50,4 +53,5 @@ test("GitHub strategy returns the user created in one unit of work", async (): P
   assert.strictEqual(savedUsers[0], user);
   assert.equal(user.id, "123");
   assert.equal(user.displayName, "alice");
+  assert.deepEqual(hints, [["123", "alice"]]);
 });

@@ -2,6 +2,8 @@ import type { PipelinePolicy, PipelineRequest, PipelineResponse, SendRequest } f
 import { ResilienceTimeoutError, type AttemptContext, type ResilienceModuleOptions, type ResiliencePolicy, type ResilienceService } from "@nestjs/resilience";
 import type { ConfigService } from "@nestjs/config";
 import type { HttpTransport } from "../external-clients.js";
+import { Logger } from "@nestjs/common";
+import { GitHubRateLimitError, GitHubRateLimitGuard, type GitHubRateDiagnostic } from "../github/rate-limit.js";
 
 const TRANSIENT_HTTP: readonly number[] = [408, 429, 500, 502, 503, 504];
 
@@ -12,6 +14,7 @@ export class DependencyHttpError extends Error {
 }
 
 export function isTransientDependencyError(error: unknown): boolean {
+  if (error instanceof GitHubRateLimitError) return false;
   if (error instanceof ResilienceTimeoutError) return true;
   if (typeof error !== "object" || error === null) return false;
   const record: Record<string, unknown> = error as Record<string, unknown>;
@@ -74,7 +77,13 @@ function retryAfter(value: string | null | undefined): number | undefined {
 
 function safeMethod(method: string): boolean { return ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase()); }
 
-export function createResilientHttpTransport(http: HttpTransport, resilience: ResilienceService): HttpTransport {
+export function createResilientHttpTransport(http: HttpTransport, resilience: ResilienceService,
+  reportGitHubRate?: (event: GitHubRateDiagnostic) => void): HttpTransport {
+  const logger: Logger = new Logger("GitHubRateLimit");
+  const githubRate: GitHubRateLimitGuard = new GitHubRateLimitGuard(reportGitHubRate ?? ((event: GitHubRateDiagnostic): void => {
+    if (event.event === "github.rate-limit.exhausted") logger.warn(event);
+    else logger.debug(event);
+  }));
   const policies: Map<string, ResiliencePolicy> = new Map<string, ResiliencePolicy>();
   const dependencies: readonly string[] = ["github", "azure-devops", "source-upload"];
   for (let dependencyIndex: number = 0; dependencyIndex < dependencies.length; dependencyIndex++) {
@@ -87,11 +96,19 @@ export function createResilientHttpTransport(http: HttpTransport, resilience: Re
     const dependency: string = ["api.github.com", "codeload.github.com"].includes(url.hostname) ? "github"
       : url.hostname === "dev.azure.com" ? "azure-devops" : "source-upload";
     const method: string = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const githubApi: boolean = url.hostname === "api.github.com";
+    const headers: Headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    const scope: "public" | "authenticated" = headers.has("authorization") ? "authenticated" : "public";
     const parent: AbortSignal | undefined = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     const policy: ResiliencePolicy = policies.get(`${dependency}-${safeMethod(method) ? "read" : "write"}`)!;
     return policy.execute(async ({ signal }: AttemptContext): Promise<Response> => {
+      if (githubApi) githubRate.check(scope);
       const requestSignal: AbortSignal = parent ? AbortSignal.any([signal, parent]) : signal;
       const response: Response = await http(input, { ...init, signal: requestSignal });
+      if (githubApi && githubRate.observe(url.pathname, scope, response)) {
+        await response.body?.cancel().catch((): void => undefined);
+        githubRate.check(scope);
+      }
       if (TRANSIENT_HTTP.includes(response.status)) {
         const wait: number | undefined = retryAfter(response.headers.get("retry-after"));
         await response.body?.cancel().catch((): void => undefined);

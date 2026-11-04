@@ -10,11 +10,22 @@ import type { GitHubPush, GitHubWebhookRepositoryGateway } from "@kumo/applicati
 
 const GITHUB_API_VERSION: string = "2026-03-10";
 const REQUEST_TIMEOUT_MS: number = 30_000;
+const ACCOUNT_HINT_TTL_MS: number = 3_600_000;
+const MAX_ACCOUNT_HINTS: number = 512;
+
+interface AccountHint {
+  readonly login: string;
+  readonly expiresAt: number;
+}
 
 @Injectable()
 export class GitHubProvider implements RepositoryBuildSourcePort, GitHubWebhookRepositoryGateway {
   private readonly clientId: string;
   private readonly keyName: string;
+  private readonly accountHints: Map<string, AccountHint> = new Map<string, AccountHint>();
+  private readonly accountLookups: Map<string, Promise<string>> = new Map<string, Promise<string>>();
+  private readonly repositoryListings: Map<string, Promise<GitHubRepositoryPage>> = new Map<string, Promise<GitHubRepositoryPage>>();
+  private appMetadata: { readonly slug: string; readonly etag: string } | undefined;
 
   public constructor(
     private readonly kmsClient: Pick<KmsProvider, "sign">,
@@ -36,39 +47,93 @@ export class GitHubProvider implements RepositoryBuildSourcePort, GitHubWebhookR
   public async getInstallationUrl(): Promise<string> {
     return runBuildStep("GitHub App lookup", async (): Promise<string> => {
       const jwt: string = await this.createAppJwt();
-      const app: unknown = await this.getJson("/app", jwt);
+      const cached: typeof this.appMetadata = this.appMetadata;
+      const response: Response = await this.githubRequest("/app", jwt, cached ? { "If-None-Match": cached.etag } : {});
+      if (response.status === 304 && cached) return `https://github.com/apps/${cached.slug}/installations/new`;
+      if (!response.ok) throw new BuildProviderError(`GitHub app lookup failed: HTTP ${response.status}`);
+      const app: unknown = await response.json();
       if (typeof app !== "object" || app === null || !("slug" in app) ||
         typeof app.slug !== "string" || app.slug.length > 100 ||
         !/^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*$/.test(app.slug)) {
         throw new BuildProviderError("GitHub returned an invalid app response");
       }
+      const etag: string | null = response.headers.get("etag");
+      this.appMetadata = etag ? { slug: app.slug, etag } : undefined;
       return `https://github.com/apps/${app.slug}/installations/new`;
     });
   }
 
+  /** Public metadata from a verified OAuth profile; never an authorization grant. */
+  public rememberAccount(userId: string, login: string | undefined): void {
+    if (!/^[1-9][0-9]*$/.test(userId) || typeof login !== "string" || !validLogin(login)) return;
+    this.accountHints.delete(userId);
+    if (this.accountHints.size >= MAX_ACCOUNT_HINTS) {
+      const oldest: string | undefined = this.accountHints.keys().next().value;
+      if (oldest !== undefined) this.accountHints.delete(oldest);
+    }
+    this.accountHints.set(userId, { login, expiresAt: Date.now() + ACCOUNT_HINT_TTL_MS });
+  }
+
+  private async accountLogin(userId: string): Promise<string> {
+    const cached: AccountHint | undefined = this.accountHints.get(userId);
+    if (cached && cached.expiresAt > Date.now()) return cached.login;
+    this.accountHints.delete(userId);
+    const pending: Promise<string> | undefined = this.accountLookups.get(userId);
+    if (pending) return pending;
+    const lookup: Promise<string> = (async (): Promise<string> => {
+      const user: unknown = await this.getJson(`/user/${userId}`);
+      if (!isRecord(user) || !isGitHubId(user.id) || String(user.id) !== userId || user.type !== "User" ||
+        typeof user.login !== "string" || !validLogin(user.login)) {
+        throw new BuildProviderError("GitHub returned an invalid account response");
+      }
+      this.rememberAccount(userId, user.login);
+      return user.login;
+    })();
+    this.accountLookups.set(userId, lookup);
+    try { return await lookup; }
+    finally { this.accountLookups.delete(userId); }
+  }
+
   public async listOwnInstalledRepositories(userId: string, page: number, perPage: number): Promise<GitHubRepositoryPage> {
+    const key: string = JSON.stringify([userId, page, perPage]);
+    const pending: Promise<GitHubRepositoryPage> | undefined = this.repositoryListings.get(key);
+    if (pending) return structuredClone(await pending);
+    const listing: Promise<GitHubRepositoryPage> = this.listRepositories(userId, page, perPage);
+    this.repositoryListings.set(key, listing);
+    try { return structuredClone(await listing); }
+    finally { this.repositoryListings.delete(key); }
+  }
+
+  private async listRepositories(userId: string, page: number, perPage: number): Promise<GitHubRepositoryPage> {
     return runBuildStep("GitHub installed repository lookup", async (): Promise<GitHubRepositoryPage> => {
       if (!/^[1-9][0-9]*$/.test(userId) || !Number.isSafeInteger(page) || page < 1 || page > 1_000_000 ||
         !Number.isSafeInteger(perPage) || perPage < 1 || perPage > 100) {
         throw new InvalidBuildInput("Invalid GitHub account or pagination");
       }
       const empty: GitHubRepositoryPage = { repositories: [], page, perPage, hasNextPage: false };
-      // Resolve the immutable OAuth account ID rather than a client-supplied login.
-      const user: unknown = await this.getJson(`/user/${userId}`);
-      if (!isRecord(user) || !isGitHubId(user.id) || String(user.id) !== userId ||
-        user.type !== "User" || typeof user.login !== "string" ||
-        !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(user.login)) {
-        throw new BuildProviderError("GitHub returned an invalid account response");
-      }
+      const usedHint: boolean = (this.accountHints.get(userId)?.expiresAt ?? 0) > Date.now();
+      let login: string = await this.accountLogin(userId);
       const jwt: string = await this.createAppJwt();
-      const response: Response = await this.githubRequest(`/users/${encodeURIComponent(user.login)}/installation`, jwt);
-      if (response.status === 404) return empty;
+      let response: Response = await this.githubRequest(`/users/${encodeURIComponent(login)}/installation`, jwt);
+      if (response.status === 404 && usedHint) {
+        this.accountHints.delete(userId);
+        const currentLogin: string = await this.accountLogin(userId);
+        if (currentLogin !== login) {
+          login = currentLogin;
+          response = await this.githubRequest(`/users/${encodeURIComponent(login)}/installation`, jwt);
+        }
+      }
+      if (response.status === 404) {
+        this.accountHints.delete(userId);
+        return empty;
+      }
       if (!response.ok) throw new BuildProviderError(`GitHub installation lookup failed: HTTP ${response.status}`);
       const installation: unknown = await response.json();
       // Never mint a token until the installation's immutable owner matches the session.
       if (!isRecord(installation) || !isGitHubId(installation.id) || !isRecord(installation.account) ||
         !isGitHubId(installation.account.id) || String(installation.account.id) !== userId ||
         installation.account.type !== "User") {
+        this.accountHints.delete(userId);
         throw new BuildProviderError("GitHub returned an installation outside the current account");
       }
       if (installation.suspended_at != null) return empty;
@@ -87,7 +152,7 @@ export class GitHubProvider implements RepositoryBuildSourcePort, GitHubWebhookR
         if (String(repository.owner.id) !== userId || repository.owner.type !== "User") continue;
         if (!isGitHubId(repository.id) || typeof repository.name !== "string" ||
           !/^[a-zA-Z0-9._-]{1,100}$/.test(repository.name) || repository.name === "." || repository.name === ".." ||
-          typeof repository.owner.login !== "string" || repository.owner.login.toLowerCase() !== user.login.toLowerCase() ||
+          typeof repository.owner.login !== "string" || repository.owner.login.toLowerCase() !== login.toLowerCase() ||
           repository.full_name !== `${repository.owner.login}/${repository.name}` || typeof repository.private !== "boolean" ||
           (repository.default_branch !== null && typeof repository.default_branch !== "string")) {
           throw new BuildProviderError("GitHub returned invalid repository metadata");
@@ -229,7 +294,8 @@ export class GitHubProvider implements RepositoryBuildSourcePort, GitHubWebhookR
 
     // The installation can access more repositories than the requesting user.
     const user: unknown = await this.getJson(`/user/${encodeURIComponent(input.userId)}`, token);
-    if (typeof user !== "object" || user === null || !("login" in user) || typeof user.login !== "string") {
+    if (!isRecord(user) || !isGitHubId(user.id) || String(user.id) !== input.userId ||
+      typeof user.login !== "string" || !validLogin(user.login)) {
       throw new BuildProviderError("GitHub returned an invalid user response");
     }
     const access: Response = await this.githubRequest(`${repoPath}/collaborators/${encodeURIComponent(user.login)}`, token);
@@ -298,9 +364,10 @@ export class GitHubProvider implements RepositoryBuildSourcePort, GitHubWebhookR
     return `${signingInput}.${signature}`;
   }
 
-  private githubRequest(path: string, token?: string): Promise<Response> {
+  private githubRequest(path: string, token?: string, extraHeaders: Record<string, string> = {}): Promise<Response> {
     return this.http(`https://api.github.com${path}`, {
       headers: {
+        ...extraHeaders,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         Accept: "application/vnd.github+json",
         "User-Agent": "kumo",
@@ -330,4 +397,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isGitHubId(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function validLogin(login: string): boolean {
+  return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(login);
 }
