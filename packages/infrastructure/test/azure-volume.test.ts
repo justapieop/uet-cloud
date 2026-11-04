@@ -396,3 +396,46 @@ test("AzureProvider.deleteStorageVolume deletes standalone share and matching ap
   assert.ok(deletedShares.includes("share-my-test-logs"));
   assert.ok(!deletedShares.includes("share-other-unrelated"));
 });
+
+test("AzureProvider.detachVolume tolerates ManagedEnvironmentStorageDeleteInUse and succeeds", async (): Promise<void> => {
+  const setup: ReturnType<typeof createSetup> = createSetup({ existingApp: true });
+  let deleteAttempts: number = 0;
+
+  setup.clients.managedEnvironmentsStorages = {
+    createOrUpdate: async (): Promise<any> => ({}),
+    get: async (): Promise<any> => ({}),
+    delete: async (): Promise<void> => {
+      deleteAttempts++;
+      const inUseError: Error & { code: string; statusCode: number } = Object.assign(
+        new Error("Cannot delete Managed environment storage 'stg-sample-app-logs' because it's still in use."),
+        { code: "ManagedEnvironmentStorageDeleteInUse", statusCode: 400 },
+      );
+      throw inUseError;
+    },
+  };
+
+  const volume: DeploymentVolume = { name: "logs", mountPath: "/var/logs", sizeGb: 32 };
+  await setup.provider.attachVolume({
+    userId: "12345",
+    appName: "sample-app",
+    deploymentId: "dep-1",
+    resourceId: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/user-rg-12345/providers/Microsoft.App/containerApps/sample-app",
+    volume,
+    existingVolumes: [],
+  });
+
+  await setup.provider.detachVolume({
+    userId: "12345",
+    appName: "sample-app",
+    deploymentId: "dep-1",
+    resourceId: "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/user-rg-12345/providers/Microsoft.App/containerApps/sample-app",
+    volumeName: "logs",
+    existingVolumes: [volume],
+    deleteData: false,
+  });
+
+  const updated: ContainerApp = setup.apps.get("sample-app")!;
+  assert.equal(updated.template?.volumes?.length, 0);
+  assert.equal(updated.template?.containers?.[0]?.volumeMounts?.length, 0);
+  assert.equal(deleteAttempts, 3);
+});

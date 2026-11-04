@@ -416,21 +416,14 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
 
     const storageLinkName: string = this.storageLinkName(input.appName, input.volumeName);
     const envRef: ManagedEnvironmentReference = managedEnvironmentReference(environment.id!, this.requiredSetting("AZURE_SUBSCRIPTION_ID"));
-    if (this.clients.managedEnvironmentsStorages) {
-      try {
-        await this.clients.managedEnvironmentsStorages.delete(envRef.resourceGroup, envRef.name, storageLinkName, { abortSignal: signal });
-      } catch (error: unknown) {
-        if (!this.isNotFound(error)) throw error;
-      }
-    }
-    if (this.clients.resources?.deleteById) {
-      try {
-        const storageResourceId: string = `${environment.id}/storages/${storageLinkName}`;
-        await this.clients.resources.deleteById(storageResourceId, "2026-03-02-preview");
-      } catch (error: unknown) {
-        if (!this.isNotFound(error)) throw error;
-      }
-    }
+    const storageResourceId: string = `${environment.id}/storages/${storageLinkName}`;
+
+    await this.deleteEnvironmentStorageLinkWithRetry({
+      envRef,
+      storageLinkName,
+      storageResourceId,
+      signal,
+    });
 
     if (input.deleteData && this.clients.fileShares) {
       const storageAccountName: string = this.userStorageAccountName(input.userId);
@@ -637,6 +630,69 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     }
 
     return storageLinkName;
+  }
+
+  private async deleteEnvironmentStorageLinkWithRetry(input: {
+    readonly envRef: ManagedEnvironmentReference;
+    readonly storageLinkName: string;
+    readonly storageResourceId: string;
+    readonly signal?: AbortSignal;
+  }): Promise<void> {
+    const maxAttempts: number = 3;
+    const baseDelayMs: number = 2000;
+
+    for (let attempt: number = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        if (this.clients.managedEnvironmentsStorages) {
+          try {
+            await this.clients.managedEnvironmentsStorages.delete(
+              input.envRef.resourceGroup,
+              input.envRef.name,
+              input.storageLinkName,
+              { abortSignal: input.signal },
+            );
+          } catch (error: unknown) {
+            if (!this.isNotFound(error)) throw error;
+          }
+        }
+        if (this.clients.resources?.deleteById) {
+          try {
+            await this.clients.resources.deleteById(input.storageResourceId, "2026-03-02-preview");
+          } catch (error: unknown) {
+            if (!this.isNotFound(error)) throw error;
+          }
+        }
+        return;
+      } catch (error: unknown) {
+        if (this.isNotFound(error)) {
+          return;
+        }
+
+        const isStorageInUse: boolean = this.isStorageInUseError(error);
+        if (isStorageInUse && attempt < maxAttempts) {
+          await delay(baseDelayMs * attempt);
+          continue;
+        }
+
+        if (isStorageInUse) {
+          // Volume was unmounted in the Container App, but Azure may still hold a temporary reference in deactivated revisions.
+          // Do not fail the detach workflow so database status can remain consistent.
+          return;
+        }
+
+        throw error;
+      }
+    }
+  }
+
+  private isStorageInUseError(error: unknown): boolean {
+    if (typeof error !== "object" || error === null) return false;
+    const errorStr: string = JSON.stringify(error).toLowerCase();
+    return (
+      errorStr.includes("managedenvironmentstoragedeleteinuse") ||
+      errorStr.includes("still in use") ||
+      errorStr.includes("storageinuse")
+    );
   }
 
   private isNotFound(error: unknown): boolean {
