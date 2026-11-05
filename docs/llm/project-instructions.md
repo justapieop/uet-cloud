@@ -14,7 +14,7 @@ Keep use cases under `packages/application/src/use-cases`. Group related code by
 
 Define `BuildModule` in `packages/presentation/src/modules/Build.module.ts`, where it wires build use cases to infrastructure providers. Build providers, repositories, and the worker remain in `packages/infrastructure` and are exported through its public API.
 
-Keep Container App start/stop in the infrastructure `AzureContainerLifecycleManager`, separate from provisioning/build orchestration in `AzureProvider`. Share workload resource-group and ARM identity validation through `azure/workload-scope.ts`. See `architecture-review.md` for current boundaries and unresolved rename/deletion/reconciliation gaps.
+Keep Container App start/stop in the infrastructure `AzureContainerLifecycleManager`, separate from provisioning/build orchestration in `AzureProvider`. Share workload resource-group and ARM identity validation through `azure/workload-scope.ts`. See `architecture-review.md` for current boundaries and unresolved rename/reconciliation gaps.
 
 For use cases that require multiple database writes to succeed or fail together, use the application-layer `UnitOfWork` port. Its infrastructure implementation supplies repositories bound to one TypeORM transaction; perform all writes through those repositories within the unit-of-work callback. When composing operations, the outer use case owns the transaction and passes those repositories to inner operations; inner operations must not open another unit of work.
 

@@ -18,12 +18,11 @@ No domain schema, migrations, deployment names, API paths, queue semantics, admi
 ## Remaining gaps and decisions
 
 1. **Rename before exposure:** `UpdateDeploymentCase` changes the persisted deployment name, while Azure resource access and lifecycle commands use that name as the Container App name. A provisioned app cannot safely be renamed through that use case. Decide whether name is immutable or introduce a separate display name before exposing a rename endpoint.
-2. **Deletion before exposure:** `DeleteDeploymentCase` deletes only the SQL record. It does not remove the Azure app, coordinate in-flight provisioning, or retain cleanup progress. A public delete endpoint needs a durable deletion workflow before it can call this case safely.
-3. **Lifecycle reconciliation:** start/stop perform an Azure operation followed by a SQL status update. A process crash between them can leave persisted status stale, and simultaneous lifecycle requests are not serialized. A durable command/reconciliation design is a follow-up, not a guarantee provided by this extraction.
-4. **Provisioning recovery:** workers intentionally fail stale work instead of automatically resubmitting builds. Moving orchestration into a new service or retrying whole workflows would change that policy and needs a separate recovery design. Keep the existing SQL queues and admission receipts until then.
-5. **Optional legacy build path:** `AcrModule`/`AcrProvider` remain available but the active deployment path uses Azure Pipelines. Removing that optional adapter is a product decision, not required to untangle current runtime dependencies.
+2. **Lifecycle reconciliation:** start/stop perform an Azure operation followed by a SQL status update. A process crash between them can leave persisted status stale, and simultaneous lifecycle requests are not serialized. A durable command/reconciliation design is a follow-up, not a guarantee provided by this extraction.
+3. **Provisioning recovery:** workers intentionally fail stale work instead of automatically resubmitting builds. Moving orchestration into a new service or retrying whole workflows would change that policy and needs a separate recovery design. Keep the existing SQL queues and admission receipts until then.
+4. **Optional legacy build path:** `AcrModule`/`AcrProvider` remain available but the active deployment path uses Azure Pipelines. Removing that optional adapter is a product decision, not required to untangle current runtime dependencies.
 
-The rename/delete gaps are existing application behavior with no HTTP handlers. This review records them without inventing cloud deletion or resource migration semantics.
+The deployment deletion gap was addressed on 2026-11-05. `DELETE /deployments/:id` now records a durable owner-scoped request, and the background worker deletes the owned Container App and its app-specific storage links while retaining shared volume data. GET responses expose deletion progress without querying Azure during cleanup. Backend and REST compilation passed; the SQL concurrency suite has not yet been run. The rename gap remains unresolved.
 
 ## Validation
 
