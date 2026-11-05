@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, type Dispatch, type JSX, type SetStateAction, type TransitionStartFunction } from "react";
-import { useRouter } from "next/navigation";
-import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { useState, useTransition, type Dispatch, type JSX, type SetStateAction, type TransitionStartFunction } from "react";
 import type { Deployment } from "@/entities/deployment";
 import { startDeploymentAction, stopDeploymentAction, type LifecycleActionResult } from "../api/actions";
 
@@ -12,25 +10,12 @@ interface DeploymentActionButtonProps {
 }
 
 export function DeploymentActionButton({ id, status }: DeploymentActionButtonProps): JSX.Element {
-  const router: AppRouterInstance = useRouter();
   const [pending, startTransition]: [boolean, TransitionStartFunction] = useTransition();
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
 
   const isStarting: boolean = status === "STARTING";
   const isStopping: boolean = status === "STOPPING";
   const isTransient: boolean = isStarting || isStopping;
-
-  useEffect((): (() => void) => {
-    if (!isTransient) {
-      return (): void => {};
-    }
-    const timer: NodeJS.Timeout = setInterval((): void => {
-      router.refresh();
-    }, 3000);
-    return (): void => {
-      clearInterval(timer);
-    };
-  }, [isTransient, router]);
 
   if (status !== "RUNNING" && status !== "STOPPED" && !isTransient) {
     return <span className="text-xs text-muted-dark">—</span>;
@@ -48,8 +33,6 @@ export function DeploymentActionButton({ id, status }: DeploymentActionButtonPro
 
       if (!result.success && result.error) {
         setErrorMessage(result.error);
-      } else {
-        router.refresh();
       }
     });
   }
