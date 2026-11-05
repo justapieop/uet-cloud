@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { Deployment } from "@/entities/deployment";
+import { DeleteDeploymentButton } from "@/features/manage-deployment";
 
 interface OverviewHeaderProps {
   readonly deployment: Deployment;
@@ -13,6 +14,9 @@ const STATUS_CONFIGS: Readonly<Record<Deployment["status"], { readonly label: st
   PENDING: { label: "Pending", dotClass: "bg-amber-400", badgeClass: "border-amber-400/20 bg-amber-400/10 text-amber-300" },
   STOPPED: { label: "Stopped", dotClass: "bg-zinc-400", badgeClass: "border-zinc-400/20 bg-zinc-400/10 text-zinc-300" },
   FAILED: { label: "Failed", dotClass: "bg-red-400", badgeClass: "border-red-400/20 bg-red-400/10 text-red-300" },
+  DELETE_PENDING: { label: "Deletion queued", dotClass: "bg-amber-400 animate-pulse", badgeClass: "border-amber-400/20 bg-amber-400/10 text-amber-300" },
+  DELETING: { label: "Deleting", dotClass: "bg-amber-400 animate-pulse", badgeClass: "border-amber-400/20 bg-amber-400/10 text-amber-300" },
+  DELETE_FAILED: { label: "Deletion failed", dotClass: "bg-red-400", badgeClass: "border-red-400/20 bg-red-400/10 text-red-300" },
   DELETED: { label: "Deleted", dotClass: "bg-zinc-600", badgeClass: "border-zinc-600/20 bg-zinc-600/10 text-muted-text" },
 };
 
@@ -52,8 +56,8 @@ export function OverviewHeader({ deployment }: OverviewHeaderProps): JSX.Element
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {deployment.fqdn && /^[a-zA-Z0-9.-]+$/.test(deployment.fqdn) ? (
+        <div className="flex flex-wrap items-center gap-3">
+          {deployment.status !== "DELETED" && deployment.fqdn && /^[a-zA-Z0-9.-]+$/.test(deployment.fqdn) ? (
             <a
               href={`https://${deployment.fqdn}`}
               target="_blank"
@@ -65,11 +69,17 @@ export function OverviewHeader({ deployment }: OverviewHeaderProps): JSX.Element
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
             </a>
-          ) : (
+          ) : deployment.status !== "DELETED" ? (
             <span className="inline-flex h-9 items-center rounded-lg border border-surface-border-subtle bg-white/[0.02] px-3.5 text-xs text-muted-dark">
               No public endpoint
             </span>
-          )}
+          ) : null}
+          <DeleteDeploymentButton
+            id={deployment.id}
+            name={deployment.name}
+            status={deployment.status}
+            pollForCompletion
+          />
         </div>
       </div>
 

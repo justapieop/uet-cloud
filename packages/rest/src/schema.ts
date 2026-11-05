@@ -184,6 +184,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an owned deployment's provisioning status */
+        get: operations["DeploymentsController_get"];
+        put?: never;
+        post?: never;
+        /** Request deletion of an owned deployment */
+        delete: operations["DeploymentsController_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/deployments/{id}/volumes": {
         parameters: {
             query?: never;
@@ -214,58 +232,6 @@ export interface paths {
         post?: never;
         /** Detach a persistent volume from an existing deployment */
         delete: operations["DeploymentsController_detachVolume"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/deployments/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get an owned deployment's provisioning status */
-        get: operations["DeploymentsController_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/volumes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List all persistent volumes owned by the current user */
-        get: operations["VolumesController_list"];
-        put?: never;
-        /** Create a new standalone persistent storage volume */
-        post: operations["VolumesController_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/volumes/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete an unattached persistent volume and its underlying Azure File Share */
-        delete: operations["VolumesController_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -333,6 +299,26 @@ export interface paths {
         get: operations["BuildSourceController_download"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/{id}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe-hosted subscription checkout for the signed-in user
+         * @description Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
+         */
+        post: operations["PlanSubscriptionsController_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -422,26 +408,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plans/{id}/subscriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create a Stripe-hosted subscription checkout for the signed-in user
-         * @description Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
-         */
-        post: operations["PlanSubscriptionsController_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/user/{userId}/subscriptions": {
         parameters: {
             query?: never;
@@ -477,46 +443,6 @@ export interface paths {
          * @description Only accepts cancel_at_period_end. Does not immediately cancel, reactivate an ended subscription, change prices, or remove metered items.
          */
         patch: operations["UserSubscriptionsController_setCancellation"];
-        trace?: never;
-    };
-    "/subscriptions/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List the signed-in user's Stripe subscriptions
-         * @description Lists all statuses for the customer linked to the session user. Customer and user IDs are never accepted from the caller.
-         */
-        get: operations["MySubscriptionsController_list"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/subscriptions/me/{subscriptionId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Schedule or undo cancellation for the signed-in user's subscription
-         * @description Only changes cancel_at_period_end; does not immediately cancel, change prices, or remove metered items.
-         */
-        patch: operations["MySubscriptionsController_setCancellation"];
         trace?: never;
     };
     "/roles": {
@@ -659,6 +585,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all persistent volumes owned by the current user */
+        get: operations["VolumesController_list"];
+        put?: never;
+        /** Create a new standalone persistent storage volume */
+        post: operations["VolumesController_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/volumes/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an unattached persistent volume and its underlying Azure File Share */
+        delete: operations["VolumesController_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -722,8 +683,8 @@ export interface components {
              */
             sub_path?: string;
             /**
-             * @description Volume capacity in GiB
-             * @example 5
+             * @description Volume capacity in GiB (32 to 262,144 GiB)
+             * @example 32
              */
             size_gb: number;
             /**
@@ -784,32 +745,6 @@ export interface components {
             /** @enum {string} */
             access_mode: "ReadWrite" | "ReadOnly";
         };
-        CreateStandaloneVolumeDto: {
-            /** @description Volume identifier name (2-32 lowercase alphanumeric or hyphens) */
-            name: string;
-            /** @description Volume capacity in GiB */
-            size_gb: number;
-            /** @description Target deployment region */
-            region?: string;
-        };
-        VolumeAttachedDeploymentDto: {
-            /** @example 00000000-0000-4000-8000-000000000001 */
-            id: string;
-            /** @example my-app */
-            name: string;
-        };
-        VolumeItemResponseDto: {
-            /** @example 00000000-0000-4000-8000-000000000001 */
-            id: string;
-            /** @example shared-data */
-            name: string;
-            size_gb: number;
-            /** @example eastasia */
-            region: string;
-            attached_deployments: components["schemas"]["VolumeAttachedDeploymentDto"][];
-            created_at: string;
-            updated_at: string;
-        };
         DeploymentResponseDto: {
             /** @description Requested region, or null when omitted */
             region: string | null;
@@ -822,7 +757,7 @@ export interface components {
             /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
             external: boolean | null;
             /** @enum {string} */
-            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
             image: string | null;
             build_id: string | null;
             resource_id: string | null;
@@ -900,6 +835,14 @@ export interface components {
             commit_sha: string;
             image: string;
         };
+        PlanSubscriptionResponseDto: {
+            checkout_session_id: string;
+            /**
+             * Format: uri
+             * @description Redirect the browser to this Stripe-hosted payment page
+             */
+            checkout_url: string;
+        };
         PlanResponseDto: {
             id: string;
             name: string;
@@ -969,14 +912,6 @@ export interface components {
             /** @description Active local plans matching the user's active Stripe subscriptions */
             plans: components["schemas"]["PlanResponseDto"][];
         };
-        PlanSubscriptionResponseDto: {
-            checkout_session_id: string;
-            /**
-             * Format: uri
-             * @description Redirect the browser to this Stripe-hosted payment page
-             */
-            checkout_url: string;
-        };
         AdminSubscriptionItemDto: {
             price_id: string;
             product_id: string;
@@ -995,20 +930,6 @@ export interface components {
             next_cursor: string | null;
         };
         AdminCancellationDto: {
-            /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
-            cancel_at_period_end: boolean;
-        };
-        MySubscriptionResponseDto: {
-            id: string;
-            status: string;
-            cancel_at_period_end: boolean;
-            /** @description Unix timestamp from Stripe */
-            cancel_at: number | null;
-        };
-        MySubscriptionsResponseDto: {
-            subscriptions: components["schemas"]["MySubscriptionResponseDto"][];
-        };
-        MyCancellationDto: {
             /** @description true schedules cancellation at period end; false undoes a scheduled cancellation */
             cancel_at_period_end: boolean;
         };
@@ -1063,6 +984,42 @@ export interface components {
             name: string;
             /** @example Japan East */
             display_name: string;
+        };
+        VolumeAttachedDeploymentDto: {
+            /** @example 00000000-0000-4000-8000-000000000001 */
+            id: string;
+            /** @example my-app */
+            name: string;
+        };
+        VolumeItemResponseDto: {
+            /** @example 00000000-0000-4000-8000-000000000001 */
+            id: string;
+            /** @example shared-data */
+            name: string;
+            /** @example 5 */
+            size_gb: number;
+            /** @example eastasia */
+            region: string;
+            attached_deployments: components["schemas"]["VolumeAttachedDeploymentDto"][];
+            created_at: string;
+            updated_at: string;
+        };
+        CreateStandaloneVolumeDto: {
+            /**
+             * @description Volume identifier name (2-32 lowercase alphanumeric or hyphens)
+             * @example shared-data
+             */
+            name: string;
+            /**
+             * @description Volume capacity in GiB (32 to 262,144 GiB)
+             * @example 32
+             */
+            size_gb: number;
+            /**
+             * @description Target deployment region
+             * @example eastasia
+             */
+            region?: string;
         };
     };
     responses: never;
@@ -1296,7 +1253,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter by deployment status */
-                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
                 /** @description Case-insensitive literal substring of the deployment name */
                 name?: string;
                 /** @description Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource */
@@ -1505,6 +1462,110 @@ export interface operations {
             };
         };
     };
+    DeploymentsController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResponseDto"];
+                };
+            };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure resource is missing, invalid, or inaccessible */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure configuration is temporarily unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentsController_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deletion was accepted. Follow its status with GET /deployments/:id. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid deployment UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this user */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment is busy or in a state that cannot be deleted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     DeploymentsController_listVolumes: {
         parameters: {
             query?: never;
@@ -1645,62 +1706,6 @@ export interface operations {
             };
             /** @description Deployment not in RUNNING or STOPPED state */
             409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DeploymentsController_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeploymentResponseDto"];
-                };
-            };
-            /** @description Invalid deployment UUID */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description No authenticated session, inactive or suspended user, or required permission missing */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Deployment not found for this user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Azure resource is missing, invalid, or inaccessible */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Azure configuration is temporarily unavailable */
-            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1903,6 +1908,72 @@ export interface operations {
             };
             /** @description GitHub download or archive preparation failed */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlanSubscriptionsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Local Kumo plan ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description No body is needed. Only an empty object is accepted; pricing is selected by the server. */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid plan/key or nonempty request body; client price selection is forbidden */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended user with a linked Stripe customer is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan is missing, inactive, or not linked to Stripe */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2212,72 +2283,6 @@ export interface operations {
             };
         };
     };
-    PlanSubscriptionsController_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "idempotency-key": string;
-                /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
-                "Idempotency-Key": string;
-            };
-            path: {
-                /** @description Local Kumo plan ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        /** @description No body is needed. Only an empty object is accepted; pricing is selected by the server. */
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanSubscriptionResponseDto"];
-                };
-            };
-            /** @description Invalid plan/key or nonempty request body; client price selection is forbidden */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description An active, unsuspended user with a linked Stripe customer is required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Plan is missing, inactive, or not linked to Stripe */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe idempotency key conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     UserSubscriptionsController_list: {
         parameters: {
             query?: {
@@ -2393,137 +2398,6 @@ export interface operations {
                 content?: never;
             };
             /** @description Stripe subscription management unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    MySubscriptionsController_list: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MySubscriptionsResponseDto"];
-                };
-            };
-            /** @description Invalid subscription ID, payload, or Idempotency-Key */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description A signed-in session is required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description An active, unsuspended signed-in user is required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Subscription not found for the signed-in user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe subscription state or idempotency conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe subscription service unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    MySubscriptionsController_setCancellation: {
-        parameters: {
-            query?: never;
-            header: {
-                "idempotency-key": string;
-                "Idempotency-Key": string;
-            };
-            path: {
-                subscriptionId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MyCancellationDto"];
-            };
-        };
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MySubscriptionResponseDto"];
-                };
-            };
-            /** @description Invalid subscription ID, payload, or Idempotency-Key */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description A signed-in session is required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description An active, unsuspended signed-in user is required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Subscription not found for the signed-in user */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe subscription state or idempotency conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe subscription service unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2995,6 +2869,7 @@ export interface operations {
                     "application/json": components["schemas"]["VolumeItemResponseDto"][];
                 };
             };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3024,18 +2899,21 @@ export interface operations {
                     "application/json": components["schemas"]["VolumeItemResponseDto"];
                 };
             };
+            /** @description Invalid volume parameters */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            /** @description Volume name already exists or disk quota exceeded */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3055,24 +2933,28 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description Volume deleted successfully */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            /** @description No authenticated session, inactive or suspended user, or required permission missing */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            /** @description Volume not found */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            /** @description Volume is currently mounted to one or more deployments */
             409: {
                 headers: {
                     [name: string]: unknown;

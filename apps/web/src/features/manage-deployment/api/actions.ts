@@ -82,3 +82,44 @@ export async function stopDeploymentAction(id: string): Promise<LifecycleActionR
     return { success: false, error: extractErrorMessage(error, "Failed to connect to deployment service") };
   }
 }
+
+export async function deleteDeploymentAction(id: string): Promise<LifecycleActionResult> {
+  const cookieHeader: string | null = (await headers()).get("cookie");
+  if (!cookieHeader) {
+    return { success: false, error: "Authentication required" };
+  }
+
+  try {
+    const result: { response: Response } = await apiClient.DELETE("/deployments/{id}", {
+      params: { path: { id } },
+      headers: { cookie: cookieHeader },
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!result.response.ok) {
+      if (result.response.status === 400) {
+        return { success: false, error: "Invalid deployment identifier." };
+      }
+      if (result.response.status === 403) {
+        return { success: false, error: "Your account is not allowed to delete this deployment." };
+      }
+      if (result.response.status === 404) {
+        return { success: false, error: "Deployment was not found." };
+      }
+      if (result.response.status === 409) {
+        return {
+          success: false,
+          error: "This deployment cannot be deleted while it is provisioning or another operation is in progress. Refresh and try again.",
+        };
+      }
+      return { success: false, error: `Failed to delete deployment (HTTP ${result.response.status})` };
+    }
+
+    revalidatePath("/dashboard");
+    revalidatePath(`/dashboard/deployments/${id}`);
+    return { success: true };
+  } catch (error: unknown) {
+    return { success: false, error: extractErrorMessage(error, "Failed to connect to deployment service") };
+  }
+}

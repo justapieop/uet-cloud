@@ -3,7 +3,7 @@ import { Navbar } from "@/widgets/navbar";
 import { DEPLOYMENT_STATUSES, type Deployment, type DeploymentFilters as Filters } from "@/entities/deployment";
 import { getDeployments, type DeploymentsResult } from "@/entities/deployment/server";
 import { DeploymentFilters } from "@/features/filter-deployments";
-import { DeploymentActionButton } from "@/features/manage-deployment";
+import { DeleteDeploymentButton, DeploymentActionButton } from "@/features/manage-deployment";
 import { LoginButton } from "@/features/auth";
 import { DashboardNav } from "@/widgets/dashboard-nav";
 
@@ -14,12 +14,20 @@ interface DashboardPageProps {
 const STATUS_STYLES: Readonly<Record<Deployment["status"], string>> = {
   PENDING: "text-amber-300", PROVISIONING: "text-blue-300",
   STARTING: "text-blue-300", STOPPING: "text-amber-300",
-  RUNNING: "text-emerald-300", STOPPED: "text-amber-400", FAILED: "text-red-300", DELETED: "text-muted-text",
+  RUNNING: "text-emerald-300", STOPPED: "text-amber-400", FAILED: "text-red-300",
+  DELETE_PENDING: "text-amber-300", DELETING: "text-amber-300", DELETE_FAILED: "text-red-300", DELETED: "text-muted-text",
 };
 
 function formatDate(value: string): string {
   const date: Date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(date);
+}
+
+function formatStatus(status: Deployment["status"]): string {
+  if (status === "DELETE_PENDING") return "Deletion queued";
+  if (status === "DELETING") return "Deleting";
+  if (status === "DELETE_FAILED") return "Deletion failed";
+  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 export async function DashboardPage({ searchParams }: DashboardPageProps): Promise<JSX.Element> {
@@ -35,7 +43,8 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
     : await getDeployments(filters);
   const filtered: boolean = Boolean(filters.name || filters.status || filters.region);
   const hasTransient: boolean = result.kind === "success" && result.deployments.some((deployment: Deployment): boolean =>
-    deployment.status === "STARTING" || deployment.status === "STOPPING" || deployment.status === "PROVISIONING" || deployment.status === "PENDING"
+    deployment.status === "STARTING" || deployment.status === "STOPPING" || deployment.status === "PROVISIONING" ||
+    deployment.status === "PENDING" || deployment.status === "DELETE_PENDING" || deployment.status === "DELETING"
   );
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
@@ -105,11 +114,16 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-5"><span className={`inline-flex items-center gap-2 whitespace-nowrap text-xs ${STATUS_STYLES[deployment.status]}`}><span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{deployment.status.charAt(0) + deployment.status.slice(1).toLowerCase()}</span></td>
+                        <td className="px-6 py-5"><span className={`inline-flex items-center gap-2 whitespace-nowrap text-xs ${STATUS_STYLES[deployment.status]}`}><span aria-hidden="true" className="size-1.5 rounded-full bg-current" />{formatStatus(deployment.status)}</span></td>
                         <td className="px-6 py-5 font-mono text-[11px] text-muted-text">{deployment.region ?? "—"}</td>
                         <td className="px-6 py-5"><p className="whitespace-nowrap text-xs text-muted-text">{deployment.max_vcpu ?? "—"} vCPU <span className="mx-1 text-muted-dark">/</span> {deployment.max_memory ?? "—"} GiB</p><p className="mt-1.5 text-[11px] text-muted-dark">{deployment.min_scaling ?? "—"}–{deployment.max_scaling ?? "—"} replicas</p></td>
                         <td className="px-6 py-5 text-[11px] leading-5 text-muted-text"><time dateTime={deployment.updated_at}>{formatDate(deployment.updated_at)}</time><span className="block text-[10px] text-muted-dark">UTC</span></td>
-                        <td className="px-6 py-5"><DeploymentActionButton id={deployment.id} status={deployment.status} /></td>
+                        <td className="px-6 py-5">
+                          <div className="flex flex-col items-start gap-2">
+                            <DeploymentActionButton id={deployment.id} status={deployment.status} />
+                            <DeleteDeploymentButton id={deployment.id} name={deployment.name} status={deployment.status} />
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
