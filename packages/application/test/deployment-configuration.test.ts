@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deployment, type DeploymentSpec } from "@kumo/domain";
+import { Deployment, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
 import { DeploymentConfigurationReadError, type DeploymentConfiguration, type DeploymentConfigurationReader } from "../dist/ports/deployment-configuration.js";
 import { DeploymentNotFoundError, type DeploymentListFilters } from "../dist/ports/deployment.js";
 import { GetDeploymentCase } from "../dist/use-cases/deployment/GetDeployment.case.js";
@@ -28,7 +28,7 @@ test("deployment reads preserve saved intent and resolve applied configuration o
 
 test("queued, failed-before-provisioning and deleted records need no Azure reads; malformed running rows fail closed", async (): Promise<void> => {
   const reader: DeploymentConfigurationReader = { read: async (): Promise<never> => { throw new Error("Must not read Azure"); } };
-  for (const status of ["PENDING", "PROVISIONING", "FAILED", "DELETED"] as const) {
+  for (const status: DeploymentStatus of ["PENDING", "PROVISIONING", "FAILED", "DELETED"] as const) {
     const deployment: Deployment = new Deployment({ id: "deployment", userId: "123", name: "my-app", status, spec: SPEC });
     const useCase: GetDeploymentCase = new GetDeploymentCase({ ...emptyRepositories().deployment, findByIdAndUserId: async (): Promise<Deployment> => deployment }, reader);
     assert.equal((await useCase.exec(deployment.id, "123")).configuration, null);
@@ -37,6 +37,36 @@ test("queued, failed-before-provisioning and deleted records need no Azure reads
     findByIdAndUserId: async (): Promise<Deployment> => new Deployment({ id: "deployment", userId: "123", name: "my-app", status: "RUNNING" }),
   }, reader);
   await assert.rejects(invalid.exec("deployment", "123"), DeploymentConfigurationReadError);
+});
+
+test("deletion workflow snapshots skip Azure even while the historical Container App resource ID remains", async (): Promise<void> => {
+  let reads: number = 0;
+  const statuses: readonly DeploymentStatus[] = ["DELETE_PENDING", "DELETING", "DELETE_FAILED", "DELETED"];
+  const reader: DeploymentConfigurationReader = {
+    read: async (): Promise<never> => {
+      reads++;
+      throw new Error("Deletion status reads must not contact Azure");
+    },
+  };
+  for (const status: DeploymentStatus of statuses) {
+    const deployment: Deployment = new Deployment({
+      id: `deployment-${status.toLowerCase()}`,
+      userId: "123",
+      name: "my-app",
+      status,
+      spec: SPEC,
+      resourceId: "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app",
+      containerAppEnvironmentId: "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.App/managedEnvironments/shared-env",
+    });
+    const useCase: GetDeploymentCase = new GetDeploymentCase({
+      ...emptyRepositories().deployment,
+      findByIdAndUserId: async (): Promise<Deployment> => deployment,
+    }, reader);
+    const result: Awaited<ReturnType<GetDeploymentCase["exec"]>> = await useCase.exec(deployment.id, "123");
+    assert.equal(result.deployment.status, status);
+    assert.equal(result.configuration, null);
+  }
+  assert.equal(reads, 0);
 });
 
 test("list region filtering uses applied Azure regions and bounds parallel reads", async (): Promise<void> => {

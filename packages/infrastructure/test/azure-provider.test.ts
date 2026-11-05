@@ -8,6 +8,7 @@ import type { BuildDetails, BuildStatus } from "@kumo/domain";
 import type { FeatureFlagConfiguration } from "../dist/feature-flags/provider.js";
 import type { AzureLegacyEnvironmentProvisioner } from "../dist/azure/legacy-environment.js";
 import { AzureProvider, type AzureDeploymentCreateInput, type AzureProviderClients } from "../dist/azure/provider.js";
+import { storageLinkName } from "../dist/azure/volume-storage-names.js";
 
 const ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.App/managedEnvironments/shared-env";
 const LEGACY_ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/managedEnvironments/user-aca-env-123";
@@ -173,6 +174,12 @@ function fixture(options: FixtureOptions = {}): Fixture {
     return options.legacyProvider;
   }, flags), events, apps };
 }
+
+test("AzureProvider uses the same deterministic storage-link name as the deletion adapter", (): void => {
+  const setup: Fixture = fixture();
+  const expected: string = storageLinkName("my-application", "customer-data");
+  assert.equal(setup.provider.storageLinkName("my-application", "customer-data"), expected);
+});
 
 test("new apps reuse the shared environment and build before app creation", async (): Promise<void> => {
   const setup: Fixture = fixture();

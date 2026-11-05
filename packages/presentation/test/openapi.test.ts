@@ -58,7 +58,7 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 42);
+  assert.equal(count, 43);
   const webhook: OperationObject = document.paths["/github/webhook"]!.post!;
   assert.ok(webhook.responses["200"]);
   assert.ok(webhook.responses["401"]);
@@ -86,4 +86,21 @@ test("OpenAPI covers controller operations, session authentication, and generate
     }
     assert.equal(operation.responses["201"], undefined);
   }
+  const deletion: OperationObject = document.paths["/deployments/{id}"]!.delete!;
+  assert.ok(deletion.responses["202"], "DELETE /deployments/{id} must document accepted asynchronous processing");
+  assert.equal(deletion.responses["200"], undefined, "DELETE /deployments/{id} must not document a synchronous response");
+  assert.ok(deletion.responses["400"], "DELETE /deployments/{id} must document UUID validation failures");
+  assert.ok(deletion.responses["404"], "DELETE /deployments/{id} must document owner-scoped not found");
+  assert.ok(deletion.responses["409"], "DELETE /deployments/{id} must document lifecycle state conflicts");
+  assert.deepEqual(deletion.security, [{ session: [] }]);
+  const statusSchema: unknown = document.components?.schemas?.DeploymentResponseDto?.properties?.status;
+  const statusValues: unknown = typeof statusSchema === "object" && statusSchema !== null && "enum" in statusSchema
+    ? statusSchema.enum
+    : undefined;
+  assert.ok(Array.isArray(statusValues));
+  const expectedStatuses: readonly string[] = [
+    "PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED",
+    "DELETE_PENDING", "DELETING", "DELETE_FAILED", "DELETED",
+  ];
+  assert.deepEqual(statusValues, expectedStatuses);
 });

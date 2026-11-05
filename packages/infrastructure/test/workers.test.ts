@@ -4,12 +4,13 @@ import { test, type TestContext } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import { Logger } from "@nestjs/common";
 import { Build, Deployment, type BuildDetails } from "@kumo/domain";
-import type { BuildQueueRepository, DeploymentQueueRepository } from "@kumo/application";
+import type { BuildQueueRepository, DeploymentDeletionQueueRepository, DeploymentQueueRepository, ProcessDeploymentCase, ProcessDeploymentDeletionCase } from "@kumo/application";
 import { DeploymentWorker } from "../dist/azure/deployment-worker.js";
 import { BuildWorker } from "../dist/azure/build-worker.js";
 import { emptyRepositories } from "../../application/test/support/repositories.ts";
 
 const CLAIMED: Deployment = new Deployment({ id: "deployment", userId: "123", name: "my-app", status: "PROVISIONING", spec: { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 } });
+const DELETION_CLAIMED: Deployment = new Deployment({ id: "deletion", userId: "123", name: "old-app", status: "DELETING", resourceId: "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/old-app" });
 const BUILD: BuildDetails = { id: "build", userId: "123", repo: "https://github.com/owner/repo", ref: null, error: null, dockerFilePath: "Dockerfile", commitSha: null, image: "registry/app:v1", status: "PREPARING", runId: null, runUrl: null, sourceTokenHash: "a".repeat(64), sourceExpiresAt: new Date("2030-01-01"), createdAt: new Date(), updatedAt: new Date() };
 
 async function flush(): Promise<void> { await new Promise<void>((resolve: () => void): void => { setImmediate(resolve); }); }
@@ -91,6 +92,80 @@ test("deployment worker recovers on a later tick after a repository failure", as
   context.mock.timers.tick(1000);
   await flush();
   assert.equal(claims, 1);
+  await worker.onApplicationShutdown();
+});
+
+test("deployment worker waits for an in-flight deletion operation during shutdown", async (): Promise<void> => {
+  let releaseDeletion: () => void = (): void => {};
+  const deletionInProgress: Promise<void> = new Promise<void>((resolve: () => void): void => { releaseDeletion = resolve; });
+  let deletionStarted: boolean = false;
+  const repository: DeploymentDeletionQueueRepository = {
+    ...emptyRepositories().deployment,
+    failStaleProvisioning: async (): Promise<void> => {},
+    recoverStaleDeletions: async (): Promise<void> => {},
+    claimNextPending: async (): Promise<null> => null,
+    claimNextDeletion: async (): Promise<Deployment> => DELETION_CLAIMED,
+  };
+  const processProvisioning: Pick<ProcessDeploymentCase, "exec"> = { exec: async (): Promise<void> => {} };
+  const processDeletion: Pick<ProcessDeploymentDeletionCase, "exec"> = {
+    exec: async (deployment: Deployment): Promise<void> => {
+      assert.equal(deployment.status, "DELETING");
+      deletionStarted = true;
+      return deletionInProgress;
+    },
+  };
+  const worker: DeploymentWorker = new DeploymentWorker(repository, processProvisioning, processDeletion, new ConfigService());
+  worker.onApplicationBootstrap();
+  await flush();
+  assert.equal(deletionStarted, true);
+  let shutdownFinished: boolean = false;
+  const shutdown: Promise<void> = worker.onApplicationShutdown().then((): void => { shutdownFinished = true; });
+  await flush();
+  assert.equal(shutdownFinished, false);
+  releaseDeletion();
+  await shutdown;
+  assert.equal(shutdownFinished, true);
+});
+
+test("deployment worker recovers stale deletion claims and gives deletion work service without starving provisioning", async (context: TestContext): Promise<void> => {
+  context.mock.timers.enable({ apis: ["setInterval", "Date"], now: 1_000_000 });
+  context.mock.method(Math, "random", (): number => 0.5);
+  const events: string[] = [];
+  let pendingClaims: number = 0;
+  let deletionClaims: number = 0;
+  let provisioningRecoveryCutoff: Date | undefined;
+  let deletionRecoveryCutoff: Date | undefined;
+  const repository: DeploymentDeletionQueueRepository = {
+    ...emptyRepositories().deployment,
+    failStaleProvisioning: async (before: Date): Promise<void> => { provisioningRecoveryCutoff = before; },
+    recoverStaleDeletions: async (before: Date): Promise<void> => { deletionRecoveryCutoff = before; },
+    claimNextPending: async (): Promise<Deployment | null> => {
+      pendingClaims++;
+      return pendingClaims <= 6 ? new Deployment({ ...CLAIMED.getDetails(), id: `pending-${pendingClaims}`, name: `pending-${pendingClaims}` }) : null;
+    },
+    claimNextDeletion: async (): Promise<Deployment | null> => {
+      deletionClaims++;
+      return deletionClaims <= 6 ? new Deployment({ ...DELETION_CLAIMED.getDetails(), id: `deleting-${deletionClaims}`, name: `deleting-${deletionClaims}` }) : null;
+    },
+  };
+  const processProvisioning: Pick<ProcessDeploymentCase, "exec"> = { exec: async (): Promise<void> => { events.push("provisioning"); } };
+  const worker: DeploymentWorker = new DeploymentWorker(
+    repository,
+    processProvisioning,
+    { exec: async (_deployment: Deployment): Promise<void> => { events.push("deletion"); } } as Pick<ProcessDeploymentDeletionCase, "exec">,
+    new ConfigService({ AZURE_DEPLOYMENT_TIMEOUT_MS: "1000" }),
+  );
+  worker.onApplicationBootstrap();
+  await flush();
+  assert.equal(provisioningRecoveryCutoff?.getTime(), 939_000);
+  assert.equal(deletionRecoveryCutoff?.getTime(), 939_000);
+  for (let second: number = 0; second < 12; second++) {
+    context.mock.timers.tick(1000);
+    await flush();
+  }
+  assert.ok(events.includes("provisioning"));
+  assert.ok(events.includes("deletion"));
+  assert.ok(Math.max(events.indexOf("provisioning"), events.indexOf("deletion")) < 4, `Expected both queues to be served promptly, got ${events.join(",")}`);
   await worker.onApplicationShutdown();
 });
 
