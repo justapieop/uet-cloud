@@ -13,6 +13,8 @@ import {
   ListVolumesCase,
   VolumeInUseError,
   VolumeOperationConflictError,
+  DeploymentOperationConflictError,
+  DeleteDeploymentCase,
   type DeploymentReadResult,
 } from "@kumo/application";
 import {
@@ -51,6 +53,7 @@ export class DeploymentsController {
     @Optional() private readonly attachVolumeCase?: AttachVolumeCase,
     @Optional() private readonly detachVolumeCase?: DetachVolumeCase,
     @Optional() private readonly listVolumesCase?: ListVolumesCase,
+    @Optional() private readonly deleteDeploymentCase?: DeleteDeploymentCase,
   ) {}
 
   @Post("deployments")
@@ -138,6 +141,30 @@ export class DeploymentsController {
     } catch (error: unknown) {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof InvalidDeploymentStatusError) throw new ConflictException(error.message);
+      throw error;
+    }
+  }
+
+  @Delete("deployments/:id")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @RequirePermissions(Permission.DeploymentDelete, Permission.DeploymentRead)
+  @Header("Cache-Control", "private, no-store")
+  @ApiOperation({ summary: "Request deletion of an owned deployment" })
+  @ApiAcceptedResponse({ description: "Deletion was accepted. Follow its status with GET /deployments/:id." })
+  @ApiBadRequestResponse({ description: "Invalid deployment UUID" })
+  @ApiNotFoundResponse({ description: "Deployment not found for this user" })
+  @ApiConflictResponse({ description: "Deployment is busy or in a state that cannot be deleted" })
+  public async delete(@Req() request: Request, @Param("id", new ParseUUIDPipe()) id: string): Promise<void> {
+    const user: User = this.owner(request);
+    if (!this.deleteDeploymentCase) throw new ServiceUnavailableException("Deployment deletion is not available");
+    try {
+      await this.deleteDeploymentCase.exec({ id, userId: user.id });
+      await this.readCache.invalidateDeployments(user.id);
+    } catch (error: unknown) {
+      if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
+      if (error instanceof InvalidDeploymentStatusError || error instanceof DeploymentOperationConflictError) {
+        throw new ConflictException(error.message);
+      }
       throw error;
     }
   }
