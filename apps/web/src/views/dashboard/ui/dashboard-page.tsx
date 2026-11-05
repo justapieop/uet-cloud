@@ -34,6 +34,9 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
     ? { kind: "error", message: "These filters are invalid. Reset your filters and try again." }
     : await getDeployments(filters);
   const filtered: boolean = Boolean(filters.name || filters.status || filters.region);
+  const hasTransient: boolean = result.kind === "success" && result.deployments.some((deployment: Deployment): boolean =>
+    deployment.status === "STARTING" || deployment.status === "STOPPING" || deployment.status === "PROVISIONING" || deployment.status === "PENDING"
+  );
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <Navbar variant="dashboard" />
@@ -61,7 +64,7 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
             </div>
             {result.kind === "success" && <span className="text-xs text-muted-dark">Newest first</span>}
           </div>
-          {result.kind !== "unauthorized" && <DeploymentFilters key={JSON.stringify(filters)} filters={filters} clearable={params.name !== undefined || params.status !== undefined || params.region !== undefined} />}
+          {result.kind !== "unauthorized" && <DeploymentFilters key={JSON.stringify(filters)} filters={filters} clearable={params.name !== undefined || params.status !== undefined || params.region !== undefined} hasTransient={hasTransient} />}
           {result.kind === "unauthorized" ? (
             <div className="flex min-h-80 flex-col items-center justify-center px-6 py-16 text-center">
               <span aria-hidden="true" className="mb-5 flex size-12 items-center justify-center rounded-xl border border-surface-border bg-background font-mono text-lg text-muted-text">K</span>
