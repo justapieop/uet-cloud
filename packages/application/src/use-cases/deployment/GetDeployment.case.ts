@@ -24,7 +24,10 @@ export class GetDeploymentCase {
   }
 
   private async read(deployment: Deployment): Promise<DeploymentReadResult> {
-    if (deployment.status === "DELETED") return { deployment, configuration: null };
+    if (deployment.status === "DELETE_PENDING" || deployment.status === "DELETING" ||
+      deployment.status === "DELETE_FAILED" || deployment.status === "DELETED") {
+      return { deployment, configuration: null };
+    }
     if (!deployment.resourceId) {
       if (deployment.status === "RUNNING" || deployment.status === "STOPPED") throw new DeploymentConfigurationReadError("invalid");
       return { deployment, configuration: null };
