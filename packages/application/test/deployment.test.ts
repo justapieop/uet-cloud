@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Deployment, type DeploymentSpec } from "@kumo/domain";
+import { Deployment, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
 import { BuildProviderError } from "../dist/ports/build.js";
 import type { DeploymentProvisioner, DeploymentProvisionResult, DeploymentRepository } from "../dist/ports/deployment.js";
 import { ProcessDeploymentCase } from "../dist/use-cases/deployment/ProcessDeployment.case.js";
@@ -64,13 +64,30 @@ test("provider failures preserve the accepted build and expose only safe errors"
 test("update and delete use transaction-bound repositories and preserve ownership", async (): Promise<void> => {
   const writes: Deployment[] = [];
   const deployments: DeploymentRepository = repository(writes);
-  const deleted: string[] = [];
-  deployments.delete = async (id: string, userId: string): Promise<void> => { deleted.push(`${userId}/${id}`); };
+  let hardDeletes: number = 0;
+  let currentDeployment: Deployment = new Deployment({ ...CLAIMED.getDetails(), status: "RUNNING" });
+  deployments.findByIdAndUserId = async (id: string, userId: string): Promise<Deployment | null> =>
+    id === currentDeployment.id && userId === currentDeployment.userId ? currentDeployment : null;
+  deployments.delete = async (): Promise<void> => { hardDeletes++; };
+  deployments.transitionStatus = async (
+    id: string,
+    userId: string,
+    from: DeploymentStatus,
+    to: DeploymentStatus,
+  ): Promise<boolean> => {
+    if (id !== currentDeployment.id || userId !== currentDeployment.userId || from !== currentDeployment.status) return false;
+    currentDeployment = new Deployment({ ...currentDeployment.getDetails(), status: to });
+    writes.push(currentDeployment);
+    return true;
+  };
   const uow: UnitOfWork = { run: async <T>(work: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => work({ ...emptyRepositories(), deployment: deployments }) };
   await new UpdateDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "123", name: "renamed-app" });
   assert.equal(writes[0]?.name, "renamed-app");
   assert.equal(writes[0]?.spec?.repo, SPEC.repo);
   await assert.rejects(new UpdateDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "456", name: "other-app" }), /not found/);
   await new DeleteDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "123" });
-  assert.deepEqual(deleted, ["123/deployment"]);
+  assert.equal(currentDeployment.status, "DELETE_PENDING");
+  assert.equal(writes.at(-1)?.status, "DELETE_PENDING");
+  await assert.rejects(new DeleteDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "456" }), /not found/);
+  assert.equal(hardDeletes, 0);
 });

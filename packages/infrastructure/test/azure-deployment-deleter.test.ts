@@ -35,6 +35,7 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   const app: ContainerApp = options.app ?? {
     id: RESOURCE_ID,
     name: "my-app",
+    location: "southeastasia",
     environmentId: SHARED_ENVIRONMENT_ID,
     tags: { "kumo-deployment-id": "deployment-1" },
   };
@@ -103,6 +104,7 @@ test("AzureDeploymentDeleter permits the app's canonical legacy environment in i
     app: {
       id: RESOURCE_ID,
       name: "my-app",
+      location: "southeastasia",
       environmentId: LEGACY_ENVIRONMENT_ID,
       tags: { "kumo-deployment-id": "deployment-1" },
     },
@@ -162,6 +164,7 @@ test("AzureDeploymentDeleter rejects foreign IDs and mismatched ownership tags b
     app: {
       id: RESOURCE_ID,
       name: "my-app",
+      location: "southeastasia",
       environmentId: SHARED_ENVIRONMENT_ID,
       tags: { "kumo-deployment-id": "another-deployment" },
     },

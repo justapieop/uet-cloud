@@ -104,7 +104,8 @@ test("deployment deletion HTTP contract requires both grants, scopes to the sess
   assert.match(accepted.headers.get("cache-control") ?? "", /private/);
   assert.deepEqual(invalidatedUsers, ["alice"]);
   const progressStatuses: readonly DeploymentStatus[] = ["DELETE_PENDING", "DELETING", "DELETE_FAILED", "DELETED"];
-  for (const status: DeploymentStatus of progressStatuses) {
+  for (let index: number = 0; index < progressStatuses.length; index++) {
+    const status: DeploymentStatus = progressStatuses[index]!;
     progressStatus = status;
     const progress: globalThis.Response = await fetch(url, {
       headers: { "x-test-user": "alice", "cache-control": "no-store" },

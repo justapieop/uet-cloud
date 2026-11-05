@@ -4,7 +4,7 @@ import { test, type TestContext } from "node:test";
 import { ConfigService } from "@nestjs/config";
 import { Logger } from "@nestjs/common";
 import { Build, Deployment, type BuildDetails } from "@kumo/domain";
-import type { BuildQueueRepository, DeploymentDeletionQueueRepository, DeploymentQueueRepository, ProcessDeploymentCase, ProcessDeploymentDeletionCase } from "@kumo/application";
+import type { BuildQueueRepository, DeploymentDeletionQueueRepository, ProcessDeploymentCase, ProcessDeploymentDeletionCase } from "@kumo/application";
 import { DeploymentWorker } from "../dist/azure/deployment-worker.js";
 import { BuildWorker } from "../dist/azure/build-worker.js";
 import { emptyRepositories } from "../../application/test/support/repositories.ts";
@@ -12,6 +12,9 @@ import { emptyRepositories } from "../../application/test/support/repositories.t
 const CLAIMED: Deployment = new Deployment({ id: "deployment", userId: "123", name: "my-app", status: "PROVISIONING", spec: { repo: "https://github.com/owner/repo", targetPort: 8080, maxVcpu: 0.5, maxMemory: 1, minScaling: 0, maxScaling: 2 } });
 const DELETION_CLAIMED: Deployment = new Deployment({ id: "deletion", userId: "123", name: "old-app", status: "DELETING", resourceId: "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/old-app" });
 const BUILD: BuildDetails = { id: "build", userId: "123", repo: "https://github.com/owner/repo", ref: null, error: null, dockerFilePath: "Dockerfile", commitSha: null, image: "registry/app:v1", status: "PREPARING", runId: null, runUrl: null, sourceTokenHash: "a".repeat(64), sourceExpiresAt: new Date("2030-01-01"), createdAt: new Date(), updatedAt: new Date() };
+const NO_DELETION_PROCESSOR: Pick<ProcessDeploymentDeletionCase, "exec"> = {
+  exec: async (): Promise<void> => { throw new Error("This test must not process a deletion job"); },
+};
 
 async function flush(): Promise<void> { await new Promise<void>((resolve: () => void): void => { setImmediate(resolve); }); }
 
@@ -21,9 +24,11 @@ test("idle deployment workers back off SQL claims and sweep once a minute", asyn
   let claims: number = 0;
   let sweeps: number = 0;
   const worker: DeploymentWorker = new DeploymentWorker({ ...emptyRepositories().deployment,
+    claimNextDeletion: async (): Promise<null> => null,
     claimNextPending: async (): Promise<null> => { claims++; return null; },
     failStaleProvisioning: async (): Promise<void> => { sweeps++; },
-  }, { exec: async (): Promise<never> => { throw new Error("Idle worker must not process work"); } }, new ConfigService());
+    recoverStaleDeletions: async (): Promise<void> => {},
+  }, { exec: async (): Promise<never> => { throw new Error("Idle worker must not process work"); } }, NO_DELETION_PROCESSOR, new ConfigService());
   worker.onApplicationBootstrap(); await flush();
   for (let second: number = 0; second < 120; second++) { context.mock.timers.tick(1000); await flush(); }
   assert.ok(claims <= 16, `Expected backed-off claims, got ${claims}`);
@@ -37,12 +42,14 @@ test("deployment worker avoids overlap, calculates stale cutoff and waits for ac
   let release: () => void = (): void => {};
   const active: Promise<void> = new Promise<void>((resolve: () => void): void => { release = resolve; });
   const cutoffs: number[] = [];
-  const repository: DeploymentQueueRepository = {
+  const repository: DeploymentDeletionQueueRepository = {
     ...emptyRepositories().deployment,
+    claimNextDeletion: async (): Promise<null> => null,
     failStaleProvisioning: async (before: Date): Promise<void> => { cutoffs.push(before.getTime()); },
+    recoverStaleDeletions: async (): Promise<void> => {},
     claimNextPending: async (): Promise<Deployment> => { claims++; return CLAIMED; },
   };
-  const worker: DeploymentWorker = new DeploymentWorker(repository, { exec: async (): Promise<void> => active }, new ConfigService({ AZURE_DEPLOYMENT_TIMEOUT_MS: "1000" }));
+  const worker: DeploymentWorker = new DeploymentWorker(repository, { exec: async (): Promise<void> => active }, NO_DELETION_PROCESSOR, new ConfigService({ AZURE_DEPLOYMENT_TIMEOUT_MS: "1000" }));
   worker.onApplicationBootstrap();
   await flush();
   assert.equal(cutoffs[0], 939_000);
@@ -64,10 +71,12 @@ test("shutdown finishes an in-flight claim instead of abandoning its deployment"
   let resolveClaim: (deployment: Deployment) => void = (): void => {};
   const claiming: Promise<Deployment> = new Promise<Deployment>((resolve: (deployment: Deployment) => void): void => { resolveClaim = resolve; });
   let processed: number = 0;
-  const repository: DeploymentQueueRepository = { ...emptyRepositories().deployment,
-    failStaleProvisioning: async (): Promise<void> => {}, claimNextPending: async (): Promise<Deployment> => claiming,
+  const repository: DeploymentDeletionQueueRepository = { ...emptyRepositories().deployment,
+    claimNextDeletion: async (): Promise<null> => null,
+    failStaleProvisioning: async (): Promise<void> => {}, recoverStaleDeletions: async (): Promise<void> => {},
+    claimNextPending: async (): Promise<Deployment> => claiming,
   };
-  const worker: DeploymentWorker = new DeploymentWorker(repository, { exec: async (): Promise<void> => { processed++; } }, new ConfigService());
+  const worker: DeploymentWorker = new DeploymentWorker(repository, { exec: async (): Promise<void> => { processed++; } }, NO_DELETION_PROCESSOR, new ConfigService());
   worker.onApplicationBootstrap();
   await flush();
   const shutdown: Promise<void> = worker.onApplicationShutdown();
@@ -81,11 +90,13 @@ test("deployment worker recovers on a later tick after a repository failure", as
   context.mock.method(Logger.prototype, "error", (): void => {});
   let attempts: number = 0;
   let claims: number = 0;
-  const repository: DeploymentQueueRepository = { ...emptyRepositories().deployment,
+  const repository: DeploymentDeletionQueueRepository = { ...emptyRepositories().deployment,
+    claimNextDeletion: async (): Promise<null> => null,
     failStaleProvisioning: async (): Promise<void> => { if (++attempts === 1) throw new Error("DB unavailable"); },
+    recoverStaleDeletions: async (): Promise<void> => {},
     claimNextPending: async (): Promise<null> => { claims++; return null; },
   };
-  const worker: DeploymentWorker = new DeploymentWorker(repository, { exec: async (): Promise<never> => { throw new Error("No work expected"); } }, new ConfigService());
+  const worker: DeploymentWorker = new DeploymentWorker(repository, { exec: async (): Promise<never> => { throw new Error("No work expected"); } }, NO_DELETION_PROCESSOR, new ConfigService());
   worker.onApplicationBootstrap();
   await flush();
   assert.equal(claims, 0);

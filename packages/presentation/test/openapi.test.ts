@@ -93,7 +93,11 @@ test("OpenAPI covers controller operations, session authentication, and generate
   assert.ok(deletion.responses["404"], "DELETE /deployments/{id} must document owner-scoped not found");
   assert.ok(deletion.responses["409"], "DELETE /deployments/{id} must document lifecycle state conflicts");
   assert.deepEqual(deletion.security, [{ session: [] }]);
-  const statusSchema: unknown = document.components?.schemas?.DeploymentResponseDto?.properties?.status;
+  const deploymentSchema: unknown = document.components?.schemas?.DeploymentResponseDto;
+  const statusSchema: unknown = typeof deploymentSchema === "object" && deploymentSchema !== null && "properties" in deploymentSchema &&
+    typeof deploymentSchema.properties === "object" && deploymentSchema.properties !== null && "status" in deploymentSchema.properties
+    ? deploymentSchema.properties.status
+    : undefined;
   const statusValues: unknown = typeof statusSchema === "object" && statusSchema !== null && "enum" in statusSchema
     ? statusSchema.enum
     : undefined;

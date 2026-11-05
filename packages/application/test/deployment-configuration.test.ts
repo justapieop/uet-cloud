@@ -28,7 +28,9 @@ test("deployment reads preserve saved intent and resolve applied configuration o
 
 test("queued, failed-before-provisioning and deleted records need no Azure reads; malformed running rows fail closed", async (): Promise<void> => {
   const reader: DeploymentConfigurationReader = { read: async (): Promise<never> => { throw new Error("Must not read Azure"); } };
-  for (const status: DeploymentStatus of ["PENDING", "PROVISIONING", "FAILED", "DELETED"] as const) {
+  const nonProvisionedStatuses: readonly DeploymentStatus[] = ["PENDING", "PROVISIONING", "FAILED", "DELETED"];
+  for (let index: number = 0; index < nonProvisionedStatuses.length; index++) {
+    const status: DeploymentStatus = nonProvisionedStatuses[index]!;
     const deployment: Deployment = new Deployment({ id: "deployment", userId: "123", name: "my-app", status, spec: SPEC });
     const useCase: GetDeploymentCase = new GetDeploymentCase({ ...emptyRepositories().deployment, findByIdAndUserId: async (): Promise<Deployment> => deployment }, reader);
     assert.equal((await useCase.exec(deployment.id, "123")).configuration, null);
@@ -48,7 +50,8 @@ test("deletion workflow snapshots skip Azure even while the historical Container
       throw new Error("Deletion status reads must not contact Azure");
     },
   };
-  for (const status: DeploymentStatus of statuses) {
+  for (let index: number = 0; index < statuses.length; index++) {
+    const status: DeploymentStatus = statuses[index]!;
     const deployment: Deployment = new Deployment({
       id: `deployment-${status.toLowerCase()}`,
       userId: "123",
