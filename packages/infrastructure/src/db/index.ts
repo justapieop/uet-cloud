@@ -1,4 +1,5 @@
 export * from "./repositories/deployment.js";
+export * from "./deployment-operation-lock.js";
 export * from "./repositories/volume.js";
 export * from "./repositories/plan.js";
 export * from "./repositories/role.js";

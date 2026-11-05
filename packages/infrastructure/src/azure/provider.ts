@@ -325,9 +325,10 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     readonly resourceId: string;
     readonly volume: DeploymentVolume;
     readonly existingVolumes: readonly DeploymentVolume[];
+    readonly abortSignal?: AbortSignal;
   }): Promise<void> {
     const rgName: string = this.userResourceGroup(input.userId);
-    const signal: AbortSignal = this.operationSignal();
+    const signal: AbortSignal = this.operationSignal(input.abortSignal);
     const app: ContainerApp = await this.clients.containerApps.get(rgName, input.appName, { abortSignal: signal });
     const existingEnvironmentId: string | undefined = app.environmentId ?? app.managedEnvironmentId;
     if (!existingEnvironmentId) throw new BuildProviderError("Existing Container App has no managed environment identity");
@@ -376,9 +377,10 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     readonly volumeName: string;
     readonly existingVolumes: readonly DeploymentVolume[];
     readonly deleteData?: boolean;
+    readonly abortSignal?: AbortSignal;
   }): Promise<void> {
     const rgName: string = this.userResourceGroup(input.userId);
-    const signal: AbortSignal = this.operationSignal();
+    const signal: AbortSignal = this.operationSignal(input.abortSignal);
     const app: ContainerApp = await this.clients.containerApps.get(rgName, input.appName, { abortSignal: signal });
     const existingEnvironmentId: string | undefined = app.environmentId ?? app.managedEnvironmentId;
     if (!existingEnvironmentId) throw new BuildProviderError("Existing Container App has no managed environment identity");
@@ -524,11 +526,12 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   public async deleteStorageVolume(input: {
     readonly userId: string;
     readonly volumeName: string;
+    readonly abortSignal?: AbortSignal;
   }): Promise<void> {
     const rgName: string = this.userResourceGroup(input.userId);
     const storageAccountName: string = this.userStorageAccountName(input.userId);
     const shareName: string = this.volumeShareName(input.volumeName);
-    const opSignal: AbortSignal = this.operationSignal();
+    const opSignal: AbortSignal = this.operationSignal(input.abortSignal);
 
     if (this.clients.fileShares) {
       try {

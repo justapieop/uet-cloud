@@ -5,6 +5,8 @@ export * from "./session-authorization.js";
 export * from "./uow.js";
 export * from "./build.js";
 export * from "./deployment.js";
+export * from "./deployment-deletion.js";
+export * from "./deployment-operation-lock.js";
 export * from "./deployment-configuration.js";
 export * from "./deployment-request.js";
 export * from "./container-lifecycle.js";

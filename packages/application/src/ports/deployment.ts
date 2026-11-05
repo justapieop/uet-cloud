@@ -15,7 +15,7 @@ export interface DeploymentRepository {
   countReservedByUserId(userId: string): Promise<number>;
   update(deployment: Deployment): Promise<void>;
   updateProgress(deployment: Deployment): Promise<void>;
-  transitionStatus(id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus): Promise<boolean>;
+  transitionStatus(id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus, options?: { readonly clearError?: boolean }): Promise<boolean>;
   delete(deploymentId: string, userId: string): Promise<void>;
 }
 
@@ -24,6 +24,11 @@ export const DEPLOYMENT_REPOSITORY: symbol = Symbol("DEPLOYMENT_REPOSITORY");
 export interface DeploymentQueueRepository extends DeploymentRepository {
   claimNextPending(): Promise<Deployment | null>;
   failStaleProvisioning(before: Date): Promise<void>;
+}
+
+export interface DeploymentDeletionQueueRepository extends DeploymentQueueRepository {
+  claimNextDeletion(): Promise<Deployment | null>;
+  recoverStaleDeletions(before: Date): Promise<void>;
 }
 
 export interface DeploymentProvisionInput {
@@ -53,6 +58,7 @@ export interface VolumeManager {
     readonly resourceId: string;
     readonly volume: DeploymentVolume;
     readonly existingVolumes: readonly DeploymentVolume[];
+    readonly abortSignal?: AbortSignal;
   }): Promise<void>;
 
   detachVolume(input: {
@@ -63,6 +69,7 @@ export interface VolumeManager {
     readonly volumeName: string;
     readonly existingVolumes: readonly DeploymentVolume[];
     readonly deleteData?: boolean;
+    readonly abortSignal?: AbortSignal;
   }): Promise<void>;
 
   createStorageVolume?(input: {
@@ -75,6 +82,7 @@ export interface VolumeManager {
   deleteStorageVolume?(input: {
     readonly userId: string;
     readonly volumeName: string;
+    readonly abortSignal?: AbortSignal;
   }): Promise<void>;
 }
 

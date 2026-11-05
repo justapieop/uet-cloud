@@ -2,7 +2,7 @@ import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 import { MIN_VOLUME_SIZE_GB, MAX_VOLUME_SIZE_GB } from "./volume.js";
 
-export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETED";
+export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
 
 export type VolumeAccessMode = "ReadWrite" | "ReadOnly";
 
@@ -126,6 +126,8 @@ export class Deployment extends Domain<DeploymentDetails> {
   public readonly resourceId: string | null;
   public readonly fqdn: string | null;
   public readonly error: string | null;
+  public readonly containerAppEnvironmentId: string | null;
+  public readonly containerAppDeletedAt: Date | null;
 
   public constructor(details: DeploymentDetails) {
     super(details);
@@ -146,6 +148,8 @@ export class Deployment extends Domain<DeploymentDetails> {
     this.resourceId = details.resourceId ?? null;
     this.fqdn = details.fqdn ?? null;
     this.error = details.error ?? null;
+    this.containerAppEnvironmentId = details.containerAppEnvironmentId ?? null;
+    this.containerAppDeletedAt = details.containerAppDeletedAt ?? null;
   }
 
   public validate(): InvalidDomainParams | null {
@@ -159,6 +163,14 @@ export class Deployment extends Domain<DeploymentDetails> {
 
     if (!/^[a-z][a-z0-9-]{0,30}[a-z0-9]$/.test(this.details.name)) {
       return new InvalidDomainParams("Deployment.name must be 2-32 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit");
+    }
+    if (this.details.containerAppEnvironmentId !== undefined && this.details.containerAppEnvironmentId !== null &&
+      (typeof this.details.containerAppEnvironmentId !== "string" || isBlankStr(this.details.containerAppEnvironmentId))) {
+      return new InvalidDomainParams("Deployment.containerAppEnvironmentId must be a non-blank Azure resource ID");
+    }
+    if (this.details.containerAppDeletedAt !== undefined && this.details.containerAppDeletedAt !== null &&
+      (!(this.details.containerAppDeletedAt instanceof Date) || Number.isNaN(this.details.containerAppDeletedAt.getTime()))) {
+      return new InvalidDomainParams("Deployment.containerAppDeletedAt must be a valid date");
     }
     const spec: DeploymentSpec | null | undefined = this.details.spec;
     if (spec) {
@@ -204,6 +216,7 @@ export class Deployment extends Domain<DeploymentDetails> {
       id: this.id, userId: this.userId, name: this.name, createdAt: this.createdAt, updatedAt: this.updatedAt,
       status: this.status, spec: this.spec, image: this.image, buildId: this.buildId,
       resourceId: this.resourceId, fqdn: this.fqdn, error: this.error,
+      containerAppEnvironmentId: this.containerAppEnvironmentId, containerAppDeletedAt: this.containerAppDeletedAt,
     };
   }
 }
@@ -221,4 +234,6 @@ export interface DeploymentDetails {
   resourceId?: string | null;
   fqdn?: string | null;
   error?: string | null;
+  containerAppEnvironmentId?: string | null;
+  containerAppDeletedAt?: Date | null;
 }

@@ -704,6 +704,39 @@ export class Volumes1793100000000 implements MigrationInterface {
   }
 }
 
+export class DeploymentDeletion1793232000000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("deployments", new TableColumn({
+      name: "azure_environment_id",
+      type: "nvarchar",
+      length: "2048",
+      isNullable: true,
+    }));
+    await queryRunner.addColumn("deployments", new TableColumn({
+      name: "container_app_deleted_at",
+      type: "datetime2",
+      precision: 7,
+      isNullable: true,
+    }));
+    await queryRunner.createTable(new Table({
+      name: "deployment_operation_locks",
+      columns: [
+        { name: "deployment_id", type: "nvarchar", length: "255", isPrimary: true },
+        { name: "operation", type: "nvarchar", length: "16", isNullable: false },
+        { name: "lease_token", type: "uniqueidentifier", isNullable: false },
+        { name: "expires_at", type: "datetime2", precision: 7, isNullable: false },
+      ],
+      indices: [new TableIndex({ name: "IDX_deployment_operation_locks_expires_at", columnNames: ["expires_at"] })],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropTable("deployment_operation_locks", true);
+    await queryRunner.dropColumn("deployments", "container_app_deleted_at");
+    await queryRunner.dropColumn("deployments", "azure_environment_id");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -724,5 +757,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   DatabaseLoadIndexes1792627200000,
   RootLoginLimits1793059200000,
   Volumes1793100000000,
+  DeploymentDeletion1793232000000,
 ];
 

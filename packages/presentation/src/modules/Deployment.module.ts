@@ -14,6 +14,7 @@ import {
   CreateDeploymentCase,
   RedeployDeploymentCase,
   DeleteDeploymentCase,
+  DEPLOYMENT_OPERATION_LOCK,
   GetBuildCase,
   GetDeploymentCase,
   ProcessDeploymentCase,
@@ -22,8 +23,8 @@ import {
   TriggerBuildCase,
   UNIT_OF_WORK,
   UpdateDeploymentCase,
-  VolumeOperationCoordinator,
   type UnitOfWork,
+  type DeploymentOperationLock,
 } from "@kumo/application";
 import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
@@ -160,25 +161,26 @@ import { RouteReadCache } from "../common/ReadCache.js";
       provide: DeleteDeploymentCase,
       useFactory: (
         uow: UnitOfWork,
+        operationLock: DeploymentOperationLock,
       ): DeleteDeploymentCase => {
-        return new DeleteDeploymentCase(uow);
+        return new DeleteDeploymentCase(uow, operationLock);
       },
       inject: [
         UNIT_OF_WORK,
+        DEPLOYMENT_OPERATION_LOCK,
       ],
     },
-    VolumeOperationCoordinator,
     {
       provide: AttachVolumeCase,
-      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider, coordinator: VolumeOperationCoordinator): AttachVolumeCase =>
-        new AttachVolumeCase(uow, subscriptions, provider, coordinator),
-      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider, VolumeOperationCoordinator],
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, provider: AzureProvider, operationLock: DeploymentOperationLock): AttachVolumeCase =>
+        new AttachVolumeCase(uow, subscriptions, provider, operationLock),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureProvider, DEPLOYMENT_OPERATION_LOCK],
     },
     {
       provide: DetachVolumeCase,
-      useFactory: (uow: UnitOfWork, provider: AzureProvider, coordinator: VolumeOperationCoordinator): DetachVolumeCase =>
-        new DetachVolumeCase(uow, provider, coordinator),
-      inject: [UNIT_OF_WORK, AzureProvider, VolumeOperationCoordinator],
+      useFactory: (uow: UnitOfWork, provider: AzureProvider, operationLock: DeploymentOperationLock): DetachVolumeCase =>
+        new DetachVolumeCase(uow, provider, operationLock),
+      inject: [UNIT_OF_WORK, AzureProvider, DEPLOYMENT_OPERATION_LOCK],
     },
     {
       provide: ListVolumesCase,

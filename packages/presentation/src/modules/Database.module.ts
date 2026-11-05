@@ -2,13 +2,15 @@ import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ConfigService } from "@nestjs/config";
 import { PinoLogger } from "nestjs-pino";
-import { TypeORMError } from "typeorm";
+import { DataSource, TypeORMError } from "typeorm";
 import {
+  DEPLOYMENT_OPERATION_LOCK,
   UNIT_OF_WORK,
 } from "@kumo/application";
 import {
   InfraDeployment,
   DATABASE_MIGRATIONS,
+  InfraDeploymentOperationLock,
   InfraDeploymentRepository,
   InfraPlan,
   InfraRole,
@@ -73,6 +75,14 @@ import { AppConfigModule } from "./AppConfig.module.js";
     InfraRoleRepository,
     InfraUserRoleRepository,
     InfraDeploymentRepository,
+    {
+      provide: DEPLOYMENT_OPERATION_LOCK,
+      useFactory: (dataSource: DataSource, config: ConfigService): InfraDeploymentOperationLock => {
+        const timeoutMs: number = Number(config.get<string>("AZURE_DEPLOYMENT_TIMEOUT_MS", "3600000"));
+        return new InfraDeploymentOperationLock(dataSource, timeoutMs + 120_000);
+      },
+      inject: [DataSource, ConfigService],
+    },
     InfraVolumeRepository,
     TypeOrmUnitOfWork,
     InfraStripeCustomerLinkRepository,
@@ -83,6 +93,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
   ],
   exports: [
     UNIT_OF_WORK,
+    DEPLOYMENT_OPERATION_LOCK,
     InfraStripeCustomerLinkRepository,
     InfraDeploymentRepository,
     InfraVolumeRepository,
