@@ -10,14 +10,14 @@ Offsets are stable persisted bit positions. Existing roles retain their grants; 
 | `DeploymentRead` | 1 | List and read owned deployments | None |
 | `DeploymentCreate` | 2 | Queue a deployment and its build, subject to subscription and quotas | None |
 | `DeploymentUpdate` | 3 | Update owned deployments | `DeploymentRead` |
-| `DeploymentDelete` | 4 | Delete owned deployments and their resources | `DeploymentRead` |
+| `DeploymentDelete` | 4 | Request deletion of owned deployments and their resources | `DeploymentRead` |
 | `BuildRead` | 5 | Read owned build status and pipeline details | None |
 | `DeploymentMetricsRead` | 6 | Read owned deployment usage metrics | `DeploymentRead` |
 | `PlanManage` | 7 | Administer local plans | None |
 | `SubscriptionManage` | 8 | Inspect users' subscriptions and schedule/undo cancellation | None |
 | `RoleManage` | 9 | Inspect and manage roles, and manage role assignments across users | None |
 
-Deployment update/delete definitions cover application use cases; they do not add HTTP endpoints. PlanManage and SubscriptionManage explicitly grant cross-user administrative billing access. RoleManage grants cross-user role administration and permission-catalog access. Super does not bypass ownership, subscription, or quota checks on ordinary deployment APIs. See [admin billing APIs](admin-billing.md).
+Deployment update/delete permissions are enforced by HTTP handlers as well as application use cases. PlanManage and SubscriptionManage explicitly grant cross-user administrative billing access. RoleManage grants cross-user role administration and permission-catalog access. Super does not bypass ownership, subscription, or quota checks on ordinary deployment APIs. See [admin billing APIs](admin-billing.md).
 
 To store grants on a role, OR the masks computed as `1n << BigInt(permission.offset)`. Do not persist catalog definitions as separate permission rows. The SQL Server signed bigint storage supports offsets 0–62. Never reuse or renumber an assigned offset.
 
@@ -44,6 +44,7 @@ The API enforces these policies before use cases, idempotency replay, and respon
 | `POST /deployments` | `DeploymentCreate` |
 | `POST /deployments/:id/start` | `DeploymentUpdate` |
 | `POST /deployments/:id/stop` | `DeploymentUpdate` |
+| `DELETE /deployments/:id` | `DeploymentDelete`, `DeploymentRead` |
 | `GET /deployments` | `DeploymentRead` |
 | `GET /deployments/:id` | `DeploymentRead` |
 | `GET /deployment/build/:id` | `BuildRead` |
@@ -55,7 +56,7 @@ The API enforces these policies before use cases, idempotency replay, and respon
 | `GET /user/:userId/roles` | `RoleManage` |
 | `PUT /user/:userId/roles` | `RoleManage` |
 
-Permission checks do not replace resource ownership, Stripe subscription, or quota checks. Authentication and current-profile routes retain their session policies; pipeline manifest/source routes retain their per-build bearer-token authorization. Start/stop require DeploymentUpdate; rename and delete use cases still have no HTTP endpoints. Internal workers do not require user sessions or permission decorators.
+Permission checks do not replace resource ownership, Stripe subscription, or quota checks. Authentication and current-profile routes retain their session policies; pipeline manifest/source routes retain their per-build bearer-token authorization. Start/stop require DeploymentUpdate. `DELETE /deployments/:id` requires both DeploymentDelete and DeploymentRead, and the use case still scopes lookup to the authenticated user, including for Super. Internal workers do not require user sessions or permission decorators.
 
 `GET /roles` returns every role, including inactive roles, together with the static permission catalog. Role responses list exact stored permission keys, so a role with only the Super bit is returned as `["Super"]` rather than being expanded into every catalog entry. Permission metadata is informational; it does not grant prerequisites automatically.
 
