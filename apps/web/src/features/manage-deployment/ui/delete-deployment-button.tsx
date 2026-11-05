@@ -107,7 +107,7 @@ export function DeleteDeploymentButton({
   if (!canDeleteDeployment(status)) return null;
 
   const isRetry: boolean = status === "DELETE_FAILED";
-  const triggerLabel: string = isRetry ? "Retry delete" : "Delete";
+  const triggerLabel: string = isRetry ? "Retry" : "Delete";
 
   function handleConfirm(): void {
     setErrorMessage(null);
@@ -134,19 +134,20 @@ export function DeleteDeploymentButton({
 
   return (
     <>
-      <Button
+      <button
         type="button"
-        variant="danger-soft"
-        size="sm"
-        isDisabled={isPending}
-        onPress={(): void => {
+        disabled={isPending}
+        aria-busy={isPending}
+        aria-label={isRetry ? `Retry deletion of ${name}` : `Delete deployment ${name}`}
+        className="inline-flex h-7 w-[68px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 font-mono text-[11px] font-medium text-red-300 transition-all hover:border-red-500/50 hover:bg-red-500/20 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+        onClick={(): void => {
           setPollTimedOut(false);
           pollStartedAtRef.current = null;
           setIsOpen(true);
         }}
       >
-        {triggerLabel}
-      </Button>
+        <span>{triggerLabel}</span>
+      </button>
 
       <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={handleOpenChange}>
         <AlertDialog.Container>
