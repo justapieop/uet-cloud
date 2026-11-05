@@ -737,6 +737,20 @@ export class DeploymentDeletion1793232000000 implements MigrationInterface {
   }
 }
 
+export class DeploymentDeletionClaims1793836800000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("deployments", new TableColumn({
+      name: "deletion_claim_token",
+      type: "uniqueidentifier",
+      isNullable: true,
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.dropColumn("deployments", "deletion_claim_token");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -758,5 +772,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   RootLoginLimits1793059200000,
   Volumes1793100000000,
   DeploymentDeletion1793232000000,
+  DeploymentDeletionClaims1793836800000,
 ];
 

@@ -1,8 +1,8 @@
-import { DeploymentAlreadyExists, type DeploymentDeletionQueueRepository, type DeploymentListFilters } from "@kumo/application";
+import { DeploymentAlreadyExists, DeploymentDeletionClaimLostError, DeploymentProgressConflictError, type DeploymentDeletionQueueRepository, type DeploymentListFilters, type DeploymentProgressOptions } from "@kumo/application";
 import { Deployment, type DeploymentSpec, type DeploymentStatus, type DeploymentVolume } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Column, Entity, Index, PrimaryColumn, Repository, type SelectQueryBuilder } from "typeorm";
+import { Column, Entity, Index, PrimaryColumn, Repository, type FindOptionsWhere, type SelectQueryBuilder } from "typeorm";
 
 @Entity({ name: "deployments" })
 @Index("UQ_deployments_name", ["name"], { unique: true })
@@ -18,6 +18,7 @@ export class InfraDeployment {
   @Column({ type: "nvarchar", length: 2048, name: "azure_resource_id", nullable: true }) public readonly resourceId!: string | null;
   @Column({ type: "nvarchar", length: 2048, name: "azure_environment_id", nullable: true }) public readonly containerAppEnvironmentId!: string | null;
   @Column({ type: "datetime2", precision: 7, name: "container_app_deleted_at", nullable: true }) public readonly containerAppDeletedAt!: Date | null;
+  @Column({ type: "uniqueidentifier", name: "deletion_claim_token", nullable: true }) public readonly deletionClaimToken!: string | null;
   @Column({ type: "nvarchar", length: 2048, nullable: true }) public readonly fqdn!: string | null;
   @Column({ type: "nvarchar", length: 1000, name: "error_message", nullable: true }) public readonly error!: string | null;
   @Column({ type: "datetime2", precision: 7, name: "created_at" }) public readonly createdAt!: Date;
@@ -77,14 +78,19 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
     catch (error: unknown) { throw this.translateError(error); }
   }
 
-  public async updateProgress(deployment: Deployment): Promise<void> {
+  public async updateProgress(deployment: Deployment, options: DeploymentProgressOptions = {}): Promise<void> {
     try {
-      await this.repository.update({ id: deployment.id, userId: deployment.userId }, {
+      const criteria: FindOptionsWhere<InfraDeployment> = options.deletionClaimToken
+        ? { id: deployment.id, userId: deployment.userId, status: "DELETING", deletionClaimToken: options.deletionClaimToken }
+        : { id: deployment.id, userId: deployment.userId, ...(options.expectedStatus ? { status: options.expectedStatus } : {}) };
+      const result: Awaited<ReturnType<Repository<InfraDeployment>["update"]>> = await this.repository.update(criteria, {
         status: deployment.status, image: deployment.image, buildId: deployment.buildId,
         resourceId: deployment.resourceId, containerAppEnvironmentId: deployment.containerAppEnvironmentId,
         containerAppDeletedAt: deployment.containerAppDeletedAt,
         fqdn: deployment.fqdn, error: deployment.error, updatedAt: deployment.updatedAt,
       });
+      if (options.deletionClaimToken && result.affected !== 1) throw new DeploymentDeletionClaimLostError();
+      if (options.expectedStatus && result.affected !== 1) throw new DeploymentProgressConflictError();
     } catch (error: unknown) { throw this.translateError(error); }
   }
 
@@ -97,6 +103,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
   ): Promise<boolean> {
     const changes: Partial<InfraDeployment> = { status: to, updatedAt: new Date() };
     if (options.clearError) Object.assign(changes, { error: null });
+    if (to === "DELETE_PENDING") Object.assign(changes, { deletionClaimToken: null });
     const result: Awaited<ReturnType<Repository<InfraDeployment>["update"]>> = await this.repository.update({ id, userId, status: from }, changes);
     return result.affected === 1;
   }
@@ -117,6 +124,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
         inserted.azure_resource_id AS resourceId, inserted.fqdn, inserted.error_message AS error,
         inserted.azure_environment_id AS containerAppEnvironmentId,
         inserted.container_app_deleted_at AS containerAppDeletedAt,
+        inserted.deletion_claim_token AS deletionClaimToken,
         inserted.created_at AS createdAt, inserted.updated_at AS updatedAt;
     `);
     return records[0] ? this.toDomain(records[0]) : null;
@@ -128,12 +136,13 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
         SELECT TOP (1) * FROM deployments WITH (UPDLOCK, READPAST, READCOMMITTEDLOCK)
         WHERE status = 'DELETE_PENDING' ORDER BY updated_at, id
       )
-      UPDATE candidate SET status = 'DELETING', updated_at = SYSUTCDATETIME(), error_message = NULL
+      UPDATE candidate SET status = 'DELETING', deletion_claim_token = NEWID(), updated_at = SYSUTCDATETIME(), error_message = NULL
       OUTPUT inserted.id, inserted.user_id AS userId, inserted.name, inserted.status,
         inserted.creation_request AS requestJson, inserted.image, inserted.build_id AS buildId,
         inserted.azure_resource_id AS resourceId, inserted.fqdn, inserted.error_message AS error,
         inserted.azure_environment_id AS containerAppEnvironmentId,
         inserted.container_app_deleted_at AS containerAppDeletedAt,
+        inserted.deletion_claim_token AS deletionClaimToken,
         inserted.created_at AS createdAt, inserted.updated_at AS updatedAt;
     `);
     return records[0] ? this.toDomain(records[0]) : null;
@@ -147,7 +156,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
 
   public async recoverStaleDeletions(before: Date): Promise<void> {
     await this.repository.createQueryBuilder().update(InfraDeployment)
-      .set({ status: "DELETE_PENDING", error: "Deployment deletion was interrupted or timed out", updatedAt: new Date() })
+      .set({ status: "DELETE_PENDING", deletionClaimToken: null, error: "Deployment deletion was interrupted or timed out", updatedAt: new Date() })
       .where("status = :status AND updated_at < :before", { status: "DELETING", before }).execute();
   }
 
@@ -176,6 +185,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
       fqdn: record.fqdn, error: record.error, createdAt: record.createdAt, updatedAt: record.updatedAt,
       containerAppEnvironmentId: record.containerAppEnvironmentId,
       containerAppDeletedAt: record.containerAppDeletedAt,
+      deletionClaimToken: record.deletionClaimToken,
     });
   }
 
@@ -186,6 +196,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
       image: deployment.image, buildId: deployment.buildId, resourceId: deployment.resourceId,
       containerAppEnvironmentId: deployment.containerAppEnvironmentId,
       containerAppDeletedAt: deployment.containerAppDeletedAt,
+      deletionClaimToken: deployment.deletionClaimToken,
       fqdn: deployment.fqdn, error: deployment.error, createdAt: deployment.createdAt, updatedAt: deployment.updatedAt,
     };
   }

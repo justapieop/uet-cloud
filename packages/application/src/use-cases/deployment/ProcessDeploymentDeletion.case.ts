@@ -1,6 +1,6 @@
 import { Deployment, type DeploymentVolume } from "@kumo/domain";
-import type { DeploymentResourceDeleter } from "../../ports/deployment-deletion.js";
-import type { DeploymentRepository } from "../../ports/deployment.js";
+import { DeploymentDeletionClaimLostError, type DeploymentResourceDeleter } from "../../ports/deployment-deletion.js";
+import type { DeploymentProgressOptions, DeploymentRepository } from "../../ports/deployment.js";
 
 export class ProcessDeploymentDeletionCase {
   public constructor(
@@ -10,7 +10,9 @@ export class ProcessDeploymentDeletionCase {
 
   public async exec(claimed: Deployment): Promise<void> {
     if (claimed.status !== "DELETING") throw new Error("Deployment must be claimed before deletion processing");
+    if (!claimed.deletionClaimToken) throw new Error("Deployment deletion claim must have a token");
 
+    const progressOptions: DeploymentProgressOptions = { deletionClaimToken: claimed.deletionClaimToken };
     let current: Deployment = claimed;
     try {
       if (!current.containerAppDeletedAt) {
@@ -27,7 +29,7 @@ export class ProcessDeploymentDeletionCase {
               containerAppEnvironmentId: environmentId,
               updatedAt: new Date(),
             });
-            await this.repository.updateProgress(current);
+            await this.repository.updateProgress(current, progressOptions);
           }
         }
 
@@ -43,7 +45,7 @@ export class ProcessDeploymentDeletionCase {
           containerAppDeletedAt: new Date(),
           updatedAt: new Date(),
         });
-        await this.repository.updateProgress(current);
+        await this.repository.updateProgress(current, progressOptions);
       }
 
       const volumes: readonly DeploymentVolume[] = current.spec?.volumes ?? [];
@@ -62,17 +64,22 @@ export class ProcessDeploymentDeletionCase {
         status: "DELETED",
         error: null,
         updatedAt: new Date(),
-      }));
-    } catch {
-      const error: string = current.containerAppDeletedAt
+      }), progressOptions);
+    } catch (error: unknown) {
+      if (error instanceof DeploymentDeletionClaimLostError) return;
+      const message: string = current.containerAppDeletedAt
         ? "Deployment storage-link cleanup failed"
         : "Deployment deletion failed";
-      await this.repository.updateProgress(new Deployment({
-        ...current.getDetails(),
-        status: "DELETE_FAILED",
-        error,
-        updatedAt: new Date(),
-      }));
+      try {
+        await this.repository.updateProgress(new Deployment({
+          ...current.getDetails(),
+          status: "DELETE_FAILED",
+          error: message,
+          updatedAt: new Date(),
+        }), progressOptions);
+      } catch (saveError: unknown) {
+        if (!(saveError instanceof DeploymentDeletionClaimLostError)) throw saveError;
+      }
     }
   }
 }

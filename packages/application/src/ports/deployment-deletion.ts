@@ -26,3 +26,10 @@ export interface DeploymentResourceDeleter {
 }
 
 export const DEPLOYMENT_RESOURCE_DELETER: symbol = Symbol("DEPLOYMENT_RESOURCE_DELETER");
+
+export class DeploymentDeletionClaimLostError extends Error {
+  public constructor() {
+    super("The deployment deletion claim is no longer active");
+    this.name = "DeploymentDeletionClaimLostError";
+  }
+}

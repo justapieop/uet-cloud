@@ -128,6 +128,7 @@ export class Deployment extends Domain<DeploymentDetails> {
   public readonly error: string | null;
   public readonly containerAppEnvironmentId: string | null;
   public readonly containerAppDeletedAt: Date | null;
+  public readonly deletionClaimToken: string | null;
 
   public constructor(details: DeploymentDetails) {
     super(details);
@@ -150,6 +151,7 @@ export class Deployment extends Domain<DeploymentDetails> {
     this.error = details.error ?? null;
     this.containerAppEnvironmentId = details.containerAppEnvironmentId ?? null;
     this.containerAppDeletedAt = details.containerAppDeletedAt ?? null;
+    this.deletionClaimToken = details.deletionClaimToken ?? null;
   }
 
   public validate(): InvalidDomainParams | null {
@@ -171,6 +173,10 @@ export class Deployment extends Domain<DeploymentDetails> {
     if (this.details.containerAppDeletedAt !== undefined && this.details.containerAppDeletedAt !== null &&
       (!(this.details.containerAppDeletedAt instanceof Date) || Number.isNaN(this.details.containerAppDeletedAt.getTime()))) {
       return new InvalidDomainParams("Deployment.containerAppDeletedAt must be a valid date");
+    }
+    if (this.details.deletionClaimToken !== undefined && this.details.deletionClaimToken !== null &&
+      (typeof this.details.deletionClaimToken !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.details.deletionClaimToken))) {
+      return new InvalidDomainParams("Deployment.deletionClaimToken must be a UUID");
     }
     const spec: DeploymentSpec | null | undefined = this.details.spec;
     if (spec) {
@@ -217,6 +223,7 @@ export class Deployment extends Domain<DeploymentDetails> {
       status: this.status, spec: this.spec, image: this.image, buildId: this.buildId,
       resourceId: this.resourceId, fqdn: this.fqdn, error: this.error,
       containerAppEnvironmentId: this.containerAppEnvironmentId, containerAppDeletedAt: this.containerAppDeletedAt,
+      deletionClaimToken: this.deletionClaimToken,
     };
   }
 }
@@ -236,4 +243,5 @@ export interface DeploymentDetails {
   error?: string | null;
   containerAppEnvironmentId?: string | null;
   containerAppDeletedAt?: Date | null;
+  deletionClaimToken?: string | null;
 }

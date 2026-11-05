@@ -6,6 +6,11 @@ export interface DeploymentListFilters {
   readonly region?: string;
 }
 
+export interface DeploymentProgressOptions {
+  readonly expectedStatus?: DeploymentStatus;
+  readonly deletionClaimToken?: string;
+}
+
 export interface DeploymentRepository {
   findById(id: string): Promise<Deployment | null>;
   findByIdAndUserId(id: string, userId: string): Promise<Deployment | null>;
@@ -14,7 +19,8 @@ export interface DeploymentRepository {
   insert(deployment: Deployment): Promise<void>;
   countReservedByUserId(userId: string): Promise<number>;
   update(deployment: Deployment): Promise<void>;
-  updateProgress(deployment: Deployment): Promise<void>;
+  // A guarded write must fail when its expected status or deletion claim no longer matches.
+  updateProgress(deployment: Deployment, options?: DeploymentProgressOptions): Promise<void>;
   transitionStatus(id: string, userId: string, from: DeploymentStatus, to: DeploymentStatus, options?: { readonly clearError?: boolean }): Promise<boolean>;
   delete(deploymentId: string, userId: string): Promise<void>;
 }
@@ -27,6 +33,7 @@ export interface DeploymentQueueRepository extends DeploymentRepository {
 }
 
 export interface DeploymentDeletionQueueRepository extends DeploymentQueueRepository {
+  // A successful claim includes a fresh deletionClaimToken for all progress writes.
   claimNextDeletion(): Promise<Deployment | null>;
   recoverStaleDeletions(before: Date): Promise<void>;
 }
@@ -90,3 +97,9 @@ export const VOLUME_MANAGER: symbol = Symbol("VOLUME_MANAGER");
 
 export class DeploymentAlreadyExists extends Error {}
 export class DeploymentNotFoundError extends Error {}
+export class DeploymentProgressConflictError extends Error {
+  public constructor() {
+    super("Deployment changed before its progress could be saved");
+    this.name = "DeploymentProgressConflictError";
+  }
+}
