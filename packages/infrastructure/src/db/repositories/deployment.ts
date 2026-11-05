@@ -65,7 +65,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
 
   public countReservedByUserId(userId: string): Promise<number> {
     return this.repository.createQueryBuilder("deployment").where("deployment.userId = :userId", { userId })
-      .andWhere("(deployment.status IN (:...statuses) OR (deployment.status = :failed AND deployment.azure_resource_id IS NOT NULL) OR (deployment.status IN (:...deletionStatuses) AND deployment.container_app_deleted_at IS NULL)", {
+      .andWhere("(deployment.status IN (:...statuses) OR (deployment.status = :failed AND deployment.azure_resource_id IS NOT NULL) OR (deployment.status IN (:...deletionStatuses) AND deployment.container_app_deleted_at IS NULL))", {
         statuses: ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING"],
         failed: "FAILED",
         deletionStatuses: ["DELETE_PENDING", "DELETING", "DELETE_FAILED"],
