@@ -8,11 +8,15 @@ Build and deployment workers still check their local timers every second. Empty 
 
 Each claim is one ordered `UPDATE … OUTPUT` statement. `UPDLOCK`, `READPAST`, and `READCOMMITTEDLOCK` protect competing workers and support databases with `READ_COMMITTED_SNAPSHOT` enabled. See [SQL Server table hints](https://learn.microsoft.com/en-us/sql/t-sql/queries/hints-transact-sql-table). The deployment queue gains a filtered `(status, created_at, id)` index for records with creation requests, so claim ordering can use an index without scanning/sorting unrelated legacy rows. The existing status/updated-at index remains for stale sweeps. The migration only adds an index and preserves historical migrations and data.
 
+Deletion claims use the same atomic statement pattern, ordered by `updated_at, id`, and generate a new UUID claim token. Recovery clears the previous token when it requeues stale `DELETING` rows. Subsequent deletion progress updates match both `DELETING` and the original token; losing that claim stops persistence by the old worker. The deployment worker alternates preference between provisioning and deletion work. Each API instance still processes only one deployment job at a time, so a long cloud operation can delay the other queue on that instance.
+
 ## Writes and admission
 
 New deployment/build records use explicit inserts. Workflow updates target mutable progress columns; deployment progress does not rewrite the creation-request JSON, name, or creation timestamp. Rename updates only name and update time. Build status refreshes update only run/status fields when they actually change. A conditional status/run-ID match prevents an older refresh from overwriting a concurrent terminal state; responses return the persisted winner. Terminal builds skip polling. Concurrent refreshes of the same build and owner share one in-flight read/refresh within an API process; completed work is not retained as a user or status cache.
 
-Acceptance obtains the existing reservation count using SQL `COUNT(*)` inside the same locked UoW. It no longer loads every deployment/spec to count them in JavaScript. The existing reservation predicate, Stripe verification, uniqueness constraints, and receipt/deployment atomicity remain unchanged.
+Acceptance obtains the existing reservation count using SQL `COUNT(*)` inside the same locked UoW. It no longer loads every deployment/spec to count them in JavaScript. Reservations include `PENDING`, `PROVISIONING`, `RUNNING`, `STARTING`, `STOPPING`, `FAILED` rows retaining an Azure resource ID, and deletion states whose `container_app_deleted_at` is null. An app confirmed absent releases its slot even when storage-link cleanup remains failed and its historical resource ID is retained. Stripe verification, uniqueness constraints, and receipt/deployment atomicity remain unchanged.
+
+Provisioning progress updates require the persisted row to remain `PROVISIONING`. A worker whose row has moved into deletion or another status stops saving its result. This condition protects workflow data; it does not provide reconciliation of a cloud operation that continues after a timeout.
 
 ## Authentication and sessions
 

@@ -56,7 +56,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 - Deployment names are globally unique across all users, enforced in the database.
 - New deployment requests require an active subscription verified directly with Stripe using the user's linked Stripe Customer. Subscription product IDs map to active local plans through `plans.stripe_product_id`. Subscription registration is outside the current implementation scope.
-- Plan CPU and RAM quotas apply per deployment (per-replica allocation), with a separate per-deployment maximum replica limit (`plans.max_replicas`). The plan's deployment-count quota includes queued and provisioning deployments as well as running apps. Storage is capped when it is added to an instance later; deployment creation does not allocate storage.
+- Plan CPU and RAM quotas apply per deployment (per-replica allocation), with a separate per-deployment maximum replica limit (`plans.max_replicas`). The plan's deployment-count quota includes queued/provisioning apps, running apps, start/stop operations, failed apps retaining an Azure resource, and deletion work until app absence is confirmed. Remaining storage-link cleanup does not retain that slot after app deletion. Storage is capped when it is added to an instance later; deployment creation does not allocate storage.
 
 - Azure Container Apps is the deployment platform for applications deployed through the PaaS.
 - The configured shared managed environment must already exist and expose a Consumption workload profile; Express environments are rejected. Environment/network maintenance is an operator responsibility.
