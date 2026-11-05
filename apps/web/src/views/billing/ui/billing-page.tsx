@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { Plan } from "@/entities/plan";
 import { getUserPlan, type UserPlanResult } from "@/entities/plan/server";
+import { isDeploymentSlotReserved } from "@/entities/deployment";
 import { getDeployments, type DeploymentsResult } from "@/entities/deployment/server";
 import { CancellationControl } from "@/features/manage-own-subscription";
 import {
@@ -102,9 +103,11 @@ function PlanContent({ result }: PlanContentProps): JSX.Element {
 }
 
 function AccountUsageContent({ planResult, deploymentsResult }: AccountUsageContentProps): JSX.Element {
-  const deploymentCount: number = deploymentsResult.kind === "success" ? deploymentsResult.deployments.length : 0;
+  const reservedDeploymentCount: number = deploymentsResult.kind === "success"
+    ? deploymentsResult.deployments.filter(isDeploymentSlotReserved).length
+    : 0;
   const deploymentLimit: number | null = planResult.kind === "success"
-    ? planResult.data.plans.reduce((total: number, plan: Plan): number => total + plan.deployments, 0)
+    ? planResult.data.plans.reduce((limit: number, plan: Plan): number => Math.max(limit, plan.deployments), 0)
     : null;
 
   return (
@@ -113,9 +116,9 @@ function AccountUsageContent({ planResult, deploymentsResult }: AccountUsageCont
         <h2 id="account-usage-heading" className="text-sm font-medium">Account usage</h2>
       </div>
       <div className="p-5 sm:px-6">
-        <p className="text-sm text-muted-text">Deployments (used / total plan slots)</p>
+        <p className="text-sm text-muted-text">Deployments (reserved / highest single-plan slot limit)</p>
         <p className="mt-2 text-2xl font-semibold tabular-nums">
-          {deploymentCount} / {deploymentLimit === null ? "—" : deploymentLimit}
+          {reservedDeploymentCount} / {deploymentLimit === null ? "—" : deploymentLimit}
         </p>
       </div>
     </section>

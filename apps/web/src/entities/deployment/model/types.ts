@@ -4,3 +4,10 @@ export type Deployment = components["schemas"]["DeploymentResponseDto"];
 export type DeploymentFilters = NonNullable<operations["DeploymentsController_list"]["parameters"]["query"]>;
 
 export const DEPLOYMENT_STATUSES: readonly Deployment["status"][] = ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED", "DELETED"];
+
+const SLOT_RESERVING_STATUSES: readonly Deployment["status"][] = ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING"];
+
+export function isDeploymentSlotReserved(deployment: Deployment): boolean {
+  return SLOT_RESERVING_STATUSES.includes(deployment.status) ||
+    (deployment.status === "FAILED" && deployment.resource_id !== null);
+}

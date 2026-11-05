@@ -1,4 +1,4 @@
-export { DEPLOYMENT_STATUSES } from "./model/types";
+export { DEPLOYMENT_STATUSES, isDeploymentSlotReserved } from "./model/types";
 export type { Deployment, DeploymentFilters } from "./model/types";
 export { METRICS_RANGES, chartSeries, latestMetricSummary } from "./model/metrics";
 export type { ChartPoint, ChartSeries, DeploymentMetrics, MetricSummary, MetricsRange } from "./model/metrics";
