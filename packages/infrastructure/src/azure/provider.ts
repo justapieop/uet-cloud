@@ -14,6 +14,7 @@ import type { FeatureFlagConfiguration } from "../feature-flags/provider.js";
 import { legacyProvisioningEnabled } from "../feature-flags/legacy-provisioning.js";
 import { AzureLegacyEnvironmentProvisioner } from "./legacy-environment.js";
 import { managedEnvironmentReference, sharedEnvironmentReference, validateEnvironment, type ManagedEnvironmentReference } from "./shared-environment.js";
+import { legacyVolumeShareName, storageLinkName as createStorageLinkName, userStorageAccountName as createUserStorageAccountName, volumeShareName as createVolumeShareName } from "./volume-storage-names.js";
 
 export interface AzureRgInput {
   userId: string;
@@ -430,7 +431,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     if (input.deleteData && this.clients.fileShares) {
       const storageAccountName: string = this.userStorageAccountName(input.userId);
       const shareName: string = this.volumeShareName(input.volumeName);
-      const legacyShareName: string = `share-${input.appName.slice(0, 25)}-${input.volumeName.slice(0, 25)}`;
+      const legacyShareName: string = legacyVolumeShareName(input.appName, input.volumeName);
       try {
         await this.clients.fileShares.delete(rgName, storageAccountName, shareName, { abortSignal: signal });
       } catch (error: unknown) {
@@ -466,15 +467,14 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   }
 
   public userStorageAccountName(userId: string): string {
-    const sanitized: string = userId.toLowerCase().replace(/[^a-z0-9]/g, "");
-    return `stkumo${sanitized.slice(0, 18).padEnd(3, "0")}`;
+    return createUserStorageAccountName(userId);
   }
 
   public volumeShareName(volumeName: string): string;
   public volumeShareName(appName: string, volumeName: string): string;
   public volumeShareName(appNameOrVolumeName: string, volumeName?: string): string {
     const finalName: string = volumeName ?? appNameOrVolumeName;
-    return `share-vol-${finalName.slice(0, 50)}`;
+    return createVolumeShareName(finalName);
   }
 
   public standaloneVolumeShareName(volumeName: string): string {
@@ -482,7 +482,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
   }
 
   public storageLinkName(appName: string, volumeName: string): string {
-    return `stg-${appName.slice(0, 13)}-${volumeName.slice(0, 13)}`;
+    return createStorageLinkName(appName, volumeName);
   }
 
   public async createStorageVolume(input: {

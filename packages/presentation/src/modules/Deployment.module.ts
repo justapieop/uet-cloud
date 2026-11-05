@@ -18,6 +18,7 @@ import {
   GetBuildCase,
   GetDeploymentCase,
   ProcessDeploymentCase,
+  ProcessDeploymentDeletionCase,
   StartDeploymentCase,
   StopDeploymentCase,
   TriggerBuildCase,
@@ -26,7 +27,7 @@ import {
   type UnitOfWork,
   type DeploymentOperationLock,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentDeleter, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppCacheModule } from "./AppCache.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
@@ -100,6 +101,22 @@ import { RouteReadCache } from "../common/ReadCache.js";
       provide: ProcessDeploymentCase,
       useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): ProcessDeploymentCase => new ProcessDeploymentCase(repository, provider),
       inject: [InfraDeploymentRepository, AzureProvider],
+    },
+    {
+      provide: AzureDeploymentDeleter,
+      useFactory: (config: ConfigService, resources: ResourceManagementClient, apps: ContainerAppsAPIClient): AzureDeploymentDeleter =>
+        new AzureDeploymentDeleter(config, {
+          containerApps: apps.containerApps,
+          managedEnvironmentsStorages: apps.managedEnvironmentsStorages,
+          resources: resources.resources,
+        }),
+      inject: [ConfigService, ResourceManagementClient, ContainerAppsAPIClient],
+    },
+    {
+      provide: ProcessDeploymentDeletionCase,
+      useFactory: (repository: InfraDeploymentRepository, deleter: AzureDeploymentDeleter): ProcessDeploymentDeletionCase =>
+        new ProcessDeploymentDeletionCase(repository, deleter),
+      inject: [InfraDeploymentRepository, AzureDeploymentDeleter],
     },
     {
       provide: StorageManagementClient,

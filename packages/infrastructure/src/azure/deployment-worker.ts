@@ -1,4 +1,8 @@
-import { ProcessDeploymentCase, type DeploymentQueueRepository } from "@kumo/application";
+import {
+  ProcessDeploymentCase,
+  ProcessDeploymentDeletionCase,
+  type DeploymentDeletionQueueRepository,
+} from "@kumo/application";
 import type { Deployment } from "@kumo/domain";
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -13,10 +17,12 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
   private active: Promise<void> | undefined;
   private stopping: boolean = false;
   private readonly polling: QueuePollingPolicy = new QueuePollingPolicy();
+  private preferDeletion: boolean = true;
 
   public constructor(
-    @Inject(InfraDeploymentRepository) private readonly repository: DeploymentQueueRepository,
+    @Inject(InfraDeploymentRepository) private readonly repository: DeploymentDeletionQueueRepository,
     @Inject(ProcessDeploymentCase) private readonly processDeployment: Pick<ProcessDeploymentCase, "exec">,
+    @Inject(ProcessDeploymentDeletionCase) private readonly processDeploymentDeletion: Pick<ProcessDeploymentDeletionCase, "exec">,
     config: ConfigService,
   ) {
     this.staleAfterMs = Number(config.get<string>("AZURE_DEPLOYMENT_TIMEOUT_MS", "3600000")) + 60_000;
@@ -43,13 +49,40 @@ export class DeploymentWorker implements OnApplicationBootstrap, OnApplicationSh
 
   private async drain(): Promise<void> {
     if (this.polling.shouldSweep(Date.now())) {
-      await this.repository.failStaleProvisioning(new Date(Date.now() - this.staleAfterMs));
+      const staleBefore: Date = new Date(Date.now() - this.staleAfterMs);
+      await this.repository.failStaleProvisioning(staleBefore);
+      await this.repository.recoverStaleDeletions(staleBefore);
       this.polling.swept(Date.now());
     }
     if (this.stopping) return;
     if (!this.polling.shouldPoll(Date.now())) return;
-    const deployment: Deployment | null = await this.repository.claimNextPending();
-    if (deployment) await this.processDeployment.exec(deployment);
-    this.polling.polled(deployment !== null, Date.now());
+    let processed: boolean = false;
+    if (this.preferDeletion) {
+      const deletion: Deployment | null = await this.repository.claimNextDeletion();
+      if (deletion) {
+        await this.processDeploymentDeletion.exec(deletion);
+        processed = true;
+      } else {
+        const deployment: Deployment | null = await this.repository.claimNextPending();
+        if (deployment) {
+          await this.processDeployment.exec(deployment);
+          processed = true;
+        }
+      }
+    } else {
+      const deployment: Deployment | null = await this.repository.claimNextPending();
+      if (deployment) {
+        await this.processDeployment.exec(deployment);
+        processed = true;
+      } else {
+        const deletion: Deployment | null = await this.repository.claimNextDeletion();
+        if (deletion) {
+          await this.processDeploymentDeletion.exec(deletion);
+          processed = true;
+        }
+      }
+    }
+    this.preferDeletion = !this.preferDeletion;
+    this.polling.polled(processed, Date.now());
   }
 }
