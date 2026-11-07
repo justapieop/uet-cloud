@@ -1,7 +1,9 @@
 import { Logger, type OnModuleDestroy, type OnModuleInit, type FactoryProvider, type ExistingProvider } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import type { AzureAppConfiguration } from "@azure/app-configuration-provider";
 import { getAzureConfiguration, useAzureConfiguration } from "../config/provider.js";
 import { FEATURE_FLAG_REFRESH_INTERVAL_MS } from "./interval.js";
+import { DEPLOYMENT_RESOURCE_UPDATES_FLAG } from "./resource-updates.js";
 
 export interface FeatureFlagConfiguration {
   readonly feature_flags: ReadonlyArray<unknown>;
@@ -28,9 +30,11 @@ export class FeatureFlagsService implements FeatureFlagConfiguration, OnModuleIn
   private timer: NodeJS.Timeout | null = null;
   private refreshInProgress: Promise<void> | null = null;
 
-  public constructor(configuration: AzureAppConfiguration | null) {
+  public constructor(configuration: AzureAppConfiguration | null, localResourceUpdatesEnabled: boolean = false) {
     this.configuration = configuration;
-    this.currentFlags = configuration === null ? [] : readFeatureFlags(configuration);
+    this.currentFlags = configuration === null
+      ? localResourceUpdatesEnabled ? [{ id: DEPLOYMENT_RESOURCE_UPDATES_FLAG, enabled: true }] : []
+      : readFeatureFlags(configuration);
   }
 
   public get feature_flags(): ReadonlyArray<unknown> {
@@ -84,9 +88,15 @@ export class FeatureFlagsService implements FeatureFlagConfiguration, OnModuleIn
 
 export const featureFlagsProvider: FactoryProvider<FeatureFlagsService> = {
   provide: FeatureFlagsService,
-  useFactory: async (): Promise<FeatureFlagsService> => new FeatureFlagsService(
-    useAzureConfiguration ? await getAzureConfiguration() : null,
-  ),
+  useFactory: async (config: ConfigService): Promise<FeatureFlagsService> => {
+    if (useAzureConfiguration) return new FeatureFlagsService(await getAzureConfiguration());
+    const enabled: unknown = config.get<unknown>("DEPLOYMENT_RESOURCE_UPDATES_ENABLED");
+    if (enabled !== undefined && enabled !== "true" && enabled !== "false") {
+      throw new Error("DEPLOYMENT_RESOURCE_UPDATES_ENABLED must be true or false when CONFIG_SOURCE=local");
+    }
+    return new FeatureFlagsService(null, enabled === "true");
+  },
+  inject: [ConfigService],
 };
 
 export const featureFlagsTokenProvider: ExistingProvider<FeatureFlagsService> = {
