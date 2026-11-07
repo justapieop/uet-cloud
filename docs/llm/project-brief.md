@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Azure runtime IAM is declared in `infra/azure/iam.bicep` and applied with the Azure CLI through `Set-KumoIam.ps1`. It targets existing resources, replaces broad runtime grants with operation-specific and resource-scoped grants, and leaves GitHub Actions/Azure DevOps IAM separate. Dynamic user resource-group creation still requires subscription-scoped permissions; this does not enforce group-name ownership in Azure RBAC. See [runtime IAM](../azure-iam.md).
+
 - The old per-user resource creation workflow is retained in a separate legacy adapter and controlled by the disabled-by-default Azure App Configuration boolean feature flag `LegacyPerUserProvisioning`, with no environment override. Provisioning and region discovery evaluate the current flag snapshot on each new operation; the existing 12-hour refresh applies. It never serves as a shared-mode error fallback. Explicit opt-in restores legacy provisioning and region discovery; an omitted region for a new legacy group requires configurable AZURE_LEGACY_DEFAULT_REGION.
 
 - Ordinary users authenticate strictly through GitHub. The fixed `root` account has a separate optional password login configured only by backend `ROOT_PASSWORD`, with no username setting. It creates a normal session and receives the Super role on first successful login, without GitHub or Stripe calls. See [root login](../configuration.md#root-only-password-login).
@@ -77,7 +79,7 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 - The platform application will use TypeScript with NestJS; npm is the package manager.
 - The project is a monorepo that includes a frontend application serving as the client for the PaaS.
 - The frontend client follows Feature-Sliced Design (FSD) within `apps/web`.
-- npm workspaces place the thin NestJS server entry point in `apps/api` and the frontend client in `apps/web`. NestJS bootstrap and module composition live in `packages/presentation`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` and `infra/azure` are reserved for shared API contracts and Azure deployment configuration.
+- npm workspaces place the thin NestJS server entry point in `apps/api` and the frontend client in `apps/web`. NestJS bootstrap and module composition live in `packages/presentation`. Separate packages hold the domain, application/use-case, infrastructure, and presentation boundaries. `packages/contracts` is reserved for shared API contracts; `infra/azure` holds runtime IAM infrastructure and customer build pipeline configuration.
 - `NODE_ENV` and `CONFIG_SOURCE` independently select the API runtime environment and configuration source. Both can come from the process environment or repository-root `.env`, with the process value taking precedence. `NODE_ENV` defaults to production. `CONFIG_SOURCE` defaults to Azure when unset; `local` loads `.env`, while `azure` loads App Configuration settings and resolves Key Vault references using an Azure identity.
 - Feature flags load from Azure App Configuration at startup and refresh every 12 hours. The local configuration source provides an empty feature flag list.
 - User application isolation: Applications deployed through the platform run as Azure Container Apps inside dedicated user Resource Groups named `user-rg-<userId>`. Deployments into the system Resource Group are strictly forbidden.
