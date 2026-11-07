@@ -1,6 +1,6 @@
 import type { ProcessDeploymentResourceUpdateCase, DeploymentResourceUpdateQueueRepository } from "@kumo/application";
 import type { DeploymentResourceUpdate } from "@kumo/domain";
-import { Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
+import { Logger, type BeforeApplicationShutdown, type OnApplicationBootstrap } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { InfraDeploymentResourceUpdateRepository } from "../db/repositories/deployment-resource-update.js";
 import { QueuePollingPolicy } from "./queue-polling.js";
@@ -8,7 +8,7 @@ import { QueuePollingPolicy } from "./queue-polling.js";
 export type DeploymentResourceUpdateCacheInvalidator = (userId: string) => Promise<void> | void;
 
 /** Polls accepted commands regardless of the admission feature flag, including during draining. */
-export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, OnApplicationShutdown {
+export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, BeforeApplicationShutdown {
   private readonly logger: Logger = new Logger(DeploymentResourceUpdateWorker.name);
   private readonly polling: QueuePollingPolicy = new QueuePollingPolicy();
   private readonly reconciliationAlertMs: number;
@@ -17,6 +17,7 @@ export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, O
   private timer: ReturnType<typeof setInterval> | undefined;
   private active: Promise<void> | undefined;
   private stopping: boolean = false;
+  private readonly shutdown: AbortController = new AbortController();
 
   public constructor(
     private readonly repository: DeploymentResourceUpdateQueueRepository,
@@ -38,10 +39,12 @@ export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, O
     this.tick();
   }
 
-  public async onApplicationShutdown(): Promise<void> {
+  public async beforeApplicationShutdown(): Promise<void> {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
-    // Accepted writes finish or enter reconciliation before the application exits.
+    // Cancel polling and persist reconciliation before TypeORM's shutdown hook
+    // closes SQL. An old process must not keep renewing the claim during restart.
+    this.shutdown.abort(new Error("Resource-update worker is shutting down"));
     await this.active;
   }
 
@@ -58,7 +61,7 @@ export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, O
       if (this.repository instanceof InfraDeploymentResourceUpdateRepository) {
         const recovery: { readonly count: number; readonly userIds: readonly string[] } = await this.repository.recoverStaleClaimsWithOwners();
         recovered = recovery.count;
-        await Promise.allSettled(recovery.userIds.map(async (userId: string): Promise<void> => { await this.invalidateOwner(userId); }));
+        await Promise.allSettled(recovery.userIds.map(async (userId: string): Promise<void> => { await this.invalidateCache(userId); }));
       } else {
         recovered = await this.repository.recoverStaleClaims();
       }
@@ -83,10 +86,10 @@ export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, O
     heartbeatTimer.unref();
     try {
       if (update.status === "RECONCILING") {
-        await this.invalidateOwner(update.userId);
+        await this.invalidateCache(update.userId);
         this.warnIfOverdue(update);
       }
-      await this.processUpdate.exec(update, abort.signal);
+      await this.processUpdate.exec(update, AbortSignal.any([abort.signal, this.shutdown.signal]));
     } catch {
       // A process crash or unexpected adapter failure is never proof that ARM rejected a write.
       await this.repository.updateClaimed({
@@ -94,18 +97,23 @@ export class DeploymentResourceUpdateWorker implements OnApplicationBootstrap, O
         expectedStatus: update.status, status: "RECONCILING", releaseClaim: true, retryAfterMs: 30_000,
         errorCode: "RESOURCE_UPDATE_OUTCOME_UNKNOWN", errorMessage: "The operation requires Azure reconciliation",
       });
-      await this.invalidateOwner(update.userId);
+      await this.invalidateCache(update.userId);
     } finally {
       clearInterval(heartbeatTimer);
       await heartbeat;
       const current: DeploymentResourceUpdate | null = await this.repository.findByIdAndUserId(update.id, update.userId);
       if (current?.completedAt) {
         this.lastAlertAt.delete(update.id);
-        await this.invalidateOwner(update.userId);
+        await this.invalidateCache(update.userId);
       } else if (current?.status === "RECONCILING") {
         this.warnIfOverdue(current);
       }
     }
+  }
+
+  private async invalidateCache(userId: string): Promise<void> {
+    try { await this.invalidateOwner(userId); }
+    catch { this.logger.warn("Deployment cache invalidation failed; resource-update processing will continue"); }
   }
 
   private warnIfOverdue(update: DeploymentResourceUpdate): void {

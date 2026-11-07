@@ -13,9 +13,10 @@ export function readResourceUpdateSession(deploymentId: string): ResourceUpdateS
     if (!stored) return null;
     const value: unknown = JSON.parse(stored) as unknown;
     if (typeof value !== "object" || value === null || !("key" in value) || typeof value.key !== "string" ||
-      !/^[\x20-\x7e]{1,255}$/.test(value.key) || !("version" in value) || typeof value.version !== "string" || !value.version ||
+      !/^[\x20-\x7e]{1,255}$/.test(value.key) || !("version" in value) || typeof value.version !== "string" ||
+      !/^[\x21-\x7e]{1,255}$/.test(value.version) || value.version === "*" || value.version.startsWith("W/") || value.version.includes(",") ||
       !("configuration" in value) || typeof value.configuration !== "object" || value.configuration === null ||
-      !("operationId" in value) || (value.operationId !== null && (typeof value.operationId !== "string" || !/^[0-9a-f-]{36}$/i.test(value.operationId)))) return null;
+      !("operationId" in value) || (value.operationId !== null && (typeof value.operationId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.operationId)))) return null;
     const configuration: object = value.configuration;
     if (!("max_vcpu" in configuration) || typeof configuration.max_vcpu !== "number" ||
       !("max_memory" in configuration) || typeof configuration.max_memory !== "number" ||

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { apiClient } from "@/shared/api/server";
 import { validateComputeConfiguration } from "@/entities/deployment";
-import { resourceUpdateRequestError, type GetDeploymentResourceUpdateResult, type ResourceUpdate } from "../model/deployment-spec";
+import { computeConfigurationsEqual, resourceUpdateRequestError, type GetDeploymentResourceUpdateResult, type ResourceUpdate } from "../model/deployment-spec";
 
 export async function getDeploymentResourceUpdate(id: string, operationId: string): Promise<GetDeploymentResourceUpdateResult> {
   const uuid: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -22,9 +22,11 @@ export async function getDeploymentResourceUpdate(id: string, operationId: strin
     if (!result.response.ok) return resourceUpdateRequestError(result.response.status, result.error);
     const operation: ResourceUpdate | undefined = result.data;
     const statuses: readonly ResourceUpdate["status"][] = ["PENDING", "APPLYING", "RECONCILING", "SUCCEEDED", "FAILED"];
-    if (!operation || operation.operation_id !== operationId || operation.deployment_id !== id || !statuses.includes(operation.status) ||
+    if (!operation || typeof operation.operation_id !== "string" || operation.operation_id.toLowerCase() !== operationId.toLowerCase() ||
+        typeof operation.deployment_id !== "string" || operation.deployment_id.toLowerCase() !== id.toLowerCase() || !statuses.includes(operation.status) ||
         !operation.requested || Object.keys(validateComputeConfiguration(operation.requested)).length > 0 ||
-        (operation.observed !== null && (!operation.observed || Object.keys(validateComputeConfiguration(operation.observed)).length > 0))) {
+        (operation.observed !== null && (!operation.observed || Object.keys(validateComputeConfiguration(operation.observed)).length > 0)) ||
+        (operation.status === "SUCCEEDED" && (!operation.observed || !computeConfigurationsEqual(operation.observed, operation.requested)))) {
       return resourceUpdateRequestError(null, null);
     }
     if (operation.status === "SUCCEEDED" || operation.status === "FAILED") {

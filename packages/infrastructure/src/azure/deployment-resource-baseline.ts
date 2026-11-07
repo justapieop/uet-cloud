@@ -74,9 +74,12 @@ export function readyRevision(app: ContainerApp, revision: Revision, revisionNam
   // ARM returns ScaledToZero for healthy idle revisions even though older SDK known
   // values omit it. Idle is ready only when zero replicas are explicitly allowed.
   const idle: boolean = scaleToZero && (revision.runningState === "ScaledToZero" || revision.runningState === "Stopped");
+  // ARM also reports a healthy revision at its replica limit as RunningAtMaxScale,
+  // although the SDK's known-value enum omits that service value.
+  const running: boolean = revision.runningState === "Running" || revision.runningState === "RunningAtMaxScale";
   return app.provisioningState === "Succeeded" && app.latestRevisionName === revisionName && app.latestReadyRevisionName === revisionName &&
     revision.provisioningState === "Provisioned" && revision.active === true && revision.healthState !== "Unhealthy" &&
-    (revision.runningState === "Running" || idle);
+    (running || idle);
 }
 
 export function createResourceBaseline(app: ContainerApp, revision: Revision, identity: DeploymentResourceIdentity, environmentId: string): DeploymentResourceBaseline {

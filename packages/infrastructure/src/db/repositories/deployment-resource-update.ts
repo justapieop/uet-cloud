@@ -189,12 +189,14 @@ export class InfraDeploymentResourceUpdateRepository implements DeploymentResour
 
   private toDomain(row: InfraDeploymentResourceUpdate): DeploymentResourceUpdate {
     return new DeploymentResourceUpdate({
-      id: row.id, deploymentId: row.deploymentId, userId: row.userId, keyHash: row.keyHash, fingerprint: row.fingerprint,
+      // SQL Server returns uniqueidentifier values in uppercase; JSON receipts retain
+      // the lowercase UUID generated at acceptance. Canonicalize both read paths.
+      id: row.id.toLowerCase(), deploymentId: row.deploymentId, userId: row.userId, keyHash: row.keyHash, fingerprint: row.fingerprint,
       requested: JSON.parse(row.requestedJson) as DeploymentResourceUpdateDetails["requested"],
       baseline: JSON.parse(row.baselineJson) as DeploymentResourceUpdateDetails["baseline"],
       receipt: JSON.parse(row.receiptJson) as DeploymentResourceUpdateDetails["receipt"],
       lifecycle: row.lifecycle, billingCustomerId: row.billingCustomerId, status: row.status,
-      claimToken: row.claimToken, claimExpiresAt: row.claimExpiresAt, heartbeatAt: row.heartbeatAt,
+      claimToken: row.claimToken?.toLowerCase() ?? null, claimExpiresAt: row.claimExpiresAt, heartbeatAt: row.heartbeatAt,
       targetRevision: row.targetRevision,
       observed: row.observedJson === null ? null : JSON.parse(row.observedJson) as DeploymentResourceUpdateDetails["observed"],
       noOp: row.noOp, errorCode: row.errorCode, errorMessage: row.errorMessage,

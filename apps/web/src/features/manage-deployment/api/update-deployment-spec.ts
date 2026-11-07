@@ -43,7 +43,8 @@ export async function updateDeploymentSpec(
     });
     if (!result.response.ok) return resourceUpdateRequestError(result.response.status, result.error);
     const receipt: ResourceUpdateReceipt | undefined = result.data;
-    if (result.response.status !== 202 || !receipt || receipt.status !== "PENDING" || receipt.deployment_id !== id ||
+    if (result.response.status !== 202 || !receipt || receipt.status !== "PENDING" ||
+        typeof receipt.deployment_id !== "string" || receipt.deployment_id.toLowerCase() !== id.toLowerCase() ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(receipt.operation_id) ||
         !receipt.requested || !computeConfigurationsEqual(receipt.requested, configuration)) {
       return resourceUpdateRequestError(null, null);

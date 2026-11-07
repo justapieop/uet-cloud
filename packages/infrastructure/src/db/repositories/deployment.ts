@@ -214,7 +214,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
       containerAppEnvironmentId: record.containerAppEnvironmentId,
       containerAppDeletedAt: record.containerAppDeletedAt,
       deletionClaimToken: record.deletionClaimToken,
-      activeResourceUpdateId: record.activeResourceUpdateId,
+      activeResourceUpdateId: record.activeResourceUpdateId?.toLowerCase() ?? null,
     });
   }
 

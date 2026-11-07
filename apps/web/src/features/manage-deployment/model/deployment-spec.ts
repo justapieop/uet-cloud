@@ -102,12 +102,13 @@ export function getDeploymentComputeConfiguration(deployment: Deployment): Compu
     return null;
   }
 
-  return {
+  const configuration: ComputeConfiguration = {
     max_vcpu: maxVcpu,
     max_memory: maxMemory,
     min_scaling: minScaling,
     max_scaling: maxScaling,
   };
+  return Object.keys(validateComputeConfiguration(configuration)).length === 0 ? configuration : null;
 }
 
 export function getDeploymentEditUnavailableReason(deployment: Deployment): string | null {
