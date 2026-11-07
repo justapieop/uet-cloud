@@ -31,7 +31,7 @@ import {
   type UnitOfWork,
   type DeploymentOperationLock,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentDeleter, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, AzureDeploymentConfigurationUpdater, DeploymentResourceUpdateWorker, InfraDeploymentResourceUpdateRepository, deploymentResourceUpdatesEnabled, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentDeleter, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, AzureDeploymentConfigurationUpdater, DeploymentResourceUpdateWorker, InfraDeploymentResourceUpdateRepository, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppCacheModule } from "./AppCache.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
@@ -60,10 +60,10 @@ import { DeploymentResourcesController } from "../controllers/DeploymentResource
     DeploymentWorker,
     {
       provide: UpdateDeploymentResourcesCase,
-      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, flags: FeatureFlagsService, readCache: RouteReadCache): UpdateDeploymentResourcesCase =>
-        new UpdateDeploymentResourcesCase(uow, subscriptions, updater, lock, (): boolean => deploymentResourceUpdatesEnabled(flags),
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, readCache: RouteReadCache): UpdateDeploymentResourcesCase =>
+        new UpdateDeploymentResourcesCase(uow, subscriptions, updater, lock, undefined,
           (userId: string): Promise<void> => readCache.invalidateDeployments(userId)),
-      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, FeatureFlagsService, RouteReadCache],
+      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, RouteReadCache],
     },
     {
       provide: GetDeploymentResourceUpdateCase,

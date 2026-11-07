@@ -45,4 +45,3 @@ export class DeploymentResourceUpdateError extends Error {
 export class DeploymentResourceUpdateNotFound extends Error {}
 export class DeploymentResourceVersionRequired extends Error {}
 export class DeploymentResourceVersionMismatch extends Error {}
-export class DeploymentResourceUpdatesDisabled extends Error {}

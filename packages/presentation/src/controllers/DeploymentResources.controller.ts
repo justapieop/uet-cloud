@@ -1,7 +1,7 @@
 import {
   DeploymentConfigurationReadError, DeploymentNotFoundError, DeploymentOperationConflictError,
   DeploymentQuotaExceeded, DeploymentRequestKeyReused, DeploymentResourceUpdateError,
-  DeploymentResourceUpdateNotFound, DeploymentResourceUpdatesDisabled, DeploymentResourceVersionMismatch,
+  DeploymentResourceUpdateNotFound, DeploymentResourceVersionMismatch,
   DeploymentResourceVersionRequired, DeploymentSubscriptionRequired, GetDeploymentResourceUpdateCase,
   SubscriptionCheckUnavailable, UpdateDeploymentResourcesCase,
 } from "@kumo/application";
@@ -53,7 +53,7 @@ export class DeploymentResourcesController {
     },
   })
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: "Queue an owned deployment's compute and replica configuration update", description: "Requires a verified Single revision baseline and active plan. Admission is disabled by default. Stopped apps are rejected until Azure preservation is verified." })
+  @ApiOperation({ summary: "Queue an owned deployment's compute and replica configuration update", description: "Requires DeploymentUpdate, ownership, a verified Single revision baseline and active plan. Stopped apps are rejected until Azure preservation is verified." })
   @ApiHeader({ name: "Idempotency-Key", required: true, description: "1-255 printable ASCII characters; repeat with the same body and If-Match" })
   @ApiHeader({ name: "If-Match", required: true, description: "Opaque Kumo configuration_version from a fresh deployment read" })
   @ApiAcceptedResponse({ type: DeploymentResourceUpdateReceiptDto, headers: { Location: { description: "Owner-scoped operation status URL", schema: { type: "string" } } } })
@@ -64,7 +64,7 @@ export class DeploymentResourcesController {
   @ApiResponse({ status: 428, description: "If-Match is required" })
   @ApiUnprocessableEntityResponse({ description: "Idempotency-Key reused with a different configuration or version" })
   @ApiBadGatewayResponse({ description: "Applied Azure configuration is invalid or missing" })
-  @ApiServiceUnavailableResponse({ description: "Feature disabled, or Azure/Stripe unavailable" })
+  @ApiServiceUnavailableResponse({ description: "Azure/Stripe unavailable" })
   public async update(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -115,7 +115,6 @@ export class DeploymentResourcesController {
     if (error instanceof DeploymentSubscriptionRequired) throw new ForbiddenException(error.message);
     if (error instanceof SubscriptionCheckUnavailable) throw new ServiceUnavailableException(error.message);
     if (error instanceof DeploymentQuotaExceeded || error instanceof DeploymentOperationConflictError) throw new ConflictException(error.message);
-    if (error instanceof DeploymentResourceUpdatesDisabled) throw new ServiceUnavailableException({ code: "RESOURCE_UPDATES_DISABLED", message: "Deployment resource updates are not enabled" });
     if (error instanceof DeploymentConfigurationReadError) {
       if (error.reason === "unavailable") throw new ServiceUnavailableException(error.message);
       throw new BadGatewayException(error.message);

@@ -3,7 +3,7 @@ import { DeploymentResourceConfiguration, DeploymentResourceUpdate, InvalidDomai
 import type { DeploymentConfigurationUpdater } from "../../ports/deployment-configuration.js";
 import { DeploymentOperationConflictError, type DeploymentOperationLock } from "../../ports/deployment-operation-lock.js";
 import { DeploymentRequestKeyReused } from "../../ports/deployment-request.js";
-import { DeploymentResourceUpdateError, DeploymentResourceUpdatesDisabled, DeploymentResourceVersionMismatch, DeploymentResourceVersionRequired, type DeploymentResourceUpdateRepository } from "../../ports/deployment-resource-update.js";
+import { DeploymentResourceUpdateError, DeploymentResourceVersionMismatch, DeploymentResourceVersionRequired, type DeploymentResourceUpdateRepository } from "../../ports/deployment-resource-update.js";
 import { DeploymentNotFoundError } from "../../ports/deployment.js";
 import { DeploymentQuotaExceeded, DeploymentSubscriptionRequired, type StripeSubscriptionGateway } from "../../ports/stripe.js";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
@@ -33,7 +33,8 @@ export class UpdateDeploymentResourcesCase {
     private readonly subscriptions: StripeSubscriptionGateway,
     private readonly updater: DeploymentConfigurationUpdater,
     private readonly lock: DeploymentOperationLock,
-    private readonly isEnabled: () => boolean = (): boolean => false,
+    // Retain the former constructor argument for existing callers; rollout gates no longer authorize edits.
+    _legacyAdmissionGate?: () => boolean,
     private readonly onStateChanged?: (userId: string) => Promise<void>,
   ) {}
 
@@ -56,7 +57,6 @@ export class UpdateDeploymentResourcesCase {
       return { user, deployment, replay: existing?.receipt ?? null };
     });
     if (initial.replay) return initial.replay;
-    if (!this.isEnabled()) throw new DeploymentResourceUpdatesDisabled("Deployment resource updates are disabled");
     assertLifecycle(initial.deployment, this.updater);
     if (!initial.user.stripeCustomerId) throw new DeploymentSubscriptionRequired("An active subscription is required");
     const baseline: DeploymentResourceBaseline = await this.updater.readBaseline({ resourceId: initial.deployment.resourceId!, deploymentId: id, userId, appName: initial.deployment.name });
