@@ -39,6 +39,7 @@ resource runtimeRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
         'Microsoft.Resources/subscriptions/resourceGroups/write'
         'Microsoft.Authorization/policyAssignments/read'
         'Microsoft.App/containerApps/read'
+        'Microsoft.App/containerApps/revisions/read'
         'Microsoft.App/containerApps/write'
         'Microsoft.App/containerApps/delete'
         'Microsoft.App/containerApps/start/action'
