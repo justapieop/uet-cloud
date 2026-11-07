@@ -50,8 +50,8 @@ test("oversized CPU/RAM or replica requests are rejected without reserving quota
   assert.equal(fixture.deployments.length, 0);
 });
 
-test("pending, provisioning, running and failed apps with Azure resources reserve deployment slots", async (): Promise<void> => {
-  const statuses: readonly DeploymentStatus[] = ["PENDING", "PROVISIONING", "RUNNING", "FAILED", "DELETED"];
+test("pending, provisioning, lifecycle, scaling and failed apps with Azure resources reserve deployment slots", async (): Promise<void> => {
+  const statuses: readonly DeploymentStatus[] = ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING", "SCALING", "FAILED", "DELETED"];
   for (let index: number = 0; index < statuses.length; index += 1) {
     const fixture: AdmissionFixture = new AdmissionFixture();
     fixture.plans = [new Plan({ ...PLAN, deployments: 1 })];

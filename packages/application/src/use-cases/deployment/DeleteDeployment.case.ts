@@ -40,5 +40,6 @@ export class DeleteDeploymentCase {
       { clearError: true },
     );
     if (!transitioned) throw new InvalidDeploymentStatusError("Deployment changed before the deletion request was accepted");
+    await repo.scaleRules.delete(deployment.id);
   }
 }

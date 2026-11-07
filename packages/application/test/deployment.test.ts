@@ -80,7 +80,9 @@ test("update and delete use transaction-bound repositories and preserve ownershi
     writes.push(currentDeployment);
     return true;
   };
-  const uow: UnitOfWork = { run: async <T>(work: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => work({ ...emptyRepositories(), deployment: deployments }) };
+  const uow: UnitOfWork = { run: async <T>(work: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => work({ ...emptyRepositories(), deployment: deployments,
+    scaleRules: { ...emptyRepositories().scaleRules, delete: async (): Promise<void> => {} },
+  }) };
   await new UpdateDeploymentCase(uow).exec({ id: CLAIMED.id, userId: "123", name: "renamed-app" });
   assert.equal(writes[0]?.name, "renamed-app");
   assert.equal(writes[0]?.spec?.repo, SPEC.repo);

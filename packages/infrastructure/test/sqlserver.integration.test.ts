@@ -5,7 +5,9 @@ import { test, type TestContext } from "node:test";
 import { DataSource, type DataSourceOptions, type Repository } from "typeorm";
 import { idempotencyStoreContract, type IdempotencyStoreContractCase } from "@nestjs/idempotency/testing";
 import { AdminBillingConflict, AdminBillingNotFound, CreateDeploymentCase, CreateUserCase, RootLoginCase, RootLoginThrottled, DeploymentAlreadyExists, DeploymentQuotaExceeded, type UnitOfWork, type UnitOfWorkRepositories } from "@kumo/application";
-import { Build, Deployment, Plan, Role, User, type DeploymentSpec } from "@kumo/domain";
+import { Build, Deployment, Plan, Role, User, ScaleRule, type DeploymentSpec } from "@kumo/domain";
+import { DeleteDeploymentCase } from "@kumo/application";
+import { InfraScaleRule, InfraScaleRuleRepository, InfraDeploymentOperationLock, InfraVolume } from "../dist/db/index.js";
 import { ConfigService } from "@nestjs/config";
 import { RootPasswordAuthentication } from "../dist/auth/root-password.js";
 import { InfraSessionAuthorizationReader } from "../dist/auth/session-authorization.js";
@@ -27,7 +29,7 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
     options: { encrypt: false, trustServerCertificate: true }, pool: { max: 20 }, logging: false,
   };
   const admin: DataSource = new DataSource({ ...options, database: "master" });
-  const source: DataSource = new DataSource({ ...options, database, entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraBuild], migrations: DATABASE_MIGRATIONS, synchronize: false });
+  const source: DataSource = new DataSource({ ...options, database, entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraBuild, InfraVolume, InfraScaleRule], migrations: DATABASE_MIGRATIONS, synchronize: false });
   let created: boolean = false;
   context.after(async (): Promise<void> => {
     try {
@@ -81,6 +83,41 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
         repository.transitionStatus(deployment.id, "123", "RUNNING", "STOPPING"),
       ]);
       assert.equal(results.filter((won: boolean): boolean => won).length, 1);
+    } finally { await repository.delete(deployment.id, "123"); }
+  });
+
+  await context.test("scale rules claim due work once, serialize lifecycle transitions, enforce constraints and roll back with deployment state", async (): Promise<void> => {
+    const baseline: number = await repository.countReservedByUserId("123");
+    const deployment: Deployment = new Deployment({ id: randomUUID(), userId: "123", name: `scale-${randomUUID().slice(0, 8)}`, spec: SPEC, status: "RUNNING", resourceId: "/azure/app" });
+    const rules: InfraScaleRuleRepository = new InfraScaleRuleRepository(source.getRepository(InfraScaleRule));
+    const now: Date = new Date();
+    const rule: ScaleRule = new ScaleRule({ deploymentId: deployment.id, enabled: true, metric: "cpu", scaleOutThreshold: 80, scaleInThreshold: 20,
+      minReplicas: 1, maxReplicas: 2, evaluationWindowSeconds: 120, cooldownSeconds: 300, createdAt: now, updatedAt: now,
+      lastEvaluatedAt: null, lastScaledAt: null, lastAction: "NO_ACTION", lastReason: "new" });
+    await repository.insert(deployment);
+    try {
+      await rules.save(rule);
+      const claims: (string | null)[] = await Promise.all(Array.from({ length: 8 }, (): Promise<string | null> => rules.claimNextDue()));
+      assert.deepEqual(claims.filter((value: string | null): boolean => value !== null), [deployment.id]);
+      const transitions: boolean[] = await Promise.all([
+        repository.transitionStatus(deployment.id, "123", "RUNNING", "SCALING"),
+        repository.transitionStatus(deployment.id, "123", "RUNNING", "STOPPING"),
+      ]);
+      assert.equal(transitions.filter((value: boolean): boolean => value).length, 1);
+      assert.equal(await repository.countReservedByUserId("123"), baseline + 1);
+      await assert.rejects(uow.run(async (repo: UnitOfWorkRepositories): Promise<void> => {
+        await repo.scaleRules.save(new ScaleRule({ ...rule.getDetails(), lastReason: "rolled_back" }));
+        throw new Error("rollback scale transaction");
+      }), /rollback scale transaction/);
+      assert.equal((await rules.findByDeploymentId(deployment.id))?.getDetails().lastReason, "new");
+      await assert.rejects(source.query("UPDATE scale_rules SET scale_in_threshold = 90 WHERE deployment_id = @0", [deployment.id]));
+      await assert.rejects(rules.save(new ScaleRule({ ...rule.getDetails(), deploymentId: randomUUID() })));
+      await source.getRepository(InfraDeployment).update({ id: deployment.id }, { status: "RUNNING" });
+      await new DeleteDeploymentCase(uow, new InfraDeploymentOperationLock(source)).exec({ id: deployment.id, userId: "123" });
+      assert.equal(await rules.findByDeploymentId(deployment.id), null);
+      await rules.save(rule);
+      await repository.delete(deployment.id, "123");
+      assert.equal(await rules.findByDeploymentId(deployment.id), null, "Hard deletion cascades the policy");
     } finally { await repository.delete(deployment.id, "123"); }
   });
 
@@ -383,12 +420,14 @@ test("SQL Server migrations, constraints, acceptance transactions and worker cla
       assert.equal(await runner.hasTable("user_roles"), false);
       assert.equal(await runner.hasColumn("users", "active"), false);
       assert.equal(await runner.hasColumn("roles", "active"), false);
+      assert.equal(await runner.hasTable("scale_rules"), false);
       await source.runMigrations({ transaction: "all" });
       assert.equal(await runner.hasColumn("plans", "stripe_product_id"), true);
       assert.equal(await runner.hasColumn("plans", "max_replicas"), true);
       assert.equal(await runner.hasTable("user_roles"), true);
       assert.equal(await runner.hasColumn("users", "active"), true);
       assert.equal(await runner.hasColumn("roles", "active"), true);
+      assert.equal(await runner.hasTable("scale_rules"), true);
     } finally { await runner.release(); }
   });
 });
