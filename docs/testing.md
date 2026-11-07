@@ -1,5 +1,7 @@
 # Backend testing
 
+Scale-rule tests cover validation, HTTP authorization/CRUD/serialization, sustained CPU windows, incomplete/stale telemetry, min/max, cooldown, permissions/billing/quota, lifecycle races, provider failure/readiness, shared leases, and worker error isolation/overlap/shutdown. SQL integration adds atomic due claims, scaling-versus-stop transitions, rollback, constraints, deletion cleanup and migration reapplication. See [CPU scale rule verification and demo](scale-rules.vi.md).
+
 Use Node.js 24 and Python 3.13 (or set `PYTHON` to a compatible Python executable). Install the workspace dependencies with `npm ci`.
 
 Run `npm run test:api` for the normal backend check. It compiles the API, type-checks every backend test with `tsconfig.test.json`, runs only `*.test.ts` files in the four backend workspaces, and runs the Python build-source tests. Test helpers are not discovered as test suites. Azure and Stripe clients are substituted; no cloud credentials or live deployment are required. HTTP tests bind to an ephemeral localhost port, so the execution environment must allow loopback connections.

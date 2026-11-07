@@ -132,3 +132,5 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
     return value;
   }
 }
+
+export { memoryGiB as azureMemoryGiB } from "./deployment-resource-baseline.js";

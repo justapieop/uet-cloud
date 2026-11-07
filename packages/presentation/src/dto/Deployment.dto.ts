@@ -130,7 +130,7 @@ export class DeploymentResponseDto {
   @Expose({ name: "additional_ports" }) @ApiProperty({ name: "additional_ports", type: [AdditionalDeploymentPortResponseDto] }) public readonly additionalPorts: AdditionalDeploymentPortResponseDto[];
   @Expose({ name: "volumes" }) @ApiProperty({ name: "volumes", type: [DeploymentVolumeResponseDto] }) public readonly volumes: DeploymentVolumeResponseDto[];
   @Expose() @ApiProperty({ type: Boolean, nullable: true, description: "Whether ingress is external; applied Azure value for provisioned deployment reads" }) public readonly external: boolean | null;
-  @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "FAILED", "DELETE_PENDING", "DELETING", "DELETE_FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
+  @Expose() @ApiProperty({ enum: ["PENDING", "PROVISIONING", "RUNNING", "STOPPED", "STARTING", "STOPPING", "SCALING", "FAILED", "DELETE_PENDING", "DELETING", "DELETE_FAILED", "DELETED"] }) public readonly status: DeploymentStatus;
   @Expose() @ApiProperty({ type: String, nullable: true }) public readonly image: string | null;
   @Expose({ name: "build_id" }) @ApiProperty({ name: "build_id", type: String, nullable: true }) public readonly buildId: string | null;
   @Expose({ name: "resource_id" }) @ApiProperty({ name: "resource_id", type: String, nullable: true }) public readonly resourceId: string | null;

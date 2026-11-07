@@ -72,6 +72,7 @@ function fixture(): Fixture {
       update: unused, updateProgress: unused, transitionStatus: unused, delete: unused,
     },
     deploymentResourceUpdates: queue,
+    scaleRules: { findByDeploymentId: unused, save: unused, delete: unused },
     plans: { findActiveByStripeProductIds: async (products: readonly string[]): Promise<Plan[]> => state.plans.filter((plan: Plan): boolean => plan.active && plan.stripeProductId !== null && products.includes(plan.stripeProductId)) },
     roles: { findById: unused, findByIdForUpdate: unused, findByIds: unused, findAll: unused, findActiveByUserId: unused, save: unused, insert: unused, replace: unused, deactivate: unused },
     userRoles: { findByUserId: unused, replaceForUser: unused }, deploymentRequests: { findForUpdate: unused, save: unused },

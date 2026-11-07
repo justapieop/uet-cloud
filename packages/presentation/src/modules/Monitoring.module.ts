@@ -38,5 +38,6 @@ import { ConfigService } from "@nestjs/config";
       inject: [ConfigService, MonitorClient, ContainerAppsAPIClient],
     },
   ],
+  exports: [AzureMonitorMetricsReader],
 })
 export class MonitoringModule {}

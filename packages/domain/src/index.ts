@@ -8,3 +8,4 @@ export * from "./plan.js";
 export * from "./volume.js";
 export * from "./deployment-resource-configuration.js";
 export * from "./deployment-resource-update.js";
+export * from "./scale-rule.js";
