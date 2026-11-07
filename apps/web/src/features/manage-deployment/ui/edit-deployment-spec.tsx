@@ -8,6 +8,8 @@ import {
   getDeploymentComputeConfiguration,
   getDeploymentEditUnavailableReason,
   getDeploymentSpecFingerprint,
+  isResourceUpdateActive,
+  type ResourceUpdate,
 } from "../model/deployment-spec";
 import { DeploymentSpecForm } from "./deployment-spec-form";
 
@@ -18,6 +20,9 @@ interface EditDeploymentSpecProps {
 interface EditorSession {
   readonly configuration: ComputeConfiguration;
   readonly fingerprint: string;
+  readonly configurationVersion: string | null;
+  readonly appliedConfigurationAvailable: boolean;
+  readonly operation: ResourceUpdate | null;
 }
 
 export function EditDeploymentSpec({ deployment }: EditDeploymentSpecProps): JSX.Element {
@@ -26,11 +31,16 @@ export function EditDeploymentSpec({ deployment }: EditDeploymentSpecProps): JSX
   const router: ReturnType<typeof useRouter> = useRouter();
   const unavailableReason: string | null = getDeploymentEditUnavailableReason(deployment);
   const fingerprint: string = getDeploymentSpecFingerprint(deployment);
+  const activeOperation: boolean = isResourceUpdateActive(deployment.resource_update);
+  const canInspect: boolean = activeOperation && deployment.resource_update !== null;
 
   function openCurrentConfiguration(): void {
     const configuration: ComputeConfiguration | null = getDeploymentComputeConfiguration(deployment);
-    if (unavailableReason || !configuration) return;
-    setSession({ configuration, fingerprint });
+    if ((!canInspect && unavailableReason) || (!configuration && !canInspect)) return;
+    const values: ComputeConfiguration | undefined = configuration ?? deployment.resource_update?.requested;
+    if (!values) return;
+    setSession({ configuration: values, fingerprint, configurationVersion: deployment.configuration_version,
+      appliedConfigurationAvailable: configuration !== null, operation: deployment.resource_update });
   }
 
   function handleOpenChange(isOpen: boolean): void {
@@ -44,11 +54,11 @@ export function EditDeploymentSpec({ deployment }: EditDeploymentSpecProps): JSX
         <Button
           variant="secondary"
           size="sm"
-          isDisabled={unavailableReason !== null}
-          aria-label={`Edit resources and scaling for ${deployment.name}`}
+          isDisabled={unavailableReason !== null && !canInspect}
+          aria-label={`${activeOperation ? "View resource update" : "Edit resources and scaling"} for ${deployment.name}`}
           aria-describedby={unavailableReason ? reasonId : undefined}
         >
-          Edit
+          {activeOperation ? "View update" : "Edit"}
         </Button>
         <Modal.Backdrop>
           <Modal.Container size="lg" scroll="inside">
@@ -66,6 +76,9 @@ export function EditDeploymentSpec({ deployment }: EditDeploymentSpecProps): JSX
                   key={session.fingerprint}
                   deploymentId={deployment.id}
                   baseline={session.configuration}
+                  configurationVersion={session.configurationVersion}
+                  appliedConfigurationAvailable={session.appliedConfigurationAvailable}
+                  initialOperation={session.operation}
                   baselineChanged={session.fingerprint !== fingerprint}
                   reloadUnavailableReason={unavailableReason}
                   onReload={openCurrentConfiguration}
@@ -79,7 +92,7 @@ export function EditDeploymentSpec({ deployment }: EditDeploymentSpecProps): JSX
       {unavailableReason && (
         <div className="text-right text-[11px] leading-4 text-muted-text">
           <p id={reasonId}>{unavailableReason}</p>
-          {!getDeploymentComputeConfiguration(deployment) && deployment.resource_id && (
+          {(!getDeploymentComputeConfiguration(deployment) || !deployment.configuration_version) && deployment.resource_id && !activeOperation && deployment.status !== "STOPPED" && (
             <Button variant="ghost" size="sm" className="mt-1" onPress={(): void => router.refresh()}>
               Refresh configuration
             </Button>
