@@ -1,9 +1,11 @@
 import type { Deployment } from "@kumo/domain";
 import { DeploymentNotFoundError, type DeploymentListFilters, type DeploymentRepository } from "../../ports/deployment.js";
 import { DeploymentConfigurationReadError, type DeploymentConfigurationReader, type DeploymentReadResult } from "../../ports/deployment-configuration.js";
+import type { DeploymentResourceUpdateRepository } from "../../ports/deployment-resource-update.js";
 
 export class GetDeploymentCase {
-  public constructor(private readonly repository: DeploymentRepository, private readonly configuration: DeploymentConfigurationReader) {}
+  public constructor(private readonly repository: DeploymentRepository, private readonly configuration: DeploymentConfigurationReader,
+    private readonly resourceUpdates?: DeploymentResourceUpdateRepository) {}
 
   public async exec(id: string, userId: string): Promise<DeploymentReadResult> {
     const deployment: Deployment | null = await this.repository.findByIdAndUserId(id, userId);
@@ -24,15 +26,17 @@ export class GetDeploymentCase {
   }
 
   private async read(deployment: Deployment): Promise<DeploymentReadResult> {
+    const resourceUpdate: DeploymentReadResult["resourceUpdate"] = this.resourceUpdates
+      ? await this.resourceUpdates.findLatestByDeployment(deployment.id, deployment.userId) : null;
     if (deployment.status === "DELETE_PENDING" || deployment.status === "DELETING" ||
       deployment.status === "DELETE_FAILED" || deployment.status === "DELETED") {
-      return { deployment, configuration: null };
+      return { deployment, configuration: null, resourceUpdate };
     }
     if (!deployment.resourceId) {
       if (deployment.status === "RUNNING" || deployment.status === "STOPPED") throw new DeploymentConfigurationReadError("invalid");
-      return { deployment, configuration: null };
+      return { deployment, configuration: null, resourceUpdate };
     }
-    return { deployment, configuration: await this.configuration.read({
+    return { deployment, resourceUpdate, configuration: await this.configuration.read({
       resourceId: deployment.resourceId, deploymentId: deployment.id, userId: deployment.userId, appName: deployment.name,
     }) };
   }
