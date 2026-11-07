@@ -13,6 +13,10 @@ import {
   DeleteVolumeCase,
   CreateDeploymentCase,
   RedeployDeploymentCase,
+  UpdateDeploymentResourcesCase,
+  GetDeploymentResourceUpdateCase,
+  ProcessDeploymentResourceUpdateCase,
+  DEPLOYMENT_CONFIGURATION_UPDATER,
   DeleteDeploymentCase,
   DEPLOYMENT_OPERATION_LOCK,
   GetBuildCase,
@@ -27,7 +31,7 @@ import {
   type UnitOfWork,
   type DeploymentOperationLock,
 } from "@kumo/application";
-import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentDeleter, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
+import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureProvider, AzureDeploymentDeleter, AzureLegacyEnvironmentProvisioner, FeatureFlagsService, AzureContainerLifecycleManager, AzureDeploymentConfigurationReader, AzureDeploymentConfigurationUpdater, DeploymentResourceUpdateWorker, InfraDeploymentResourceUpdateRepository, deploymentResourceUpdatesEnabled, DeploymentWorker, InfraDeploymentRepository, StripeProvider, type AzureCredential, type AzureProviderClients } from "@kumo/infrastructure";
 import { ConfigService } from "@nestjs/config";
 import { AppCacheModule } from "./AppCache.module.js";
 import { AppConfigModule } from "./AppConfig.module.js";
@@ -41,6 +45,7 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
 import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
 import { VolumesController } from "../controllers/Volumes.controller.js";
 import { RouteReadCache } from "../common/ReadCache.js";
+import { DeploymentResourcesController } from "../controllers/DeploymentResources.controller.js";
 
 @Module({
   imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule, FeatureModule, AppCacheModule],
@@ -48,14 +53,38 @@ import { RouteReadCache } from "../common/ReadCache.js";
     BuildSourceController,
     DeploymentsController,
     RedeploymentsController,
+    DeploymentResourcesController,
     VolumesController,
   ],
   providers: [
     DeploymentWorker,
     {
+      provide: UpdateDeploymentResourcesCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, flags: FeatureFlagsService): UpdateDeploymentResourcesCase =>
+        new UpdateDeploymentResourcesCase(uow, subscriptions, updater, lock, (): boolean => deploymentResourceUpdatesEnabled(flags)),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, FeatureFlagsService],
+    },
+    {
+      provide: GetDeploymentResourceUpdateCase,
+      useFactory: (uow: UnitOfWork): GetDeploymentResourceUpdateCase => new GetDeploymentResourceUpdateCase(uow),
+      inject: [UNIT_OF_WORK],
+    },
+    {
+      provide: ProcessDeploymentResourceUpdateCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, queue: InfraDeploymentResourceUpdateRepository): ProcessDeploymentResourceUpdateCase =>
+        new ProcessDeploymentResourceUpdateCase(uow, subscriptions, updater, lock, queue),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, InfraDeploymentResourceUpdateRepository],
+    },
+    {
+      provide: DeploymentResourceUpdateWorker,
+      useFactory: (repository: InfraDeploymentResourceUpdateRepository, processUpdate: ProcessDeploymentResourceUpdateCase, config: ConfigService, readCache: RouteReadCache): DeploymentResourceUpdateWorker =>
+        new DeploymentResourceUpdateWorker(repository, processUpdate, config, (userId: string): Promise<void> => readCache.invalidateDeployments(userId)),
+      inject: [InfraDeploymentResourceUpdateRepository, ProcessDeploymentResourceUpdateCase, ConfigService, RouteReadCache],
+    },
+    {
       provide: RedeployDeploymentCase,
-      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider): RedeployDeploymentCase => new RedeployDeploymentCase(uow, subscriptions),
-      inject: [UNIT_OF_WORK, StripeProvider],
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, reader: AzureDeploymentConfigurationReader, lock: DeploymentOperationLock): RedeployDeploymentCase => new RedeployDeploymentCase(uow, subscriptions, reader, lock),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationReader, DEPLOYMENT_OPERATION_LOCK],
     },
     {
       provide: ResourceManagementClient,
@@ -71,14 +100,21 @@ import { RouteReadCache } from "../common/ReadCache.js";
     },
     {
       provide: GetDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository, reader: AzureDeploymentConfigurationReader): GetDeploymentCase => new GetDeploymentCase(repository, reader),
-      inject: [InfraDeploymentRepository, AzureDeploymentConfigurationReader],
+      useFactory: (repository: InfraDeploymentRepository, reader: AzureDeploymentConfigurationReader, updates: InfraDeploymentResourceUpdateRepository): GetDeploymentCase => new GetDeploymentCase(repository, reader, updates),
+      inject: [InfraDeploymentRepository, AzureDeploymentConfigurationReader, InfraDeploymentResourceUpdateRepository],
     },
     {
       provide: AzureDeploymentConfigurationReader,
-      useFactory: (config: ConfigService, apps: ContainerAppsAPIClient): AzureDeploymentConfigurationReader => new AzureDeploymentConfigurationReader(config, apps.containerApps),
+      useFactory: (config: ConfigService, apps: ContainerAppsAPIClient): AzureDeploymentConfigurationReader => new AzureDeploymentConfigurationReader(config, apps.containerApps, apps.containerAppsRevisions),
       inject: [ConfigService, ContainerAppsAPIClient],
     },
+    {
+      provide: AzureDeploymentConfigurationUpdater,
+      useFactory: (config: ConfigService, apps: ContainerAppsAPIClient, reader: AzureDeploymentConfigurationReader): AzureDeploymentConfigurationUpdater =>
+        new AzureDeploymentConfigurationUpdater(config, apps.containerApps, apps.containerAppsRevisions, reader),
+      inject: [ConfigService, ContainerAppsAPIClient, AzureDeploymentConfigurationReader],
+    },
+    { provide: DEPLOYMENT_CONFIGURATION_UPDATER, useExisting: AzureDeploymentConfigurationUpdater },
     {
       provide: AzureContainerLifecycleManager,
       useFactory: (config: ConfigService, apps: ContainerAppsAPIClient): AzureContainerLifecycleManager =>
@@ -99,8 +135,8 @@ import { RouteReadCache } from "../common/ReadCache.js";
     },
     {
       provide: ProcessDeploymentCase,
-      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider): ProcessDeploymentCase => new ProcessDeploymentCase(repository, provider),
-      inject: [InfraDeploymentRepository, AzureProvider],
+      useFactory: (repository: InfraDeploymentRepository, provider: AzureProvider, uow: UnitOfWork, subscriptions: StripeProvider): ProcessDeploymentCase => new ProcessDeploymentCase(repository, provider, uow, subscriptions),
+      inject: [InfraDeploymentRepository, AzureProvider, UNIT_OF_WORK, StripeProvider],
     },
     {
       provide: AzureDeploymentDeleter,
@@ -131,7 +167,7 @@ import { RouteReadCache } from "../common/ReadCache.js";
       provide: AzureProvider,
       useFactory: (
         config: ConfigService, triggerBuild: TriggerBuildCase, getBuild: GetBuildCase,
-        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, storage: StorageManagementClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService,
+        resources: ResourceManagementClient, apps: ContainerAppsAPIClient, storage: StorageManagementClient, credential: AzureCredential, resilience: ResilienceService, flags: FeatureFlagsService, reader: AzureDeploymentConfigurationReader,
       ): AzureProvider => {
         const clients: AzureProviderClients = {
           resources: resources.resources, resourceGroups: resources.resourceGroups,
@@ -146,9 +182,9 @@ import { RouteReadCache } from "../common/ReadCache.js";
           return new AzureLegacyEnvironmentProvisioner(config, { resourceGroups: resources.resourceGroups,
             managedEnvironments: apps.managedEnvironments, virtualNetworks: network.virtualNetworks }, flags);
         };
-        return new AzureProvider(config, triggerBuild, getBuild, clients, createLegacy, flags);
+        return new AzureProvider(config, triggerBuild, getBuild, clients, createLegacy, flags, reader);
       },
-      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, StorageManagementClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService],
+      inject: [ConfigService, TriggerBuildCase, GetBuildCase, ResourceManagementClient, ContainerAppsAPIClient, StorageManagementClient, AZURE_CREDENTIAL, ResilienceService, FeatureFlagsService, AzureDeploymentConfigurationReader],
     },
     {
       provide: CreateDeploymentCase,
