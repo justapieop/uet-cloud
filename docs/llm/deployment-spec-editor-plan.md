@@ -1,8 +1,16 @@
-# Deployment spec editor — frontend implementation plan
+# Deployment spec editor — implementation notes and original plan
 
-Date: 2026-11-07. Status: frontend preview implemented; the configuration mutation API remains a placeholder.
+Original plan: 2026-11-07. Integration update: 2026-11-08. Status: frontend connected to the resource-update backend; backend admission still requires its rollout flag.
 
 ## Implementation status
+
+The save placeholder has been replaced by authenticated Next.js server actions using the generated resource-update API. Submission includes `If-Match` and a retry-stable `Idempotency-Key`. The editor polls the accepted operation, displays queued/applying/reconciling/terminal outcomes, retains drafts on errors and refreshes applied values only after success. Active operations can be reopened for progress. Missing stable versions, stopped apps and backend-disabled admission have explicit explanations.
+
+No production flag was enabled or Azure workload changed as part of frontend integration. `CONFIG_SOURCE=local` currently supplies no enabled flags, so fresh admission still returns `RESOURCE_UPDATES_DISABLED`; see [API and rollout](../deployment-resource-updates.md).
+
+The remainder records the original preview implementation and design history. Its placeholder-only statements are superseded by the integration status above.
+
+## Original preview status
 
 The implementation follows this plan's compute/scaling scope and file map. The editor is available through **Edit** in the deployment detail's Compute & Scaling card. It loads existing plan context on opening, validates the draft, compares requested/applied values, and explicitly reports that resource changes cannot yet be applied. The displayed deployment remains backed by real GET responses. No backend update endpoint, generated contract, or Azure mutation was added.
 

@@ -1,6 +1,6 @@
 # Deployment resource updates
 
-The backend can queue compute/scaling changes without building another image or replacing a deployment. Admission is disabled by default. The frontend resource editor remains a preview until its save adapter uses this API.
+The backend can queue compute/scaling changes without building another image or replacing a deployment. Admission is disabled by default. The frontend resource editor submits authenticated requests through the generated client and polls the accepted operation before refreshing applied values.
 
 ## API
 
@@ -46,8 +46,10 @@ SQL locks serialize Kumo writers. They cannot cancel an ARM request already acce
 5. Monitor overdue reconciliation alerts (default one hour, configurable with `DEPLOYMENT_RESOURCE_UPDATE_RECONCILIATION_ALERT_MS`, minimum one minute). Inspect the stored operation ID/target revision alongside Azure operation history and the serving revision. Restore a stable baseline or resolve the command through an evidence-based recovery procedure. Do not manually clear a pointer while an earlier PATCH might still run.
 6. Drain or resolve all unfinished commands before removing guards, rolling back to older API replicas, or running the down migration. The down migration rejects unfinished commands. A failed rollout may leave an unsettled template; subsequent update/redeploy admission stays blocked until operators restore a stable ready baseline.
 
-The frontend handoff must send the version/key, poll the Location operation after 202, then refresh applied values. Do not optimistically present requested resources as applied.
+The frontend sends the baseline `configuration_version` and a retry-stable idempotency key from an authenticated Next.js server action. It polls the owner-scoped operation after 202, presents queued/applying/reconciling/failed results, and refreshes applied values after verified success. Drafts survive request failures, and ambiguous submissions retain their original key and settings for safe retry. Reopening the editor can resume an active operation. Requested resources are not optimistically presented as applied.
+
+The UI reports backend admission errors, including `RESOURCE_UPDATES_DISABLED`, rather than simulating a save. With the current `CONFIG_SOURCE=local` implementation, feature flags are empty and resource admission remains disabled; connecting the frontend does not enable the backend flag. Azure App Configuration enablement and rollout prerequisites remain separate operator actions. STOPPED deployments and reads without a verified version cannot submit changes.
 
 ## Validation status
 
-Implementation builds with `npm run build:api`. No tests were authored or modified as part of the implementation task. The independent test suite must bind its fixtures to the public ports and use the dedicated `TEST_SQLSERVER_*` database for SQL concurrency/rollback verification. No application database migration or live Azure/Stripe mutation was executed during implementation.
+The API and web production builds pass (`npm run build:api` and `npm run build --workspace @kumo/web -- --webpack`); both web and test TypeScript checks pass. The independently authored resource domain, admission, worker, Azure adapter and HTTP tests pass (20/20). The separate SQL Server integration test was not run because no `TEST_SQLSERVER_*` database is configured. No tests were authored or modified as part of the implementation task, and no application database migration or live Azure/Stripe mutation was executed.
