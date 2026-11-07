@@ -35,7 +35,7 @@ export interface ResourceUpdateController {
 function progressMessage(operation: ResourceUpdateProgress): string {
   switch (operation.status) {
     case "PENDING": return "Resource update queued. Current resources remain unchanged until verification completes.";
-    case "APPLYING": return "Applying resources. You can continue using this page.";
+    case "APPLYING": return "Applying resources.";
     case "RECONCILING": return "Azure is still confirming the outcome. The existing update is being checked.";
     case "SUCCEEDED": return operation.no_op ? "Current resources already match your request." : "Resource changes verified. Current values have been refreshed.";
     case "FAILED": return resourceUpdateFailureMessage(operation.error_code);
