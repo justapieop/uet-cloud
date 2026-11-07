@@ -32,12 +32,12 @@ export type GetDeploymentResourceUpdateResult =
   | { readonly kind: "ready"; readonly operation: ResourceUpdate }
   | DeploymentResourceRequestError;
 
-export function isResourceUpdateActive(operation: ResourceUpdate | null | undefined): boolean {
+export function isResourceUpdateActive(operation: Pick<ResourceUpdate, "status"> | null | undefined): boolean {
   return operation?.status === "PENDING" || operation?.status === "APPLYING" || operation?.status === "RECONCILING";
 }
 
 const SAFE_RESOURCE_ERROR_CODES: ReadonlySet<string> = new Set<string>([
-  "RESOURCE_UPDATES_DISABLED", "RESOURCE_STOPPED_UNSUPPORTED", "RESOURCE_REVISION_MODE_UNSUPPORTED",
+  "RESOURCE_STOPPED_UNSUPPORTED", "RESOURCE_REVISION_MODE_UNSUPPORTED",
   "RESOURCE_BASELINE_UNSETTLED", "RESOURCE_BASELINE_CHANGED", "RESOURCE_DEPLOYMENT_CHANGED",
   "CONFIGURATION_VERSION_MISMATCH", "CONFIGURATION_VERSION_REQUIRED", "RESOURCE_QUOTA_EXCEEDED",
   "DEPLOYMENT_QUOTA_EXCEEDED", "IDEMPOTENCY_KEY_REUSED", "IDEMPOTENCY_KEY_IN_USE",
@@ -52,7 +52,6 @@ export function getResourceUpdateErrorCode(error: unknown): string | null {
 }
 
 export function resourceUpdateErrorMessage(status: number | null, code: string | null): string {
-  if (code === "RESOURCE_UPDATES_DISABLED") return "Resource updates are disabled on the deployment service. Ask your platform administrator to enable them.";
   if (code === "RESOURCE_STOPPED_UNSUPPORTED") return "Resource changes for stopped deployments are not supported yet. Start this deployment before editing its resources.";
   if (code === "RESOURCE_REVISION_MODE_UNSUPPORTED") return "Resource updates require Single revision mode without pinned or split traffic.";
   if (code === "RESOURCE_BASELINE_UNSETTLED") return "The current Azure revision is not ready or stable. Wait for its rollout to finish, then refresh the configuration.";
@@ -85,8 +84,8 @@ export function resourceUpdateRequestError(status: number | null, error: unknown
   const unavailable: boolean = status === null || status >= 500;
   return {
     kind: "error", code, status, message: resourceUpdateErrorMessage(status, code),
-    outcomeUnknown: unavailable && code !== "RESOURCE_UPDATES_DISABLED",
-    retryable: code !== "RESOURCE_UPDATES_DISABLED" && code !== "RESOURCE_STOPPED_UNSUPPORTED" &&
+    outcomeUnknown: unavailable,
+    retryable: code !== "RESOURCE_STOPPED_UNSUPPORTED" &&
       code !== "RESOURCE_REVISION_MODE_UNSUPPORTED" && (unavailable || status === 409 || status === 429),
   };
 }
