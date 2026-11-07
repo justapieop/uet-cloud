@@ -122,7 +122,7 @@ resource configuration 'Microsoft.AppConfiguration/configurationStores@2024-05-0
   location: location
   tags: tags
   sku: { name: configurationSku }
-  properties: { disableLocalAuth: true, publicNetworkAccess: 'Enabled' }
+  properties: { disableLocalAuth: false, publicNetworkAccess: 'Enabled' }
 }
 
 var operatorGrants = [
@@ -227,8 +227,10 @@ resource mongo 'Microsoft.DocumentDB/mongoClusters@2025-09-01' = {
   location: location
   tags: tags
   properties: {
-    // Free-tier instant provisioning assigns its own administrator username.
-    administrator: union({ password: mongoAdminPassword }, mongoComputeTier == 'Free' ? {} : { userName: mongoAdminUsername })
+    administrator: {
+      userName: mongoAdminUsername
+      password: mongoAdminPassword
+    }
     authConfig: { allowedModes: ['NativeAuth'] }
     compute: { tier: mongoComputeTier }
     storage: { sizeGb: 32 }
