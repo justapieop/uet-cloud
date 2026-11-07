@@ -30,4 +30,4 @@ The preserved implementation creates `user-rg-<userId>`, `user-vnet-<userId>`, a
 
 The region catalog also switches explicitly to the preserved subscription-location/provider/policy/quota intersection in legacy mode. Shared mode keeps the existing-environment single-region catalog and ignores environment-count quotas.
 
-Provisioning and region discovery evaluate the current FeatureFlagsService snapshot at the start of each operation. The existing Azure feature-flag polling interval is 12 hours; changes apply after a successful refresh or API restart. Refresh failures retain the last known snapshot. Work already in progress is not migrated or cancelled. With CONFIG_SOURCE=local, the flag list is empty and legacy remains disabled.
+Provisioning and region discovery evaluate the current FeatureFlagsService snapshot at the start of each operation. The existing Azure feature-flag polling interval is 12 hours; changes apply after a successful refresh or API restart. Refresh failures retain the last known snapshot. Work already in progress is not migrated or cancelled. With CONFIG_SOURCE=local, legacy remains disabled independently of the local resource-update switch.

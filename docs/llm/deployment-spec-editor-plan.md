@@ -6,7 +6,7 @@ Original plan: 2026-11-07. Integration update: 2026-11-08. Status: frontend conn
 
 The save placeholder has been replaced by authenticated Next.js server actions using the generated resource-update API. Submission includes `If-Match` and a retry-stable `Idempotency-Key`. The editor polls the accepted operation, displays queued/applying/reconciling/terminal outcomes, retains drafts on errors and refreshes applied values only after success. Active operations can be reopened for progress. Missing stable versions, stopped apps and backend-disabled admission have explicit explanations.
 
-No production flag was enabled or Azure workload changed as part of frontend integration. `CONFIG_SOURCE=local` currently supplies no enabled flags, so fresh admission still returns `RESOURCE_UPDATES_DISABLED`; see [API and rollout](../deployment-resource-updates.md).
+Deployment owners use their normal `DeploymentUpdate` grant to edit their own resources. Local-source installations can enable admission with `DEPLOYMENT_RESOURCE_UPDATES_ENABLED=true`; Azure-source installations use the `DeploymentResourceUpdates` flag. Another user's deployment remains inaccessible, including to Super. See [API and rollout](../deployment-resource-updates.md).
 
 The remainder records the original preview implementation and design history. Its placeholder-only statements are superseded by the integration status above.
 

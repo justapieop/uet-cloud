@@ -42,6 +42,8 @@ The API enforces these policies before use cases, idempotency replay, and respon
 | Route | Required permissions |
 | --- | --- |
 | `POST /deployments` | `DeploymentCreate` |
+| `PATCH /deployments/:id` | `DeploymentUpdate` and current ownership |
+| `GET /deployments/:id/resource-updates/:operationId` | `DeploymentRead` and current ownership |
 | `POST /deployments/:id/start` | `DeploymentUpdate` |
 | `POST /deployments/:id/stop` | `DeploymentUpdate` |
 | `DELETE /deployments/:id` | `DeploymentDelete`, `DeploymentRead` |
@@ -57,6 +59,8 @@ The API enforces these policies before use cases, idempotency replay, and respon
 | `PUT /user/:userId/roles` | `RoleManage` |
 
 Permission checks do not replace resource ownership, Stripe subscription, or quota checks. Authentication and current-profile routes retain their session policies; pipeline manifest/source routes retain their per-build bearer-token authorization. Start/stop require DeploymentUpdate. `DELETE /deployments/:id` requires both DeploymentDelete and DeploymentRead, and the use case still scopes lookup to the authenticated user, including for Super. Internal workers do not require user sessions or permission decorators.
+
+The authenticated creator is the deployment owner and can edit its compute/scaling with the standard `DeploymentUpdate` grant. Resource-update ownership is checked before idempotency replay and again in the acceptance transaction. A different user receives 404, including a user with Super. A disabled resource-update feature returns 503 rather than indicating a missing role; see [resource-update enablement](configuration.md#local-source). Existing grant revocations and account suspension still take effect on the next request.
 
 `GET /roles` returns every role, including inactive roles, together with the static permission catalog. Role responses list exact stored permission keys, so a role with only the Super bit is returned as `["Super"]` rather than being expanded into every catalog entry. Permission metadata is informational; it does not grant prerequisites automatically.
 
