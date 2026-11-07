@@ -54,6 +54,7 @@ export class AdmissionFixture implements UnitOfWork, StripeSubscriptionGateway {
       roles: {} as UnitOfWorkRepositories["roles"],
       userRoles: {} as UnitOfWorkRepositories["userRoles"],
       volumes: {} as UnitOfWorkRepositories["volumes"],
+      scaleRules: {} as UnitOfWorkRepositories["scaleRules"],
       plans: { findActiveByStripeProductIds: async (ids: readonly string[]): Promise<Plan[]> =>
         this.plans.filter((plan: Plan): boolean => plan.active && plan.stripeProductId !== null && ids.includes(plan.stripeProductId)) },
       deploymentRequests: {
@@ -66,7 +67,7 @@ export class AdmissionFixture implements UnitOfWork, StripeSubscriptionGateway {
       deployment: {
         countReservedByUserId: async (): Promise<number> => {
           assert.equal(this.locked, true);
-          return this.deployments.filter((item: Deployment): boolean => item.status === "PENDING" || item.status === "PROVISIONING" || item.status === "RUNNING" || (item.status === "FAILED" && item.resourceId !== null)).length;
+          return this.deployments.filter((item: Deployment): boolean => ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING", "SCALING"].includes(item.status) || (item.status === "FAILED" && item.resourceId !== null)).length;
         },
         insert: async (deployment: Deployment): Promise<void> => { assert.equal(this.locked, true); this.deployments.push(deployment); },
         findById: async (): Promise<null> => null,

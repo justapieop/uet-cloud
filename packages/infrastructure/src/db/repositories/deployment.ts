@@ -67,7 +67,7 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
   public countReservedByUserId(userId: string): Promise<number> {
     return this.repository.createQueryBuilder("deployment").where("deployment.userId = :userId", { userId })
       .andWhere("(deployment.status IN (:...statuses) OR (deployment.status = :failed AND deployment.azure_resource_id IS NOT NULL) OR (deployment.status IN (:...deletionStatuses) AND deployment.container_app_deleted_at IS NULL))", {
-        statuses: ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING"],
+        statuses: ["PENDING", "PROVISIONING", "RUNNING", "STARTING", "STOPPING", "SCALING"],
         failed: "FAILED",
         deletionStatuses: ["DELETE_PENDING", "DELETING", "DELETE_FAILED"],
       }).getCount();
@@ -152,6 +152,12 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
     await this.repository.createQueryBuilder().update(InfraDeployment)
       .set({ status: "FAILED", error: "Deployment provisioning was interrupted or timed out", updatedAt: new Date() })
       .where("status = :status AND updated_at < :before AND creation_request IS NOT NULL", { status: "PROVISIONING", before }).execute();
+  }
+
+  public async failStaleScaling(before: Date): Promise<void> {
+    await this.repository.createQueryBuilder().update(InfraDeployment)
+      .set({ status: "FAILED", error: "Scaling was interrupted; inspect Azure before recovery", updatedAt: new Date() })
+      .where("status = :status AND updated_at < :before", { status: "SCALING", before }).execute();
   }
 
   public async recoverStaleDeletions(before: Date): Promise<void> {

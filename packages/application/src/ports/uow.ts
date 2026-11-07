@@ -5,6 +5,7 @@ import type { UserRoleRepository } from "./user-role.js";
 import type { UserRepository } from "./user.js";
 import type { PlanRepository } from "./plan.js";
 import type { VolumeRepository } from "./volume.js";
+import type { ScaleRuleRepository } from "./scale-rule.js";
 
 export interface UnitOfWorkRepositories {
   users: UserRepository;
@@ -14,6 +15,7 @@ export interface UnitOfWorkRepositories {
   deploymentRequests: DeploymentRequestRepository;
   plans: PlanRepository;
   volumes: VolumeRepository;
+  scaleRules: ScaleRuleRepository;
 }
 
 export interface UnitOfWork {

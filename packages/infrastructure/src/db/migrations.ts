@@ -751,6 +751,39 @@ export class DeploymentDeletionClaims1793836800000 implements MigrationInterface
   }
 }
 
+export class ScaleRules1794009600000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.createTable(new Table({ name: "scale_rules", columns: [
+      { name: "deployment_id", type: "nvarchar", length: "255", isPrimary: true },
+      { name: "enabled", type: "bit" },
+      { name: "metric", type: "nvarchar", length: "16" },
+      { name: "scale_out_threshold", type: "float" },
+      { name: "scale_in_threshold", type: "float" },
+      { name: "min_replicas", type: "int" },
+      { name: "max_replicas", type: "int" },
+      { name: "evaluation_window_seconds", type: "int" },
+      { name: "cooldown_seconds", type: "int" },
+      { name: "created_at", type: "datetime2", precision: 7 },
+      { name: "updated_at", type: "datetime2", precision: 7 },
+      { name: "last_evaluated_at", type: "datetime2", precision: 7, isNullable: true },
+      { name: "last_scaled_at", type: "datetime2", precision: 7, isNullable: true },
+      { name: "last_action", type: "nvarchar", length: "16" },
+      { name: "last_reason", type: "nvarchar", length: "255" },
+      { name: "next_evaluation_at", type: "datetime2", precision: 7, default: "SYSUTCDATETIME()" },
+    ], indices: [new TableIndex({ name: "IDX_scale_rules_due", columnNames: ["enabled", "next_evaluation_at", "deployment_id"] })],
+    foreignKeys: [new TableForeignKey({ name: "FK_scale_rules_deployment", columnNames: ["deployment_id"], referencedTableName: "deployments", referencedColumnNames: ["id"], onDelete: "CASCADE" })],
+    checks: [
+      new TableCheck({ name: "CK_scale_rules_metric", expression: "metric = 'cpu'" }),
+      new TableCheck({ name: "CK_scale_rules_thresholds", expression: "scale_in_threshold >= 0 AND scale_out_threshold <= 100 AND scale_in_threshold < scale_out_threshold" }),
+      new TableCheck({ name: "CK_scale_rules_replicas", expression: "min_replicas >= 1 AND max_replicas >= min_replicas AND max_replicas <= 1000" }),
+      new TableCheck({ name: "CK_scale_rules_window", expression: "evaluation_window_seconds BETWEEN 120 AND 1800 AND evaluation_window_seconds % 60 = 0 AND cooldown_seconds BETWEEN 60 AND 86400" }),
+      new TableCheck({ name: "CK_scale_rules_action", expression: "last_action IN ('NO_ACTION', 'SCALE_OUT', 'SCALE_IN')" }),
+    ] }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> { await queryRunner.dropTable("scale_rules", true); }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -773,5 +806,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Volumes1793100000000,
   DeploymentDeletion1793232000000,
   DeploymentDeletionClaims1793836800000,
+  ScaleRules1794009600000,
 ];
 
