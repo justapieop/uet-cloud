@@ -751,6 +751,60 @@ export class DeploymentDeletionClaims1793836800000 implements MigrationInterface
   }
 }
 
+export class DeploymentResourceUpdates1794096000000 implements MigrationInterface {
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.addColumn("deployments", new TableColumn({
+      name: "active_resource_update_id", type: "uniqueidentifier", isNullable: true,
+    }));
+    await queryRunner.createTable(new Table({
+      name: "deployment_resource_updates",
+      columns: [
+        { name: "id", type: "uniqueidentifier", isPrimary: true },
+        { name: "deployment_id", type: "nvarchar", length: "255", isNullable: false },
+        { name: "user_id", type: "nvarchar", length: "255", isNullable: false },
+        { name: "key_hash", type: "varchar", length: "64", isNullable: false },
+        { name: "fingerprint", type: "varchar", length: "64", isNullable: false },
+        { name: "requested_json", type: "nvarchar", length: "MAX", isNullable: false },
+        { name: "baseline_json", type: "nvarchar", length: "MAX", isNullable: false },
+        { name: "receipt_json", type: "nvarchar", length: "MAX", isNullable: false },
+        { name: "lifecycle", type: "nvarchar", length: "16", isNullable: false },
+        { name: "billing_customer_id", type: "varchar", length: "255", isNullable: false },
+        { name: "status", type: "nvarchar", length: "16", isNullable: false },
+        { name: "claim_token", type: "uniqueidentifier", isNullable: true },
+        { name: "claim_expires_at", type: "datetime2", precision: 7, isNullable: true },
+        { name: "heartbeat_at", type: "datetime2", precision: 7, isNullable: true },
+        { name: "next_attempt_at", type: "datetime2", precision: 7, isNullable: false, default: "SYSUTCDATETIME()" },
+        { name: "target_revision", type: "nvarchar", length: "128", isNullable: true },
+        { name: "observed_json", type: "nvarchar", length: "MAX", isNullable: true },
+        { name: "no_op", type: "bit", isNullable: true },
+        { name: "error_code", type: "varchar", length: "64", isNullable: true },
+        { name: "error_message", type: "nvarchar", length: "1000", isNullable: true },
+        { name: "created_at", type: "datetime2", precision: 7, isNullable: false, default: "SYSUTCDATETIME()" },
+        { name: "started_at", type: "datetime2", precision: 7, isNullable: true },
+        { name: "completed_at", type: "datetime2", precision: 7, isNullable: true },
+      ],
+      checks: [
+        new TableCheck({ name: "CK_deployment_resource_updates_status", expression: "([status] IN ('SUCCEEDED', 'FAILED') AND [completed_at] IS NOT NULL AND [claim_token] IS NULL AND [claim_expires_at] IS NULL) OR ([status] IN ('PENDING', 'APPLYING', 'RECONCILING') AND [completed_at] IS NULL)" }),
+        new TableCheck({ name: "CK_deployment_resource_updates_lifecycle", expression: "[lifecycle] IN ('RUNNING', 'STOPPED')" }),
+        new TableCheck({ name: "CK_deployment_resource_updates_json", expression: "ISJSON([requested_json]) = 1 AND ISJSON([baseline_json]) = 1 AND ISJSON([receipt_json]) = 1 AND ([observed_json] IS NULL OR ISJSON([observed_json]) = 1)" }),
+      ],
+      indices: [
+        new TableIndex({ name: "UQ_deployment_resource_updates_key_hash", columnNames: ["key_hash"], isUnique: true }),
+        new TableIndex({ name: "UQ_deployment_resource_updates_active", columnNames: ["deployment_id"], isUnique: true, where: "completed_at IS NULL" }),
+        new TableIndex({ name: "IDX_deployment_resource_updates_queue", columnNames: ["status", "next_attempt_at", "created_at"] }),
+        new TableIndex({ name: "IDX_deployment_resource_updates_history", columnNames: ["deployment_id", "created_at"] }),
+      ],
+      foreignKeys: [new TableForeignKey({ name: "FK_deployment_resource_updates_deployment", columnNames: ["deployment_id"], referencedTableName: "deployments", referencedColumnNames: ["id"] })],
+    }));
+  }
+
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query("IF EXISTS (SELECT 1 FROM deployment_resource_updates WHERE completed_at IS NULL) THROW 51000, 'Resolve active resource updates before removing resource-update guards', 1");
+    await queryRunner.dropTable("deployment_resource_updates");
+    await queryRunner.dropColumn("deployments", "active_resource_update_id");
+  }
+}
+
 export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Init1790395540677,
   Deployments1790395540678,
@@ -773,5 +827,6 @@ export const DATABASE_MIGRATIONS: Array<new () => MigrationInterface> = [
   Volumes1793100000000,
   DeploymentDeletion1793232000000,
   DeploymentDeletionClaims1793836800000,
+  DeploymentResourceUpdates1794096000000,
 ];
 
