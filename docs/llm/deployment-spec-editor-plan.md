@@ -1,12 +1,12 @@
 # Deployment spec editor — implementation notes and original plan
 
-Original plan: 2026-11-07. Integration update: 2026-11-08. Status: frontend connected to the resource-update backend; backend admission still requires its rollout flag.
+Original plan: 2026-11-07. Integration update: 2026-11-08. Status: frontend connected to the resource-update backend; owner edits use normal permissions without a rollout flag, and submission runs outside the modal.
 
 ## Implementation status
 
-The save placeholder has been replaced by authenticated Next.js server actions using the generated resource-update API. Submission includes `If-Match` and a retry-stable `Idempotency-Key`. The editor polls the accepted operation, displays queued/applying/reconciling/terminal outcomes, retains drafts on errors and refreshes applied values only after success. Active operations can be reopened for progress. Missing stable versions, stopped apps and backend-disabled admission have explicit explanations.
+The save placeholder has been replaced by authenticated Next.js server actions using the generated resource-update API. Submission includes `If-Match` and a retry-stable `Idempotency-Key`. Save closes the modal immediately. A card-level controller keeps sending/polling after the form unmounts and displays Submitting/Updating/Verifying on the original Edit button. The page stays usable; errors and retries appear on the card, uncertain requests retain their exact key/version/settings, and definitive rejection preserves the draft for reopening. Applied values refresh after verification. Missing stable versions and stopped apps have explicit explanations.
 
-Deployment owners use their normal `DeploymentUpdate` grant to edit their own resources. Local-source installations can enable admission with `DEPLOYMENT_RESOURCE_UPDATES_ENABLED=true`; Azure-source installations use the `DeploymentResourceUpdates` flag. Another user's deployment remains inaccessible, including to Super. See [API and rollout](../deployment-resource-updates.md).
+Deployment owners use their normal `DeploymentUpdate` grant to edit their own resources, following the same session/permission/ownership pattern as metrics. There is no resource-update feature flag or local enablement setting. Another user's deployment remains inaccessible, including to Super. See [API and rollout](../deployment-resource-updates.md).
 
 The remainder records the original preview implementation and design history. Its placeholder-only statements are superseded by the integration status above.
 
