@@ -13,6 +13,8 @@ Build a cloud-integrated Platform as a Service (PaaS) that lets developers and p
 
 ## Confirmed direction
 
+- Opt-in CPU scale rules reuse monitoring, SQL UnitOfWork/leases, plan quotas and ACA lifecycle. One policy per deployment evaluates sustained CPU utilization and changes capacity with revision/replica readiness and traffic confirmation. SCALING reserves the workflow; ambiguous writes fail closed. The current adapter supports healthy single-revision, single-container apps with ingress and at least one ready replica. See [CPU scale rules](../scale-rules.vi.md) for contracts, native-baseline behavior, limits and verification.
+
 - Prefer free/low-cost tiers in new-environment infrastructure. Defaults request SQL's free allowance with AutoPause at exhaustion, MongoDB Free, App Configuration Free, Consumption apps, and no persisted Log Analytics workspace. Public SQL/Mongo use firewall restrictions; Managed Redis retains a private endpoint because it has no equivalent public-IP firewall. Never silently fall back from an unavailable free tier to paid resources. This is a development-oriented baseline, not a zero-cost or availability guarantee.
 
 - New Azure environments use `infra/azure/main.bicep`, with `new-environment.bicepparam` and a CLI-based preview/apply wrapper. This is a separate fresh-stack template, not adoption of the existing deployment. Application creation is optional and follows SQL/external-secret/key/image bootstrap. GitHub Actions and Azure DevOps setup remain excluded. See [new environment infrastructure](../azure-infrastructure.md) for design defaults and unverified deployment assumptions.
