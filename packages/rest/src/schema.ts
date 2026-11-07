@@ -201,7 +201,7 @@ export interface paths {
         head?: never;
         /**
          * Queue an owned deployment's compute and replica configuration update
-         * @description Requires a verified Single revision baseline and active plan. Admission is disabled by default. Stopped apps are rejected until Azure preservation is verified.
+         * @description Requires DeploymentUpdate, ownership, a verified Single revision baseline and active plan. Stopped apps are rejected until Azure preservation is verified.
          */
         patch: operations["DeploymentResourcesController_update"];
         trace?: never;
@@ -1730,7 +1730,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Feature disabled, or Azure/Stripe unavailable */
+            /** @description Azure/Stripe unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;
