@@ -10,11 +10,15 @@ param keyVaultName string
 param pullIdentityName string
 param sharedEnvironmentName string
 
+@description('Use a separate namespace for a new environment; the default preserves existing role IDs.')
+param roleNamespace string = 'kumo'
+
 @description('Preserve existing assignment GUIDs when adopting portal/CLI-created grants.')
 param existingAssignmentNames object = {}
 
-var runtimeRoleId = guid(subscription().id, 'kumo-runtime-operations-v1')
-var environmentRoleId = guid(subscription().id, 'kumo-environment-access-v1')
+var runtimeRoleId = roleNamespace == 'kumo' ? guid(subscription().id, 'kumo-runtime-operations-v1') : guid(subscription().id, roleNamespace, 'kumo-runtime-operations-v1')
+var environmentRoleId = roleNamespace == 'kumo' ? guid(subscription().id, 'kumo-environment-access-v1') : guid(subscription().id, roleNamespace, 'kumo-environment-access-v1')
+var roleSuffix = roleNamespace == 'kumo' ? uniqueString(subscription().id) : uniqueString(subscription().id, roleNamespace)
 
 // Subscription scope is needed by the current dynamic user-RG provisioner.
 // RBAC cannot restrict these actions to resource groups by a name prefix.
@@ -22,7 +26,7 @@ var environmentRoleId = guid(subscription().id, 'kumo-environment-access-v1')
 resource runtimeRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
   name: runtimeRoleId
   properties: {
-    roleName: 'Kumo Runtime Operations ${uniqueString(subscription().id)}'
+    roleName: 'Kumo Runtime Operations ${roleSuffix}'
     description: 'Shared-mode runtime operations; no IAM writes, policy writes, network writes, SQL administration, registry administration, or environment provisioning.'
     type: 'CustomRole'
     assignableScopes: [subscription().id]
@@ -62,7 +66,7 @@ resource runtimeRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
 resource environmentRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
   name: environmentRoleId
   properties: {
-    roleName: 'Kumo Shared Environment Access ${uniqueString(subscription().id)}'
+    roleName: 'Kumo Shared Environment Access ${roleSuffix}'
     description: 'Join/read an existing environment and manage its Azure Files links; cannot change the environment or network.'
     type: 'CustomRole'
     assignableScopes: [subscription().id]
