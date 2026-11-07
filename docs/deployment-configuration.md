@@ -1,5 +1,13 @@
 # Applied deployment configuration
 
+## Frontend resource editor preview
+
+The deployment detail page offers **Edit** in **Compute & Scaling** for provisioned running/stopped deployments with complete applied resource values. It previews changes to per-replica CPU/RAM and minimum/maximum replicas, derives RAM using the established 1:2 CPU:memory ratio, and checks that the requested allocation fits one active plan. Plan lookup failures retain the draft and allow retry. Missing Azure values are not replaced with defaults.
+
+Saving resource changes is not available yet. The frontend mutation adapter returns an explicit unavailable result, retains the draft, and leaves the displayed applied configuration unchanged. There is no resource-update endpoint behind this editor. Start/stop, redeploy, and volume operations keep their existing APIs. See the [frontend implementation notes](llm/deployment-spec-editor-plan.md) for the pending backend contract.
+
+## Applied reads
+
 `GET /deployments/:id` and `GET /deployments` read applied CPU, RAM, minimum/maximum replicas, primary/additional ports, ingress visibility (`external`), region, image, and FQDN from Azure Container Apps for deployments with an Azure resource ID. Database request values are not substituted for missing Azure fields or failed Azure reads. Missing optional Azure fields return null (or an empty additional-ports list). RAM is normalized to GiB and Azure location names to lowercase without whitespace.
 
 The database continues to hold the creation request for durable queuing, provisioning, and quota reservations. Identity, ownership, build ID, Azure resource ID, workflow status, timestamps, and workflow errors remain database-backed. Existing image/FQDN columns are historical workflow snapshots; provisioned GET responses use Azure's values. This change introduces no destructive migration or removal of persisted requests.
