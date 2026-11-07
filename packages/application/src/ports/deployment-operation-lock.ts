@@ -1,4 +1,4 @@
-export type DeploymentOperation = "delete" | "attach" | "detach";
+export type DeploymentOperation = "delete" | "attach" | "detach" | "configure" | "redeploy";
 
 export interface DeploymentOperationLease {
   readonly deploymentId: string;
