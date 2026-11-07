@@ -17,7 +17,10 @@ export async function getDeployment(id: string): Promise<DeploymentResult> {
   try {
     const result: { data?: Deployment; response: Response } = await apiClient.GET("/deployments/{id}", {
       params: { path: { id } },
-      headers: { cookie },
+      // The API's authenticated read cache is independent of fetch's Next.js cache.
+      // Always fetch the current Azure revision snapshot so "Refresh configuration" can
+      // observe a rollout that became ready after the previous page render.
+      headers: { cookie, "Cache-Control": "no-cache" },
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
     });
