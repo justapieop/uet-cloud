@@ -2,7 +2,7 @@ import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 import { MIN_VOLUME_SIZE_GB, MAX_VOLUME_SIZE_GB } from "./volume.js";
 
-export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
+export type DeploymentStatus = "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "SCALING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
 
 export type VolumeAccessMode = "ReadWrite" | "ReadOnly";
 

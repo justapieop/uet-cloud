@@ -17,3 +17,6 @@ export * from "./ProcessGitHubPush.case.js";
 export * from "./AttachVolume.case.js";
 export * from "./DetachVolume.case.js";
 export * from "./ListVolumes.case.js";
+export * from "./evaluate-scale-rule.js";
+export * from "./ManageScaleRule.case.js";
+export * from "./EvaluateScaleRule.case.js";

@@ -8,6 +8,7 @@ import { InfraUser, InfraUserRepository } from "./repositories/user.js";
 import { InfraDeployment, InfraDeploymentRepository } from "./repositories/deployment.js";
 import { InfraPlan, InfraPlanRepository } from "./repositories/plan.js";
 import { InfraVolume, InfraVolumeRepository } from "./repositories/volume.js";
+import { InfraScaleRule, InfraScaleRuleRepository } from "./repositories/scale-rule.js";
 
 @Injectable()
 export class TypeOrmUnitOfWork implements UnitOfWork {
@@ -24,6 +25,7 @@ export class TypeOrmUnitOfWork implements UnitOfWork {
         deploymentRequests: new InfraDeploymentRequestRepository(manager),
         plans: new InfraPlanRepository(manager.getRepository(InfraPlan)),
         volumes: new InfraVolumeRepository(manager.getRepository(InfraVolume)),
+        scaleRules: new InfraScaleRuleRepository(manager.getRepository(InfraScaleRule)),
       };
 
       return work(repositories);

@@ -620,6 +620,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployments/{id}/scale-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the owned deployment's scale rules (zero or one) */
+        get: operations["ScaleRulesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/scale-rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the owned deployment's scale rule */
+        get: operations["ScaleRulesController_get"];
+        put?: never;
+        /** Create one CPU scale rule within reserved deployment and current plan limits */
+        post: operations["ScaleRulesController_create"];
+        /** Delete the rule, retaining the current applied replica count */
+        delete: operations["ScaleRulesController_delete"];
+        options?: never;
+        head?: never;
+        /** Update a CPU scale rule; enabled=false pauses future evaluations */
+        patch: operations["ScaleRulesController_update"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -757,7 +794,7 @@ export interface components {
             /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
             external: boolean | null;
             /** @enum {string} */
-            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "SCALING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
             image: string | null;
             build_id: string | null;
             resource_id: string | null;
@@ -1021,6 +1058,59 @@ export interface components {
              */
             region?: string;
         };
+        ScaleRuleResponseDto: {
+            deployment_id: string;
+            enabled: boolean;
+            /** @enum {string} */
+            metric: "cpu";
+            scale_out_threshold: number;
+            scale_in_threshold: number;
+            min_replicas: number;
+            max_replicas: number;
+            evaluation_window_seconds: number;
+            cooldown_seconds: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            last_evaluated_at: string | null;
+            /** Format: date-time */
+            last_scaled_at: string | null;
+            /** @enum {string} */
+            last_action: "SCALE_OUT" | "SCALE_IN" | "NO_ACTION";
+            last_reason: string;
+        };
+        CreateScaleRuleDto: {
+            /** @default false */
+            enabled: boolean;
+            /** @enum {string} */
+            metric: "cpu";
+            /** @description Percent of allocated vCPU, sustained in every one-minute bucket */
+            scale_out_threshold: number;
+            /** @description Must be lower than scale_out_threshold */
+            scale_in_threshold: number;
+            min_replicas: number;
+            max_replicas: number;
+            /** @description Whole minutes, from 120 to 1800 seconds */
+            evaluation_window_seconds: number;
+            cooldown_seconds: number;
+        };
+        UpdateScaleRuleDto: {
+            /** @default false */
+            enabled: boolean;
+            /** @enum {string} */
+            metric?: "cpu";
+            /** @description Percent of allocated vCPU, sustained in every one-minute bucket */
+            scale_out_threshold?: number;
+            /** @description Must be lower than scale_out_threshold */
+            scale_in_threshold?: number;
+            min_replicas?: number;
+            max_replicas?: number;
+            /** @description Whole minutes, from 120 to 1800 seconds */
+            evaluation_window_seconds?: number;
+            cooldown_seconds?: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -1253,7 +1343,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter by deployment status */
-                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "SCALING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
                 /** @description Case-insensitive literal substring of the deployment name */
                 name?: string;
                 /** @description Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource */
@@ -1919,7 +2009,6 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "idempotency-key": string;
                 /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
                 "Idempotency-Key": string;
             };
@@ -2346,7 +2435,6 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                "idempotency-key": string;
                 "Idempotency-Key": string;
             };
             path: {
@@ -2956,6 +3044,257 @@ export interface operations {
             };
             /** @description Volume is currently mounted to one or more deployments */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"][];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateScaleRuleDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rule exists, deployment busy, or reserved/plan quota exceeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Another deployment operation is in progress */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateScaleRuleDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment busy or reserved/plan quota exceeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription verification unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -6,6 +6,8 @@ import { StorageManagementClient } from "@azure/arm-storage";
 import { Module } from "@nestjs/common";
 import {
   AttachVolumeCase,
+  EvaluateScaleRuleCase,
+  ManageScaleRuleCase,
   DetachVolumeCase,
   ListVolumesCase,
   CreateVolumeCase,
@@ -41,17 +43,40 @@ import { DeploymentsController } from "../controllers/Deployments.controller.js"
 import { RedeploymentsController } from "../controllers/Redeployments.controller.js";
 import { VolumesController } from "../controllers/Volumes.controller.js";
 import { RouteReadCache } from "../common/ReadCache.js";
+import { AzureDeploymentScaler, AzureMonitorMetricsReader, ScaleRuleWorker } from "@kumo/infrastructure";
+import { MonitoringModule } from "./Monitoring.module.js";
+import { ScaleRulesController } from "../controllers/ScaleRules.controller.js";
 
 @Module({
-  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule, FeatureModule, AppCacheModule],
+  imports: [AppConfigModule, ExternalClientsModule, DatabaseModule, BuildModule, StripeModule, FeatureModule, AppCacheModule, MonitoringModule],
   controllers: [
     BuildSourceController,
     DeploymentsController,
     RedeploymentsController,
     VolumesController,
+    ScaleRulesController,
   ],
   providers: [
     DeploymentWorker,
+    ScaleRuleWorker,
+    {
+      provide: ManageScaleRuleCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, lock: DeploymentOperationLock): ManageScaleRuleCase => new ManageScaleRuleCase(uow, subscriptions, lock),
+      inject: [UNIT_OF_WORK, StripeProvider, DEPLOYMENT_OPERATION_LOCK],
+    },
+    {
+      provide: AzureDeploymentScaler,
+      useFactory: (config: ConfigService, apps: ContainerAppsAPIClient): AzureDeploymentScaler => new AzureDeploymentScaler(config, {
+        containerApps: apps.containerApps, revisions: apps.containerAppsRevisions, replicas: apps.containerAppsRevisionReplicas,
+      }),
+      inject: [ConfigService, ContainerAppsAPIClient],
+    },
+    {
+      provide: EvaluateScaleRuleCase,
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, metrics: AzureMonitorMetricsReader, scaler: AzureDeploymentScaler, lock: DeploymentOperationLock): EvaluateScaleRuleCase =>
+        new EvaluateScaleRuleCase(uow, subscriptions, metrics, scaler, lock),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureMonitorMetricsReader, AzureDeploymentScaler, DEPLOYMENT_OPERATION_LOCK],
+    },
     {
       provide: RedeployDeploymentCase,
       useFactory: (uow: UnitOfWork, subscriptions: StripeProvider): RedeployDeploymentCase => new RedeployDeploymentCase(uow, subscriptions),

@@ -9,6 +9,8 @@ import {
 } from "@kumo/application";
 import {
   InfraDeployment,
+  InfraScaleRule,
+  InfraScaleRuleRepository,
   DATABASE_MIGRATIONS,
   InfraDeploymentOperationLock,
   InfraDeploymentRepository,
@@ -68,13 +70,14 @@ import { AppConfigModule } from "./AppConfig.module.js";
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraVolume]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraVolume, InfraScaleRule]),
   ],
   providers: [
     InfraUserRepository,
     InfraRoleRepository,
     InfraUserRoleRepository,
     InfraDeploymentRepository,
+    InfraScaleRuleRepository,
     {
       provide: DEPLOYMENT_OPERATION_LOCK,
       useFactory: (dataSource: DataSource, config: ConfigService): InfraDeploymentOperationLock => {
@@ -92,6 +95,7 @@ import { AppConfigModule } from "./AppConfig.module.js";
     },
   ],
   exports: [
+    InfraScaleRuleRepository,
     UNIT_OF_WORK,
     DEPLOYMENT_OPERATION_LOCK,
     InfraStripeCustomerLinkRepository,

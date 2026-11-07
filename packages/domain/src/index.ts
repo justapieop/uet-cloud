@@ -6,3 +6,4 @@ export * from "./deployment.js";
 export * from "./build.js";
 export * from "./plan.js";
 export * from "./volume.js";
+export * from "./scale-rule.js";
