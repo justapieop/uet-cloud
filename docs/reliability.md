@@ -59,3 +59,7 @@ All values are validated as positive integers during startup.
 The appended `Reliability1792272000001` migration creates both SQL Server tables. Existing API startup configuration runs pending migrations; no database migration is performed by source compilation. Rolling back this migration deletes idempotency records and acceptance receipts.
 
 Reference: [NestJS resilience](https://docs.nestjs.com/reliability/resilience) and [idempotency keys](https://docs.nestjs.com/reliability/idempotency).
+
+## CPU scale rules
+
+Opt-in CPU policies reuse deployment operation leases, atomic SQL due claims, current Stripe quota checks and conditional RUNNING -> SCALING transitions. Provider waits run outside transactions. Cooldown begins only after ACA confirms readiness, traffic and replica count. Failed/ambiguous writes leave the workflow FAILED; stale scaling is failed after the existing timeout plus one minute and is never automatically resubmitted. Accepted deployment deletion removes its rule in the same UnitOfWork. See [CPU scale rules](scale-rules.vi.md) for API, native-baseline behavior, recovery limits and local verification with Azure.

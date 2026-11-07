@@ -1,0 +1,11 @@
+{
+  "subscriptionId": "c2afe842-a0e6-4958-875b-e5b72104eade",
+  "location": "japaneast",
+  "platformResourceGroup": "kumo-rg",
+  "apiAppName": "kumo-api",
+  "registryName": "kumoreg",
+  "configurationStoreName": "kumo-config",
+  "keyVaultName": "kumo-kms",
+  "pullIdentityName": "acr-id",
+  "sharedEnvironmentName": "managed-japaneast-2nlgpqg-ajfck2rventraug"
+}

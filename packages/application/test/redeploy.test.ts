@@ -45,7 +45,7 @@ test("receipt failure rolls back queued redeployment and busy/stopped deployment
   await assert.rejects(new RedeployDeploymentCase(setup, setup).exec("deployment", "123", "key"), /Receipt persistence/);
   assert.equal(setup.deployments[0]?.status, "RUNNING");
   assert.equal(setup.receipts.size, 0);
-  const statuses: DeploymentStatus[] = ["STOPPED", "STOPPING", "STARTING", "PENDING", "PROVISIONING"];
+  const statuses: DeploymentStatus[] = ["STOPPED", "STOPPING", "STARTING", "SCALING", "PENDING", "PROVISIONING"];
   for (let index: number = 0; index < statuses.length; index++) {
     const busy: AdmissionFixture = fixture(statuses[index]!);
     await assert.rejects(new RedeployDeploymentCase(busy, busy).exec("deployment", "123", "key"), InvalidDeploymentStatusError);

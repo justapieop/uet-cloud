@@ -7,6 +7,8 @@ import { NetworkTopologyCard } from "./network-topology-card";
 import { InfrastructureMetaCard } from "./infrastructure-meta-card";
 import { MetricsTelemetrySlot } from "./metrics-telemetry-slot";
 import { StorageVolumesCard } from "@/features/manage-volume";
+import { ScaleRuleCard } from "@/features/manage-scale-rule";
+import { Suspense } from "react";
 
 interface MissionControlPageProps {
   readonly deployment: Deployment;
@@ -29,6 +31,10 @@ export function MissionControlPage({ deployment }: MissionControlPageProps): JSX
           </div>
 
           <StorageVolumesCard deployment={deployment} />
+
+          <Suspense fallback={<p role="status" className="text-sm text-muted-text">Loading scale rules…</p>}>
+            <ScaleRuleCard deployment={deployment} />
+          </Suspense>
 
           <InfrastructureMetaCard deployment={deployment} />
         </div>

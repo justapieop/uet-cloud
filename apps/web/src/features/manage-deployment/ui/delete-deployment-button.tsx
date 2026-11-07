@@ -44,6 +44,7 @@ export function DeleteDeploymentButton({
   const [errorMessage, setErrorMessage]: [string | null, Dispatch<SetStateAction<string | null>>] = useState<string | null>(null);
   const [pollTimedOut, setPollTimedOut]: [boolean, Dispatch<SetStateAction<boolean>>] = useState<boolean>(false);
   const pollStartedAtRef: MutableRefObject<number | null> = useRef<number | null>(null);
+  const submissionInFlightRef: MutableRefObject<boolean> = useRef<boolean>(false);
   const deletionActive: boolean = isDeletionActive(status);
 
   useEffect((): (() => void) | undefined => {
@@ -107,46 +108,67 @@ export function DeleteDeploymentButton({
   if (!canDeleteDeployment(status)) return null;
 
   const isRetry: boolean = status === "DELETE_FAILED";
-  const triggerLabel: string = isRetry ? "Retry delete" : "Delete";
+  const triggerLabel: string = isRetry ? "Retry" : "Delete";
 
   function handleConfirm(): void {
+    if (submissionInFlightRef.current || isPending) return;
+    submissionInFlightRef.current = true;
     setErrorMessage(null);
+    // Close outside the transition so the pending request cannot hold the modal open.
+    setIsOpen(false);
     startTransition(async (): Promise<void> => {
-      const result: LifecycleActionResult = await deleteDeploymentAction(id);
-      if (!result.success) {
-        setErrorMessage(result.error ?? "Failed to delete deployment.");
-        return;
-      }
+      try {
+        const result: LifecycleActionResult = await deleteDeploymentAction(id);
+        if (!result.success) {
+          const message: string = result.error ?? "Failed to delete deployment.";
+          setErrorMessage(message);
+          toast.danger(`Could not request deletion of "${name}".`, { description: message });
+          return;
+        }
 
-      setIsOpen(false);
-      setPollTimedOut(false);
-      pollStartedAtRef.current = null;
-      toast.success(`Deletion of "${name}" was accepted.`);
-      router.refresh();
+        setPollTimedOut(false);
+        pollStartedAtRef.current = null;
+        toast.success(`Deletion of "${name}" was accepted.`);
+        router.refresh();
+      } catch {
+        const message: string = "Could not confirm the deletion request. Refresh to check the deployment status before retrying.";
+        setErrorMessage(message);
+        toast.danger(`Could not confirm deletion of "${name}".`, { description: message });
+      } finally {
+        submissionInFlightRef.current = false;
+      }
     });
   }
 
   function handleOpenChange(nextIsOpen: boolean): void {
-    if (isPending) return;
     setIsOpen(nextIsOpen);
     if (!nextIsOpen) setErrorMessage(null);
   }
 
   return (
     <>
-      <Button
-        type="button"
-        variant="danger-soft"
-        size="sm"
-        isDisabled={isPending}
-        onPress={(): void => {
-          setPollTimedOut(false);
-          pollStartedAtRef.current = null;
-          setIsOpen(true);
-        }}
-      >
-        {triggerLabel}
-      </Button>
+      <div className="flex flex-col items-start gap-1">
+        <button
+          type="button"
+          disabled={isPending}
+          aria-busy={isPending}
+          aria-label={isPending ? `Submitting deletion of ${name}` : isRetry ? `Retry deletion of ${name}` : `Delete deployment ${name}`}
+          className="inline-flex h-7 min-w-[68px] shrink-0 items-center justify-center gap-1.5 rounded-md border border-red-500/30 bg-red-500/10 px-2.5 font-mono text-[11px] font-medium text-red-300 transition-all hover:border-red-500/50 hover:bg-red-500/20 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+          onClick={(): void => {
+            setPollTimedOut(false);
+            pollStartedAtRef.current = null;
+            setErrorMessage(null);
+            setIsOpen(true);
+          }}
+        >
+          <span>{isPending ? "Submitting…" : triggerLabel}</span>
+        </button>
+        {errorMessage && (
+          <p role="alert" className="max-w-xs text-xs text-danger">
+            {errorMessage}
+          </p>
+        )}
+      </div>
 
       <AlertDialog.Backdrop isOpen={isOpen} onOpenChange={handleOpenChange}>
         <AlertDialog.Container>
@@ -163,11 +185,6 @@ export function DeleteDeploymentButton({
                 This permanently removes deployment <strong className="font-mono">{name}</strong>, its Azure Container App, and its environment storage links.
                 The deletion runs in the background and cannot be undone.
               </p>
-              {errorMessage && (
-                <p role="alert" className="mt-3 rounded-lg border border-danger/20 bg-danger-soft px-3 py-2 text-sm text-danger-soft-foreground">
-                  {errorMessage}
-                </p>
-              )}
             </AlertDialog.Body>
             <AlertDialog.Footer>
               <Button type="button" slot="close" variant="tertiary" isDisabled={isPending}>

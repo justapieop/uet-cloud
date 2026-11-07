@@ -37,7 +37,7 @@ export function DeploymentActionButton({ id, status }: DeploymentActionButtonPro
     });
   }
 
-  const baseClass: string = "inline-flex h-7 items-center justify-center gap-1.5 rounded-md px-2.5 font-mono text-[11px] font-medium transition-all active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50";
+  const baseClass: string = "inline-flex h-7 w-[68px] shrink-0 items-center justify-center gap-1.5 rounded-md px-2.5 font-mono text-[11px] font-medium transition-all active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50";
   const stopClass: string = "border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:border-amber-500/50 hover:bg-amber-500/20";
   const startClass: string = "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-500/50 hover:bg-emerald-500/20";
   const startingClass: string = "border border-blue-500/30 bg-blue-500/10 text-blue-300";

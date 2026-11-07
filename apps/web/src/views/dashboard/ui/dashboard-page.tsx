@@ -14,6 +14,7 @@ interface DashboardPageProps {
 const STATUS_STYLES: Readonly<Record<Deployment["status"], string>> = {
   PENDING: "text-amber-300", PROVISIONING: "text-blue-300",
   STARTING: "text-blue-300", STOPPING: "text-amber-300",
+  SCALING: "text-blue-300",
   RUNNING: "text-emerald-300", STOPPED: "text-amber-400", FAILED: "text-red-300",
   DELETE_PENDING: "text-amber-300", DELETING: "text-amber-300", DELETE_FAILED: "text-red-300", DELETED: "text-muted-text",
 };
@@ -43,7 +44,7 @@ export async function DashboardPage({ searchParams }: DashboardPageProps): Promi
     : await getDeployments(filters);
   const filtered: boolean = Boolean(filters.name || filters.status || filters.region);
   const hasTransient: boolean = result.kind === "success" && result.deployments.some((deployment: Deployment): boolean =>
-    deployment.status === "STARTING" || deployment.status === "STOPPING" || deployment.status === "PROVISIONING" ||
+    deployment.status === "STARTING" || deployment.status === "STOPPING" || deployment.status === "SCALING" || deployment.status === "PROVISIONING" ||
     deployment.status === "PENDING" || deployment.status === "DELETE_PENDING" || deployment.status === "DELETING"
   );
   return (
