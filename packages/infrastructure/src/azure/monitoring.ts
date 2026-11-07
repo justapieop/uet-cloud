@@ -1,4 +1,5 @@
 import { ResilienceError } from "@nestjs/resilience";
+import type { ContainerApp, ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import type { Metric, MetricValue, Response, TimeSeriesElement } from "@azure/arm-monitor";
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics, type DeploymentMetricsReader, type MetricPoint, type MetricSeries } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
@@ -14,6 +15,8 @@ export interface MetricsClient {
   }): Promise<Response>;
 }
 
+export type MetricsContainerAppsClient = Pick<ContainerAppsAPIClient["containerApps"], "get">;
+
 export interface MetricsReadInput {
   readonly resourceId: string;
   readonly deploymentId: string;
@@ -28,7 +31,7 @@ export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
   private readonly subscriptionId: string;
   private readonly platformResourceGroup: string;
 
-  public constructor(config: ConfigService, private readonly client: MetricsClient) {
+  public constructor(config: ConfigService, private readonly client: MetricsClient, private readonly apps: MetricsContainerAppsClient) {
     this.subscriptionId = config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID");
     this.platformResourceGroup = config.get<string>("AZURE_PLATFORM_RESOURCE_GROUP") ?? config.getOrThrow<string>("AZURE_RG_NAME");
   }
@@ -37,6 +40,23 @@ export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
     if (!ownedContainerAppResource(input, this.subscriptionId, this.platformResourceGroup)) {
       throw new InvalidDeploymentResourceError("Deployment resource ID is outside the user's Kumo Container App");
     }
+    const resource: ReturnType<typeof ownedContainerAppResource> = ownedContainerAppResource(input, this.subscriptionId, this.platformResourceGroup);
+    if (!resource) throw new InvalidDeploymentResourceError("Deployment resource ID is outside the user's Kumo Container App");
+    let activeRevision: string;
+    try {
+      const app: ContainerApp = await this.apps.get(resource.resourceGroup, input.appName);
+      const revisionName: string | undefined = app.latestReadyRevisionName;
+      if (app.id?.toLowerCase() !== resource.resourceId.toLowerCase() || app.tags?.["kumo-deployment-id"] !== input.deploymentId ||
+        app.configuration?.activeRevisionsMode !== "Single" || !revisionName || !/^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/.test(revisionName)) {
+        throw new DeploymentMetricsReadError("unavailable");
+      }
+      activeRevision = revisionName;
+    } catch (error: unknown) {
+      if (error instanceof DeploymentMetricsReadError) throw error;
+      const status: unknown = typeof error === "object" && error !== null && "statusCode" in error ? error.statusCode : undefined;
+      throw new DeploymentMetricsReadError(status === 403 ? "forbidden" : status === 429 ? "throttled" : "unavailable");
+    }
+    const revisionFilter: string = `revisionName eq '${activeRevision}'`;
     const timespan: string = `${input.start.toISOString()}/${input.end.toISOString()}`;
     const fetchMetric: (name: string, filter: string) => Promise<Response> = (name: string, filter: string): Promise<Response> =>
       this.client.list(input.resourceId, {
@@ -46,9 +66,9 @@ export class AzureMonitorMetricsReader implements DeploymentMetricsReader {
     let responses: [Response, Response, Response];
     try {
       responses = await Promise.all([
-        fetchMetric("UsageNanoCores", "revisionName eq '*' and podName eq '*'"),
-        fetchMetric("WorkingSetBytes", "revisionName eq '*' and podName eq '*'"),
-        fetchMetric("Replicas", "revisionName eq '*'"),
+        fetchMetric("UsageNanoCores", `${revisionFilter} and podName eq '*'`),
+        fetchMetric("WorkingSetBytes", `${revisionFilter} and podName eq '*'`),
+        fetchMetric("Replicas", revisionFilter),
       ]);
     } catch (error: unknown) {
       if (error instanceof ResilienceError) throw error;

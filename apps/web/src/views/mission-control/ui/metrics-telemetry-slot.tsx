@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type Dispatch, type JSX, type SetStateAction } from "react";
 import {
-  METRICS_RANGES, chartSeries, createLatestMetricsRequest, latestMetricSummary,
+  METRICS_RANGES, activeRevisionAverageSeries, chartSeries, createLatestMetricsRequest, latestMetricSummary,
   metricsErrorMessage, MetricsRequestError,
   type Deployment, type DeploymentMetrics, type LatestMetricsRequest, type MetricSummary, type MetricsRange,
 } from "@/entities/deployment";
@@ -153,8 +153,8 @@ export function MetricsTelemetrySlot({ deployment }: MetricsTelemetrySlotProps):
         <div role="status" className="mt-5 rounded-lg border border-surface-border-subtle bg-white/[0.015] p-6 text-center text-xs text-muted-text">No Azure Monitor samples are available for this range yet.</div>
       ) : metrics && (
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <MetricChart title="CPU Usage" unit="cores" series={chartSeries(metrics.cpu, metrics.interval_seconds, "replica")} range={range} intervalSeconds={metrics.interval_seconds} />
-          <MetricChart title="Memory Working Set" unit="MiB" series={chartSeries(metrics.memory, metrics.interval_seconds, "replica")} range={range} intervalSeconds={metrics.interval_seconds} />
+          <MetricChart title="CPU Usage" unit="cores" series={activeRevisionAverageSeries(metrics.cpu, metrics.interval_seconds)} range={range} intervalSeconds={metrics.interval_seconds} />
+          <MetricChart title="Memory Working Set" unit="MiB" series={activeRevisionAverageSeries(metrics.memory, metrics.interval_seconds)} range={range} intervalSeconds={metrics.interval_seconds} />
           <div className="lg:col-span-2"><MetricChart title="Replica Count" unit="instances" series={chartSeries(metrics.replicas, metrics.interval_seconds, "revision")} range={range} intervalSeconds={metrics.interval_seconds} /></div>
         </div>
       )}

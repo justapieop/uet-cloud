@@ -95,12 +95,6 @@ import { DeploymentResourcesController } from "../controllers/DeploymentResource
       inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
     },
     {
-      provide: ContainerAppsAPIClient,
-      useFactory: (config: ConfigService, credential: AzureCredential, resilience: ResilienceService): ContainerAppsAPIClient =>
-        new ContainerAppsAPIClient(credential, config.getOrThrow<string>("AZURE_SUBSCRIPTION_ID"), { retryOptions: { maxRetries: 0 }, additionalPolicies: [{ policy: createAzureResiliencePolicy(resilience, "azure-arm"), position: "perCall" }] }),
-      inject: [ConfigService, AZURE_CREDENTIAL, ResilienceService],
-    },
-    {
       provide: GetDeploymentCase,
       useFactory: (repository: InfraDeploymentRepository, reader: AzureDeploymentConfigurationReader, updates: InfraDeploymentResourceUpdateRepository): GetDeploymentCase => new GetDeploymentCase(repository, reader, updates),
       inject: [InfraDeploymentRepository, AzureDeploymentConfigurationReader, InfraDeploymentResourceUpdateRepository],
