@@ -71,9 +71,12 @@ export function revisionMatchesIdentity(revision: Revision, resourceId: string, 
 
 export function readyRevision(app: ContainerApp, revision: Revision, revisionName: string, configuration: DeploymentResourceConfigurationDetails): boolean {
   const scaleToZero: boolean = configuration.minScaling === 0 && revision.replicas === 0;
+  // ARM returns ScaledToZero for healthy idle revisions even though older SDK known
+  // values omit it. Idle is ready only when zero replicas are explicitly allowed.
+  const idle: boolean = scaleToZero && (revision.runningState === "ScaledToZero" || revision.runningState === "Stopped");
   return app.provisioningState === "Succeeded" && app.latestRevisionName === revisionName && app.latestReadyRevisionName === revisionName &&
     revision.provisioningState === "Provisioned" && revision.active === true && revision.healthState !== "Unhealthy" &&
-    (revision.runningState === "Running" || (scaleToZero && revision.runningState === "Stopped"));
+    (revision.runningState === "Running" || idle);
 }
 
 export function createResourceBaseline(app: ContainerApp, revision: Revision, identity: DeploymentResourceIdentity, environmentId: string): DeploymentResourceBaseline {
