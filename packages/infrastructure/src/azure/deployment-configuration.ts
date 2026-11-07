@@ -38,7 +38,7 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
     return {
       region: normalizeAzureRegion(app.location),
       maxVcpu: this.number(container.resources?.cpu),
-      maxMemory: this.memoryGiB(container.resources?.memory),
+      maxMemory: azureMemoryGiB(container.resources?.memory),
       minScaling: this.number(app.template?.scale?.minReplicas),
       maxScaling: this.number(app.template?.scale?.maxReplicas),
       targetPort: this.number(ingress?.targetPort),
@@ -65,14 +65,14 @@ export class AzureDeploymentConfigurationReader implements DeploymentConfigurati
     if (!Number.isFinite(value) || value < 0) throw new DeploymentConfigurationReadError("invalid");
     return value;
   }
+}
 
-  private memoryGiB(value: string | undefined): number | null {
-    if (value === undefined) return null;
-    const match: RegExpMatchArray | null = value.match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti)$/);
-    if (!match) throw new DeploymentConfigurationReadError("invalid");
-    const factors: Record<string, number> = { Ki: 1 / 1048576, Mi: 1 / 1024, Gi: 1, Ti: 1024 };
-    const memory: number = Number(match[1]) * factors[match[2]!]!;
-    if (!Number.isFinite(memory) || memory <= 0) throw new DeploymentConfigurationReadError("invalid");
-    return memory;
-  }
+export function azureMemoryGiB(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const match: RegExpMatchArray | null = value.match(/^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti)$/);
+  if (!match) throw new DeploymentConfigurationReadError("invalid");
+  const factors: Record<string, number> = { Ki: 1 / 1048576, Mi: 1 / 1024, Gi: 1, Ti: 1024 };
+  const memory: number = Number(match[1]) * factors[match[2]!]!;
+  if (!Number.isFinite(memory) || memory <= 0) throw new DeploymentConfigurationReadError("invalid");
+  return memory;
 }
