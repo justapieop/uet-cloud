@@ -30,8 +30,17 @@ export const DEPLOYMENT_RESOURCE_UPDATE_REPOSITORY: symbol = Symbol("DEPLOYMENT_
 export const DEPLOYMENT_RESOURCE_UPDATE_QUEUE: symbol = Symbol("DEPLOYMENT_RESOURCE_UPDATE_QUEUE");
 
 /** false means no write was submitted or a final failure has been verified; uncertain SDK outcomes must set true. */
+export interface DeploymentResourceUpdateErrorContext {
+  readonly observed?: DeploymentResourceConfigurationDetails | null;
+  readonly targetRevision?: string | null;
+}
 export class DeploymentResourceUpdateError extends Error {
-  public constructor(public readonly code: string, message: string, public readonly outcomeUnknown: boolean = false) { super(message); }
+  public constructor(
+    public readonly code: string,
+    message: string,
+    public readonly outcomeUnknown: boolean = false,
+    public readonly context?: DeploymentResourceUpdateErrorContext,
+  ) { super(message); }
 }
 export class DeploymentResourceUpdateNotFound extends Error {}
 export class DeploymentResourceVersionRequired extends Error {}

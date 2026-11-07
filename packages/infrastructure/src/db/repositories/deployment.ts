@@ -69,11 +69,6 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
 
   public async save(deployment: Deployment): Promise<void> {
     try {
-      const existing: InfraDeployment | null = await this.repository.findOneBy({ id: deployment.id });
-      if (!existing) {
-        await this.repository.insert(this.toRecord(deployment));
-        return;
-      }
       // Volume changes may save creation inputs, but a stale volume operation must
       // never erase the dedicated pointer or race a newly accepted configuration.
       const record: Partial<InfraDeployment> = this.toRecord(deployment);
@@ -81,7 +76,12 @@ export class InfraDeploymentRepository implements DeploymentDeletionQueueReposit
       const result: Awaited<ReturnType<Repository<InfraDeployment>["update"]>> = await this.repository.update({
         id: deployment.id, userId: deployment.userId, status: deployment.status, activeResourceUpdateId: IsNull(),
       }, changes);
-      if (result.affected !== 1) throw new DeploymentProgressConflictError();
+      if (result.affected === 1) return;
+      // Ordinary volume saves need only the guarded write. The uncommon insert
+      // path must first distinguish an absent row from a failed ownership/state guard.
+      const existing: InfraDeployment | null = await this.repository.findOneBy({ id: deployment.id });
+      if (existing) throw new DeploymentProgressConflictError();
+      await this.repository.insert(record);
     } catch (error: unknown) { throw this.translateError(error); }
   }
 

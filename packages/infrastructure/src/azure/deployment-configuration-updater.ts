@@ -51,6 +51,7 @@ export class AzureDeploymentConfigurationUpdater implements DeploymentConfigurat
       throw new DeploymentResourceUpdateError("RESOURCE_CONFIGURATION_INVALID", "The requested compute configuration is invalid");
     }
     if (input.lifecycle === "STOPPED") throw new AzureResourceBaselineError("RESOURCE_STOPPED_UNSUPPORTED");
+    input.abortSignal.throwIfAborted();
     const signal: AbortSignal = AbortSignal.any([input.abortSignal, AbortSignal.timeout(this.timeoutMs)]);
     const identity: DeploymentResourceIdentity = { ...input, abortSignal: signal };
     const initial: Awaited<ReturnType<AzureDeploymentConfigurationReader["readVerifiedSnapshot"]>> = await this.readPreflight(identity);
@@ -95,7 +96,9 @@ export class AzureDeploymentConfigurationUpdater implements DeploymentConfigurat
         signal.throwIfAborted();
         const result: DeploymentResourceReconcileResult = await this.reconcile({ ...input, targetRevision, abortSignal: signal });
         if (result.outcome === "succeeded") return { observed: result.observed, targetRevision: result.targetRevision, noOp: result.noOp };
-        if (result.outcome === "failed") throw new DeploymentResourceUpdateError(result.errorCode, result.errorMessage);
+        if (result.outcome === "failed") throw new DeploymentResourceUpdateError(result.errorCode, result.errorMessage, false, {
+          observed: result.observed, targetRevision: result.targetRevision ?? targetRevision,
+        });
         await delay(this.pollIntervalMs, undefined, { signal });
       }
     } catch (error: unknown) {
