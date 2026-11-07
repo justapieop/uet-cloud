@@ -21,7 +21,6 @@ import {
 import type { Request, Response } from "express";
 import { LoggedInGuard } from "../common/Auth.guard.js";
 import { RequirePermissions } from "../common/RequirePermissions.decorator.js";
-import { RouteReadCache } from "../common/ReadCache.js";
 import { DeploymentResourceOwnerGuard } from "../common/DeploymentResourceOwner.guard.js";
 import { DeploymentResourceUpdateReceiptDto, DeploymentResourceUpdateResponseDto, UpdateDeploymentResourcesDto } from "../dto/DeploymentResources.dto.js";
 
@@ -34,7 +33,6 @@ export class DeploymentResourcesController {
   public constructor(
     private readonly updateResources: UpdateDeploymentResourcesCase,
     private readonly getResourceUpdate: GetDeploymentResourceUpdateCase,
-    private readonly readCache: RouteReadCache,
   ) {}
 
   @Patch()
@@ -79,7 +77,6 @@ export class DeploymentResourcesController {
         request.get("Idempotency-Key") ?? "", request.get("If-Match"),
         { maxVcpu: input.max_vcpu, maxMemory: input.max_memory, minScaling: input.min_scaling, maxScaling: input.max_scaling });
       response.setHeader("Location", `/deployments/${id}/resource-updates/${receipt.operationId}`);
-      await this.readCache.invalidateDeployments(user.id);
       return new DeploymentResourceUpdateReceiptDto(receipt);
     } catch (error: unknown) { this.mapError(error); }
   }

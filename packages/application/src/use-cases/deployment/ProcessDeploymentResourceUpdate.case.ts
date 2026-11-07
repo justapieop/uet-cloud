@@ -14,13 +14,21 @@ export class ProcessDeploymentResourceUpdateCase {
     private readonly updater: DeploymentConfigurationUpdater,
     private readonly lock: DeploymentOperationLock,
     private readonly queue: DeploymentResourceUpdateQueueRepository,
+    private readonly onStateChanged?: (userId: string) => Promise<void>,
   ) {}
 
   public async exec(update: DeploymentResourceUpdate, abortSignal?: AbortSignal): Promise<void> {
     if (!update.claimToken || (update.status !== "APPLYING" && update.status !== "RECONCILING")) return;
     const claimToken: string = update.claimToken;
     let writeMayHaveStarted: boolean = update.targetRevision !== null;
-    const progress: (fields: Omit<DeploymentResourceUpdateProgress, "operationId" | "userId" | "claimToken" | "expectedStatus">) => Promise<boolean> = async (fields: Omit<DeploymentResourceUpdateProgress, "operationId" | "userId" | "claimToken" | "expectedStatus">): Promise<boolean> => this.queue.updateClaimed({ operationId: update.id, userId: update.userId, claimToken, expectedStatus: update.status, ...fields });
+    const progress: (fields: Omit<DeploymentResourceUpdateProgress, "operationId" | "userId" | "claimToken" | "expectedStatus">) => Promise<boolean> = async (fields: Omit<DeploymentResourceUpdateProgress, "operationId" | "userId" | "claimToken" | "expectedStatus">): Promise<boolean> => {
+      const changed: boolean = await this.queue.updateClaimed({ operationId: update.id, userId: update.userId, claimToken, expectedStatus: update.status, ...fields });
+      if (changed && this.onStateChanged && (fields.status === "SUCCEEDED" || fields.status === "FAILED" || fields.status === "RECONCILING")) {
+        // The fenced write has committed; cache errors cannot change its durable outcome.
+        try { await this.onStateChanged(update.userId); } catch {}
+      }
+      return changed;
+    };
     try {
       await withDeploymentOperationLock(this.lock, update.deploymentId, "configure", async (leaseSignal: AbortSignal): Promise<void> => {
         const signal: AbortSignal = abortSignal ? AbortSignal.any([leaseSignal, abortSignal]) : leaseSignal;

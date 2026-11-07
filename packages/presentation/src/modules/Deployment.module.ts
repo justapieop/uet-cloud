@@ -60,9 +60,10 @@ import { DeploymentResourcesController } from "../controllers/DeploymentResource
     DeploymentWorker,
     {
       provide: UpdateDeploymentResourcesCase,
-      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, flags: FeatureFlagsService): UpdateDeploymentResourcesCase =>
-        new UpdateDeploymentResourcesCase(uow, subscriptions, updater, lock, (): boolean => deploymentResourceUpdatesEnabled(flags)),
-      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, FeatureFlagsService],
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, flags: FeatureFlagsService, readCache: RouteReadCache): UpdateDeploymentResourcesCase =>
+        new UpdateDeploymentResourcesCase(uow, subscriptions, updater, lock, (): boolean => deploymentResourceUpdatesEnabled(flags),
+          (userId: string): Promise<void> => readCache.invalidateDeployments(userId)),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, FeatureFlagsService, RouteReadCache],
     },
     {
       provide: GetDeploymentResourceUpdateCase,
@@ -71,9 +72,10 @@ import { DeploymentResourcesController } from "../controllers/DeploymentResource
     },
     {
       provide: ProcessDeploymentResourceUpdateCase,
-      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, queue: InfraDeploymentResourceUpdateRepository): ProcessDeploymentResourceUpdateCase =>
-        new ProcessDeploymentResourceUpdateCase(uow, subscriptions, updater, lock, queue),
-      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, InfraDeploymentResourceUpdateRepository],
+      useFactory: (uow: UnitOfWork, subscriptions: StripeProvider, updater: AzureDeploymentConfigurationUpdater, lock: DeploymentOperationLock, queue: InfraDeploymentResourceUpdateRepository, readCache: RouteReadCache): ProcessDeploymentResourceUpdateCase =>
+        new ProcessDeploymentResourceUpdateCase(uow, subscriptions, updater, lock, queue,
+          (userId: string): Promise<void> => readCache.invalidateDeployments(userId)),
+      inject: [UNIT_OF_WORK, StripeProvider, AzureDeploymentConfigurationUpdater, DEPLOYMENT_OPERATION_LOCK, InfraDeploymentResourceUpdateRepository, RouteReadCache],
     },
     {
       provide: DeploymentResourceUpdateWorker,

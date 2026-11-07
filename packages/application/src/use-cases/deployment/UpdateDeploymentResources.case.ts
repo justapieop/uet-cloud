@@ -34,6 +34,7 @@ export class UpdateDeploymentResourcesCase {
     private readonly updater: DeploymentConfigurationUpdater,
     private readonly lock: DeploymentOperationLock,
     private readonly isEnabled: () => boolean = (): boolean => false,
+    private readonly onStateChanged?: (userId: string) => Promise<void>,
   ) {}
 
   public async exec(id: string, userId: string, key: string, ifMatch: string | undefined, input: DeploymentResourceConfigurationDetails): Promise<DeploymentResourceUpdateReceipt> {
@@ -62,7 +63,8 @@ export class UpdateDeploymentResourcesCase {
     if (baseline.version !== version) throw new DeploymentResourceVersionMismatch("The applied deployment configuration changed; refresh and retry");
     if (baseline.runningStatus !== (initial.deployment.status === "STOPPED" ? "Stopped" : "Running")) throw new DeploymentResourceUpdateError("RESOURCE_BASELINE_UNSETTLED", "Azure lifecycle does not match the deployment lifecycle");
     const products: readonly string[] = await this.subscriptions.getActiveSubscriptionProductIds(initial.user.stripeCustomerId);
-    return withDeploymentOperationLock(this.lock, id, "configure", async (signal: AbortSignal): Promise<DeploymentResourceUpdateReceipt> => {
+    let accepted: boolean = false;
+    const receipt: DeploymentResourceUpdateReceipt = await withDeploymentOperationLock(this.lock, id, "configure", async (signal: AbortSignal): Promise<DeploymentResourceUpdateReceipt> => {
       assertDeploymentOperationLease(signal);
       return this.uow.run(async (repo: UnitOfWorkRepositories): Promise<DeploymentResourceUpdateReceipt> => {
         const user: User | null = await repo.users.findByIdForUpdate(userId);
@@ -77,8 +79,8 @@ export class UpdateDeploymentResourcesCase {
           if (existing.userId !== userId || existing.deploymentId !== id) throw new DeploymentNotFoundError("Deployment not found");
           return existing.receipt;
         }
-        assertLifecycle(deployment, this.updater);
         if (deployment.status !== initial.deployment.status || deployment.resourceId !== initial.deployment.resourceId || deployment.name !== initial.deployment.name) throw new DeploymentResourceUpdateError("RESOURCE_DEPLOYMENT_CHANGED", "Deployment changed while accepting the update");
+        assertLifecycle(deployment, this.updater);
         if (deployment.activeResourceUpdateId) throw new DeploymentOperationConflictError();
         const plans: Plan[] = await repo.plans.findActiveByStripeProductIds(products);
         assertResourcePlan(plans, requested);
@@ -93,8 +95,14 @@ export class UpdateDeploymentResourcesCase {
         });
         await commands.insert(update);
         if (!await repo.deployment.setActiveResourceUpdate(id, userId, operationId)) throw new DeploymentOperationConflictError();
+        accepted = true;
         return receipt;
       });
     });
+    if (accepted && this.onStateChanged) {
+      // Cache availability must not turn a committed durable receipt into an HTTP failure.
+      try { await this.onStateChanged(userId); } catch {}
+    }
+    return receipt;
   }
 }
