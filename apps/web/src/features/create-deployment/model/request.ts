@@ -1,4 +1,5 @@
 import type { components } from "@kumo/rest";
+import { validateComputeConfiguration, type ComputeConfiguration, type ComputeConfigurationErrors } from "@/entities/deployment";
 
 export type DeploymentInput = components["schemas"]["CreateDeploymentDto"];
 export type DeploymentInputResult = { readonly data: DeploymentInput; readonly error?: never } | { readonly error: string; readonly data?: never };
@@ -13,18 +14,23 @@ export function parseDeploymentInput(form: FormData): DeploymentInputResult {
     if (url.protocol !== "https:" || url.username || url.password || repo.length > 2048) throw new Error();
   } catch { return { error: "Enter an HTTPS repository URL without embedded credentials." }; }
   const targetPort: number = Number(text("target_port"));
-  const cpu: number = Number(text("max_vcpu"));
-  const min: number = Number(text("min_scaling"));
-  const max: number = Number(text("max_scaling"));
+  const cpu: number = Number(text("max_vcpu") || NaN);
+  const configuration: ComputeConfiguration = {
+    max_vcpu: cpu,
+    max_memory: cpu * 2,
+    min_scaling: Number(text("min_scaling") || NaN),
+    max_scaling: Number(text("max_scaling") || NaN),
+  };
   if (!text("target_port") || !Number.isInteger(targetPort) || targetPort < 1 || targetPort > 65535) return { error: "Target port must be between 1 and 65535." };
-  if (!Number.isFinite(cpu) || cpu < 0.25 || !Number.isInteger(cpu * 4)) return { error: "Choose vCPU in increments of 0.25." };
-  if (!text("min_scaling") || !text("max_scaling") || !Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < 1 || min > max) return { error: "Minimum replicas must be zero or more and cannot exceed maximum replicas. Maximum must be at least one." };
+  const configurationErrors: ComputeConfigurationErrors = validateComputeConfiguration(configuration);
+  const configurationError: string | undefined = configurationErrors.max_vcpu ?? configurationErrors.max_memory ?? configurationErrors.min_scaling ?? configurationErrors.max_scaling;
+  if (configurationError) return { error: configurationError };
   const region: string = text("region");
   if (region && !/^[a-z][a-z0-9]{0,63}$/.test(region)) return { error: "Use an Azure region name without spaces, such as southeastasia." };
   const containerAccess: string = text("external");
   if (containerAccess && containerAccess !== "true" && containerAccess !== "false") return { error: "Choose public or internal container access." };
   const containerExternal: boolean = containerAccess !== "false";
-  const data: DeploymentInput = { name, repo, target_port: targetPort, external: containerExternal, max_vcpu: cpu, max_memory: cpu * 2, min_scaling: min, max_scaling: max };
+  const data: DeploymentInput = { name, repo, target_port: targetPort, external: containerExternal, ...configuration };
   const portTargets: FormDataEntryValue[] = form.getAll("additional_target_port");
   const portExposed: FormDataEntryValue[] = form.getAll("additional_exposed_port");
   const portExternal: FormDataEntryValue[] = form.getAll("additional_external");

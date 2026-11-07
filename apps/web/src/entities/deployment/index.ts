@@ -4,3 +4,5 @@ export { METRICS_RANGES, chartSeries, latestMetricSummary } from "./model/metric
 export type { ChartPoint, ChartSeries, DeploymentMetrics, MetricSummary, MetricsRange } from "./model/metrics";
 export { createLatestMetricsRequest, getDeploymentMetrics, metricsErrorMessage, MetricsRequestError } from "./api/get-deployment-metrics";
 export type { LatestMetricsRequest } from "./api/get-deployment-metrics";
+export { validateComputeConfiguration } from "./model/compute-configuration";
+export type { ComputeConfiguration, ComputeConfigurationErrors } from "./model/compute-configuration";
