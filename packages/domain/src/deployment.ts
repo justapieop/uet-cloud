@@ -181,6 +181,10 @@ export class Deployment extends Domain<DeploymentDetails> {
       (typeof this.details.deletionClaimToken !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.details.deletionClaimToken))) {
       return new InvalidDomainParams("Deployment.deletionClaimToken must be a UUID");
     }
+    if (this.details.activeResourceUpdateId !== undefined && this.details.activeResourceUpdateId !== null &&
+      (typeof this.details.activeResourceUpdateId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.details.activeResourceUpdateId))) {
+      return new InvalidDomainParams("Deployment.activeResourceUpdateId must be a UUID");
+    }
     const spec: DeploymentSpec | null | undefined = this.details.spec;
     if (spec) {
       if (spec.region !== undefined && (typeof spec.region !== "string" || !/^[a-z][a-z0-9]{0,63}$/.test(spec.region))) {

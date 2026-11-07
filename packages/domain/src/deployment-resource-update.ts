@@ -34,11 +34,26 @@ export interface DeploymentResourceUpdateDetails {
   readonly completedAt: Date | null;
 }
 export class DeploymentResourceUpdate extends Domain<DeploymentResourceUpdateDetails> {
-  public constructor(details: DeploymentResourceUpdateDetails) { super(details); }
+  private readonly snapshot: DeploymentResourceUpdateDetails;
+  public constructor(details: DeploymentResourceUpdateDetails) {
+    super(details);
+    this.snapshot = Object.freeze({
+      ...details,
+      requested: Object.freeze({ ...details.requested }),
+      baseline: Object.freeze({ ...details.baseline, configuration: Object.freeze({ ...details.baseline.configuration }) }),
+      receipt: Object.freeze({ ...details.receipt, requested: Object.freeze({ ...details.receipt.requested }) }),
+      observed: details.observed === null ? null : Object.freeze({ ...details.observed }),
+      createdAt: new Date(details.createdAt), startedAt: details.startedAt === null ? null : new Date(details.startedAt),
+      completedAt: details.completedAt === null ? null : new Date(details.completedAt),
+      claimExpiresAt: details.claimExpiresAt === null ? null : new Date(details.claimExpiresAt),
+      heartbeatAt: details.heartbeatAt === null ? null : new Date(details.heartbeatAt),
+    });
+  }
   public validate(): InvalidDomainParams | null {
     const details: DeploymentResourceUpdateDetails = this.details;
+    if (!details || typeof details !== "object") return new InvalidDomainParams("Invalid resource update details");
     const uuid: RegExp = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuid.test(details.id) || !uuid.test(details.deploymentId) || !details.userId || !details.billingCustomerId ||
+    if (!uuid.test(details.id) || !uuid.test(details.deploymentId) || (typeof details.userId !== "string" || details.userId.trim() === "") || (typeof details.billingCustomerId !== "string" || details.billingCustomerId.trim() === "") ||
       !/^[0-9a-f]{64}$/.test(details.keyHash) || !/^[0-9a-f]{64}$/.test(details.fingerprint)) return new InvalidDomainParams("Invalid resource update identity");
     const error: InvalidDomainParams | null = validateDeploymentResourceConfiguration(details.requested);
     if (error) return error;
@@ -60,31 +75,35 @@ export class DeploymentResourceUpdate extends Domain<DeploymentResourceUpdateDet
       const observedError: InvalidDomainParams | null = validateDeploymentResourceConfiguration(details.observed);
       if (observedError) return observedError;
     }
-    if (details.receipt.operationId !== details.id || details.receipt.deploymentId !== details.deploymentId || details.receipt.status !== "PENDING" ||
-      JSON.stringify(details.receipt.requested) !== JSON.stringify(details.requested)) return new InvalidDomainParams("Invalid resource update receipt");
+    if (details.noOp !== null && typeof details.noOp !== "boolean") return new InvalidDomainParams("Invalid resource update no-op value");
+    if (details.targetRevision !== null && (typeof details.targetRevision !== "string" || !details.targetRevision || details.targetRevision.length > 128)) return new InvalidDomainParams("Invalid resource update target revision");
+    if (details.errorCode !== null && (typeof details.errorCode !== "string" || !/^[A-Z0-9_]{1,64}$/.test(details.errorCode))) return new InvalidDomainParams("Invalid resource update error code");
+    if (details.errorMessage !== null && (typeof details.errorMessage !== "string" || details.errorMessage.length > 1000)) return new InvalidDomainParams("Invalid resource update error message");
+    if (!details.receipt || details.receipt.operationId !== details.id || details.receipt.deploymentId !== details.deploymentId || details.receipt.status !== "PENDING" ||
+      (!details.receipt.requested || details.receipt.requested.maxVcpu !== details.requested.maxVcpu || details.receipt.requested.maxMemory !== details.requested.maxMemory || details.receipt.requested.minScaling !== details.requested.minScaling || details.receipt.requested.maxScaling !== details.requested.maxScaling)) return new InvalidDomainParams("Invalid resource update receipt");
     return null;
   }
-  public get id(): string { return this.details.id; }
-  public get deploymentId(): string { return this.details.deploymentId; }
-  public get userId(): string { return this.details.userId; }
-  public get keyHash(): string { return this.details.keyHash; }
-  public get fingerprint(): string { return this.details.fingerprint; }
-  public get requested(): DeploymentResourceConfigurationDetails { return { ...this.details.requested }; }
-  public get baseline(): DeploymentResourceBaseline { return { ...this.details.baseline, configuration: { ...this.details.baseline.configuration } }; }
-  public get lifecycle(): DeploymentResourceUpdateLifecycle { return this.details.lifecycle; }
-  public get billingCustomerId(): string { return this.details.billingCustomerId; }
-  public get status(): DeploymentResourceUpdateStatus { return this.details.status; }
-  public get claimToken(): string | null { return this.details.claimToken; }
-  public get claimExpiresAt(): Date | null { return this.details.claimExpiresAt; }
-  public get heartbeatAt(): Date | null { return this.details.heartbeatAt; }
-  public get targetRevision(): string | null { return this.details.targetRevision; }
-  public get observed(): DeploymentResourceConfigurationDetails | null { return this.details.observed ? { ...this.details.observed } : null; }
-  public get noOp(): boolean | null { return this.details.noOp; }
-  public get errorCode(): string | null { return this.details.errorCode; }
-  public get errorMessage(): string | null { return this.details.errorMessage; }
-  public get receipt(): DeploymentResourceUpdateReceipt { return { ...this.details.receipt, requested: { ...this.details.receipt.requested } }; }
-  public get createdAt(): Date { return this.details.createdAt; }
-  public get startedAt(): Date | null { return this.details.startedAt; }
-  public get completedAt(): Date | null { return this.details.completedAt; }
-  public getDetails(): DeploymentResourceUpdateDetails { return { ...this.details, requested: this.requested, baseline: this.baseline, observed: this.observed, receipt: this.receipt }; }
+  public get id(): string { return this.snapshot.id; }
+  public get deploymentId(): string { return this.snapshot.deploymentId; }
+  public get userId(): string { return this.snapshot.userId; }
+  public get keyHash(): string { return this.snapshot.keyHash; }
+  public get fingerprint(): string { return this.snapshot.fingerprint; }
+  public get requested(): DeploymentResourceConfigurationDetails { return { ...this.snapshot.requested }; }
+  public get baseline(): DeploymentResourceBaseline { return { ...this.snapshot.baseline, configuration: { ...this.snapshot.baseline.configuration } }; }
+  public get lifecycle(): DeploymentResourceUpdateLifecycle { return this.snapshot.lifecycle; }
+  public get billingCustomerId(): string { return this.snapshot.billingCustomerId; }
+  public get status(): DeploymentResourceUpdateStatus { return this.snapshot.status; }
+  public get claimToken(): string | null { return this.snapshot.claimToken; }
+  public get claimExpiresAt(): Date | null { return this.snapshot.claimExpiresAt === null ? null : new Date(this.snapshot.claimExpiresAt); }
+  public get heartbeatAt(): Date | null { return this.snapshot.heartbeatAt === null ? null : new Date(this.snapshot.heartbeatAt); }
+  public get targetRevision(): string | null { return this.snapshot.targetRevision; }
+  public get observed(): DeploymentResourceConfigurationDetails | null { return this.snapshot.observed ? { ...this.snapshot.observed } : null; }
+  public get noOp(): boolean | null { return this.snapshot.noOp; }
+  public get errorCode(): string | null { return this.snapshot.errorCode; }
+  public get errorMessage(): string | null { return this.snapshot.errorMessage; }
+  public get receipt(): DeploymentResourceUpdateReceipt { return { ...this.snapshot.receipt, requested: { ...this.snapshot.receipt.requested } }; }
+  public get createdAt(): Date { return new Date(this.snapshot.createdAt); }
+  public get startedAt(): Date | null { return this.snapshot.startedAt === null ? null : new Date(this.snapshot.startedAt); }
+  public get completedAt(): Date | null { return this.snapshot.completedAt === null ? null : new Date(this.snapshot.completedAt); }
+  public getDetails(): DeploymentResourceUpdateDetails { return { ...this.snapshot, requested: this.requested, baseline: this.baseline, observed: this.observed, receipt: this.receipt, createdAt: this.createdAt, startedAt: this.startedAt, completedAt: this.completedAt, claimExpiresAt: this.claimExpiresAt, heartbeatAt: this.heartbeatAt }; }
 }

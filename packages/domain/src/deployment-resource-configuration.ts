@@ -20,13 +20,17 @@ export function validateDeploymentResourceConfiguration(details: DeploymentResou
 }
 
 export class DeploymentResourceConfiguration extends Domain<DeploymentResourceConfigurationDetails> {
-  public constructor(details: DeploymentResourceConfigurationDetails) { super(details); }
+  private readonly snapshot: DeploymentResourceConfigurationDetails;
+  public constructor(details: DeploymentResourceConfigurationDetails) {
+    super(details);
+    this.snapshot = Object.freeze({ ...details });
+  }
   public validate(): InvalidDomainParams | null { return validateDeploymentResourceConfiguration(this.details); }
-  public get maxVcpu(): number { return this.details.maxVcpu; }
-  public get maxMemory(): number { return this.details.maxMemory; }
-  public get minScaling(): number { return this.details.minScaling; }
-  public get maxScaling(): number { return this.details.maxScaling; }
-  public getDetails(): DeploymentResourceConfigurationDetails { return { ...this.details }; }
+  public get maxVcpu(): number { return this.snapshot.maxVcpu; }
+  public get maxMemory(): number { return this.snapshot.maxMemory; }
+  public get minScaling(): number { return this.snapshot.minScaling; }
+  public get maxScaling(): number { return this.snapshot.maxScaling; }
+  public getDetails(): DeploymentResourceConfigurationDetails { return { ...this.snapshot }; }
   public equals(other: DeploymentResourceConfigurationDetails): boolean {
     return this.maxVcpu === other.maxVcpu && this.maxMemory === other.maxMemory && this.minScaling === other.minScaling && this.maxScaling === other.maxScaling;
   }
