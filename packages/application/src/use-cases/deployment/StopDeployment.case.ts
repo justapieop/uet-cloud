@@ -23,7 +23,7 @@ export class StopDeploymentCase {
       throw new DeploymentNotFoundError(`Deployment with id ${input.id} was not found`);
     }
 
-    if (deployment.status !== "RUNNING") {
+    if (deployment.activeResourceUpdateId || deployment.status !== "RUNNING") {
       throw new InvalidDeploymentStatusError(`Cannot stop deployment in status ${deployment.status}; must be RUNNING`);
     }
 
