@@ -283,7 +283,7 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
                 </div>
 
                 <p className="pt-1 text-[11px] text-muted-dark">
-                  Provisioning Azure File Share and updating Container App revision… You can continue using Mission Control while this runs.
+                  Provisioning Azure File Share and updating Container App revision….
                 </p>
               </div>
             </div>
@@ -357,8 +357,8 @@ export function StorageVolumesCard({ deployment }: StorageVolumesCardProps): JSX
                   {isThisVolumeOperating && (
                     <p className="pt-1 text-[11px] text-muted-dark">
                       {operationMode === "delete"
-                        ? "Detaching volume and deleting Azure file share data… You can continue using Mission Control while this runs."
-                        : "Detaching volume from container and updating Container App revision… You can continue using Mission Control while this runs."}
+                        ? "Detaching volume and deleting Azure file share data…"
+                        : "Detaching volume from container and updating Container App revision…"}
                     </p>
                   )}
                 </div>

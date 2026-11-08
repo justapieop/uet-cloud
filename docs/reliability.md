@@ -63,3 +63,5 @@ Reference: [NestJS resilience](https://docs.nestjs.com/reliability/resilience) a
 ## CPU scale rules
 
 Opt-in CPU policies reuse deployment operation leases, atomic SQL due claims, current Stripe quota checks and conditional RUNNING -> SCALING transitions. Provider waits run outside transactions. Cooldown begins only after ACA confirms readiness, traffic and replica count. Failed/ambiguous writes leave the workflow FAILED; stale scaling is failed after the existing timeout plus one minute and is never automatically resubmitted. Accepted deployment deletion removes its rule in the same UnitOfWork. See [CPU scale rules](scale-rules.vi.md) for API, native-baseline behavior, recovery limits and local verification with Azure.
+
+A pending resource update retains its deployment guard between worker leases. Scale-rule mutations reject that guard, and automatic evaluation skips guarded deployments and rechecks the guard before claiming a scaling action. Reading a saved scale rule remains available while the resource update is in progress.

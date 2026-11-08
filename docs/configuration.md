@@ -13,6 +13,8 @@ Any combination is supported. For example, `NODE_ENV=development` with `CONFIG_S
 
 Set `CONFIG_SOURCE=local` to load application values from the repository-root `.env`.
 
+Deployment resource edits use the authenticated owner's `DeploymentUpdate` grant, current plan limits and revision verification. They require no feature flag in either configuration source. The former `DeploymentResourceUpdates` flag and `DEPLOYMENT_RESOURCE_UPDATES_ENABLED` setting no longer control resource updates.
+
 ## Azure source
 
 Set `CONFIG_SOURCE=azure` and `AZURE_APPCONFIG_ENDPOINT` to the App Configuration store endpoint, such as `https://<store>.azconfig.io`. The endpoint can be set in the process environment or `.env`. When the source is Azure, only `NODE_ENV`, the source switch, and the endpoint are read from `.env` for bootstrap; application values come from Azure. The API authenticates with `DefaultAzureCredential`, which can use a managed identity on Azure or a local Azure CLI sign-in.
@@ -45,7 +47,7 @@ Production session cookies use `Secure`, `HttpOnly`, and `SameSite=Lax`. When Az
 
 To verify, preserve the browser Network log through login and inspect the API callback's 302 response for `Set-Cookie: connect.sid=...; ...; Secure; HttpOnly; SameSite=Lax`. Inspect browser cookie storage on the callback hostname; HttpOnly cookies are absent from `document.cookie`. Cookies are host-only: separate API and frontend hostnames do not share this cookie. The current frontend forwards its incoming cookie for server-side API requests, so production must also provide a common browser origin (for example, path-based API routing) or a separately designed session-sharing arrangement. Proxy trust alone does not solve hostname separation. If the callback still sends no cookie, inspect API session-store errors and MongoDB connectivity.
 
-Application settings are loaded at startup; changes in Azure require an API restart to take effect. Feature flags are loaded at startup by a separate module and polled from Azure App Configuration every 12 hours. Consumers of the `FEATURE_FLAGS` provider read its current `feature_flags` property to get the latest snapshot. If a poll fails, the last known flags remain available until a later poll succeeds. With `CONFIG_SOURCE=local`, the provider supplies an empty flag list and does not poll.
+Application settings are loaded at startup; changes in Azure require an API restart to take effect. Feature flags are loaded at startup by a separate module and polled from Azure App Configuration every 12 hours. Consumers of the `FEATURE_FLAGS` provider read its current `feature_flags` property to get the latest snapshot. If a poll fails, the last known flags remain available until a later poll succeeds. With `CONFIG_SOURCE=local`, the provider supplies an empty flag list and does not poll. Resource updates are independent of this provider.
 
 ### Frontend authentication proxy
 

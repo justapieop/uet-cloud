@@ -302,7 +302,7 @@ export class DeploymentsController {
     const user: User = this.owner(request);
     try {
       const result: DeploymentReadResult = await this.getDeployment.exec(id, user.id);
-      return new DeploymentResponseDto(result.deployment, result.configuration);
+      return new DeploymentResponseDto(result.deployment, result.configuration, result.resourceUpdate);
     } catch (error: unknown) {
       if (error instanceof DeploymentNotFoundError) throw new NotFoundException(error.message);
       if (error instanceof DeploymentConfigurationReadError) {
@@ -329,7 +329,7 @@ export class DeploymentsController {
   ): Promise<DeploymentResponseDto[]> {
     const user: User = this.owner(request);
     try {
-      return (await this.getDeployment.list(user.id, filters)).map((result: DeploymentReadResult): DeploymentResponseDto => new DeploymentResponseDto(result.deployment, result.configuration));
+      return (await this.getDeployment.list(user.id, filters)).map((result: DeploymentReadResult): DeploymentResponseDto => new DeploymentResponseDto(result.deployment, result.configuration, result.resourceUpdate));
     } catch (error: unknown) {
       if (error instanceof DeploymentConfigurationReadError) {
         if (error.reason === "unavailable") throw new ServiceUnavailableException(error.message);

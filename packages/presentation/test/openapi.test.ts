@@ -25,10 +25,11 @@ import { RootLoginController } from "../dist/controllers/RootLogin.controller.js
 import { RootController } from "../dist/controllers/Root.controller.js";
 import { VolumesController } from "../dist/controllers/Volumes.controller.js";
 import { ScaleRulesController } from "../dist/controllers/ScaleRules.controller.js";
+import { DeploymentResourcesController } from "../dist/controllers/DeploymentResources.controller.js";
 import { createOpenApiConfig } from "../dist/common/OpenApi.js";
 
 test("OpenAPI covers controller operations, session authentication, and generated client paths", async (context: TestContext): Promise<void> => {
-  const controllers: Type<object>[] = [RootLoginController, AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController, GitHubWebhookController, RootController, VolumesController, ScaleRulesController];
+  const controllers: Type<object>[] = [RootLoginController, AuthController, UserController, DeploymentsController, DeploymentMetricsController, BuildSourceController, PlansController, UserPlansController, PlanSubscriptionsController, UserSubscriptionsController, RolesController, UserRolesController, RegionsController, RedeploymentsController, GitHubWebhookController, RootController, VolumesController, ScaleRulesController, DeploymentResourcesController];
   // Resolve controllers without starting SQL, sessions, workers, or cloud clients.
   const tokens: Set<Type<object> | string | symbol> = new Set([
     CheckPermissionsCase, CACHE_MANAGER,
@@ -59,7 +60,11 @@ test("OpenAPI covers controller operations, session authentication, and generate
       }
     }
   });
-  assert.equal(count, 48);
+  assert.equal(count, 50);
+  assert.ok(document.paths["/deployments/{id}"]?.patch?.responses["202"], "Resource edits remain available alongside scale rules");
+  assert.ok(document.paths["/deployments/{id}/resource-updates/{operationId}"]?.get);
+  assert.ok(document.paths["/deployments/{id}/scale-rules"]?.get);
+  assert.ok(document.paths["/deployments/{id}/scale-rule"]?.post);
   const webhook: OperationObject = document.paths["/github/webhook"]!.post!;
   assert.ok(webhook.responses["200"]);
   assert.ok(webhook.responses["401"]);

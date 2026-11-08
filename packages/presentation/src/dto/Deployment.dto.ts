@@ -1,9 +1,10 @@
-import type { Deployment, DeploymentPortMapping, DeploymentStatus, DeploymentVolume } from "@kumo/domain";
+import type { Deployment, DeploymentPortMapping, DeploymentStatus, DeploymentVolume, DeploymentResourceUpdate } from "@kumo/domain";
 import type { DeploymentConfiguration } from "@kumo/application";
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Exclude, Expose, Type } from "class-transformer";
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsNumber, IsObject, ValidateIf, ValidateNested, IsString, Matches, Max, MaxLength, Min } from "class-validator";
 import { DeploymentVolumeDto, DeploymentVolumeResponseDto } from "./Volume.dto.js";
+import { DeploymentResourceUpdateResponseDto } from "./DeploymentResources.dto.js";
 
 export class AdditionalDeploymentPortDto {
   @ApiProperty({ example: 8080, description: "Additional TCP port the container listens on" })
@@ -120,6 +121,8 @@ export class CreateDeploymentDto {
 
 @Exclude()
 export class DeploymentResponseDto {
+  @Expose({ name: "configuration_version" }) @ApiProperty({ name: "configuration_version", type: String, nullable: true }) public readonly configurationVersion: string | null;
+  @Expose({ name: "resource_update" }) @ApiProperty({ name: "resource_update", type: DeploymentResourceUpdateResponseDto, nullable: true }) public readonly resourceUpdate: DeploymentResourceUpdateResponseDto | null;
   @Expose() @ApiProperty({ type: String, nullable: true, description: "Requested region, or null when omitted" }) public readonly region: string | null;
   @Expose() @ApiProperty({ format: "uuid" }) public readonly id: string;
   @Expose() @ApiProperty() public readonly name: string;
@@ -140,7 +143,9 @@ export class DeploymentResponseDto {
   @Expose({ name: "created_at" }) @ApiProperty({ name: "created_at", type: Date }) public readonly createdAt: Date;
   @Expose({ name: "updated_at" }) @ApiProperty({ name: "updated_at", type: Date }) public readonly updatedAt: Date;
 
-  public constructor(deployment: Deployment, configuration?: DeploymentConfiguration | null) {
+  public constructor(deployment: Deployment, configuration?: DeploymentConfiguration | null, resourceUpdate?: DeploymentResourceUpdate | null) {
+    this.configurationVersion = configuration?.configurationVersion ?? null;
+    this.resourceUpdate = resourceUpdate ? new DeploymentResourceUpdateResponseDto(resourceUpdate) : null;
     this.region = configuration ? configuration.region : deployment.spec?.region ?? null;
     this.id = deployment.id;
     this.name = deployment.name;

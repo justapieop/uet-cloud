@@ -7,6 +7,7 @@ import { emptyRepositories } from "./support/repositories.ts";
 
 const NOW: Date = new Date("2026-11-07T10:10:30Z");
 const OLD: Date = new Date("2026-11-07T09:00:00Z");
+const RESOURCE_UPDATE_ID: string = "00000000-0000-4000-8000-000000000002";
 const DETAILS: ScaleRuleDetails = {
   deploymentId: "00000000-0000-4000-8000-000000000001", enabled: true, metric: "cpu", scaleOutThreshold: 80, scaleInThreshold: 20,
   minReplicas: 1, maxReplicas: 4, evaluationWindowSeconds: 120, cooldownSeconds: 300,
@@ -73,6 +74,7 @@ class Fixture implements UnitOfWork {
   public locked: boolean = false;
   public inTransaction: boolean = false;
   public scaleCalls: number = 0;
+  public inspectCalls: number = 0;
   public metricsCalls: number = 0;
   public metricValue: number = 0.45;
   public expectedTarget: number = 3;
@@ -84,7 +86,7 @@ class Fixture implements UnitOfWork {
   public scalingGate: Promise<void> = Promise.resolve();
   public readonly lock: VolumeOperationCoordinator = new VolumeOperationCoordinator();
   public readonly scaler: DeploymentScaler = {
-    inspect: async (): Promise<DeploymentScalingSnapshot> => { assert.equal(this.inTransaction, false); return snapshot(); },
+    inspect: async (): Promise<DeploymentScalingSnapshot> => { assert.equal(this.inTransaction, false); this.inspectCalls++; return snapshot(); },
     scale: async (input): Promise<void> => {
       assert.equal(this.inTransaction, false); assert.equal(this.deployment.status, "SCALING"); assert.equal(input.targetReplicas, this.expectedTarget);
       this.scaleCalls++; await this.scalingGate;
@@ -146,6 +148,63 @@ test("management persists CRUD, rejects other owners, and disables/deletes witho
   assert.equal(disabled.getDetails().enabled, false);
   await fixture.manager.delete(APP.id, "123");
   assert.deepEqual(await fixture.manager.list(APP.id, "123"), []);
+});
+
+test("pending resource updates block scale-rule mutations before subscription reads", async (): Promise<void> => {
+  const fixture: Fixture = new Fixture();
+  fixture.deployment = new Deployment({ ...APP.getDetails(), activeResourceUpdateId: RESOURCE_UPDATE_ID });
+  const original: ScaleRule | null = fixture.rule;
+  await assert.rejects(fixture.manager.save(APP.id, "123", { scaleOutThreshold: 90 }, false), DeploymentOperationConflictError);
+  await assert.rejects(fixture.manager.save(APP.id, "123", { enabled: false }, false), DeploymentOperationConflictError);
+  await assert.rejects(fixture.manager.delete(APP.id, "123"), DeploymentOperationConflictError);
+  assert.equal(fixture.rule, original);
+  assert.equal(await fixture.manager.get(APP.id, "123"), original, "read access remains available");
+  fixture.rule = null;
+  await assert.rejects(fixture.manager.save(APP.id, "123", DETAILS, true), DeploymentOperationConflictError);
+  assert.equal(fixture.rule, null);
+  assert.equal(fixture.stripeCalls, 0);
+  assert.equal(fixture.deployment.activeResourceUpdateId, RESOURCE_UPDATE_ID);
+});
+
+test("scale-rule acceptance rechecks resource updates after subscription lookup", async (): Promise<void> => {
+  const fixture: Fixture = new Fixture();
+  const original: ScaleRule | null = fixture.rule;
+  fixture.beforeClaim = (): void => {
+    fixture.deployment = new Deployment({ ...APP.getDetails(), activeResourceUpdateId: RESOURCE_UPDATE_ID });
+  };
+  await assert.rejects(fixture.manager.save(APP.id, "123", { scaleOutThreshold: 90 }, false), DeploymentOperationConflictError);
+  assert.equal(fixture.rule, original);
+  assert.equal(fixture.stripeCalls, 1);
+  assert.equal(fixture.deployment.activeResourceUpdateId, RESOURCE_UPDATE_ID);
+});
+
+test("pending resource updates skip scaling and external reads", async (): Promise<void> => {
+  const fixture: Fixture = new Fixture();
+  fixture.deployment = new Deployment({ ...APP.getDetails(), activeResourceUpdateId: RESOURCE_UPDATE_ID });
+  const original: ScaleRule | null = fixture.rule;
+  assert.equal((await fixture.evaluator.exec(APP.id)).action, "NO_ACTION");
+  assert.equal(fixture.inspectCalls, 0);
+  assert.equal(fixture.metricsCalls, 0);
+  assert.equal(fixture.stripeCalls, 0);
+  assert.equal(fixture.scaleCalls, 0);
+  assert.equal(fixture.rule, original);
+  assert.equal(fixture.deployment.status, "RUNNING");
+  assert.equal(fixture.deployment.activeResourceUpdateId, RESOURCE_UPDATE_ID);
+});
+
+test("scaling rechecks pending resource updates before claiming the deployment", async (): Promise<void> => {
+  const fixture: Fixture = new Fixture();
+  fixture.beforeClaim = (): void => {
+    fixture.deployment = new Deployment({ ...APP.getDetails(), activeResourceUpdateId: RESOURCE_UPDATE_ID });
+  };
+  assert.equal((await fixture.evaluator.exec(APP.id)).reason, "deployment_changed");
+  assert.equal(fixture.inspectCalls, 1);
+  assert.equal(fixture.metricsCalls, 1);
+  assert.equal(fixture.stripeCalls, 1);
+  assert.equal(fixture.scaleCalls, 0);
+  assert.equal(fixture.rule?.getDetails().lastScaledAt, null);
+  assert.equal(fixture.deployment.status, "RUNNING");
+  assert.equal(fixture.deployment.activeResourceUpdateId, RESOURCE_UPDATE_ID);
 });
 
 test("rule bounds and a single current plan must cover the saved reservation", async (): Promise<void> => {

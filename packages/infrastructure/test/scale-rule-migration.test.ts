@@ -2,7 +2,7 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DataSource, type QueryRunner } from "typeorm";
-import { DATABASE_MIGRATIONS, ScaleRules1794009600000 } from "../dist/db/migrations.js";
+import { DATABASE_MIGRATIONS, DeploymentResourceUpdates1794096000000, ScaleRules1794009600000 } from "../dist/db/migrations.js";
 
 test("scale rule migration emits SQL Server DDL with ownership linkage, constraints, and due index without changing deployments", async (): Promise<void> => {
   const source: DataSource = new DataSource({ type: "mssql", database: "ddl_only" });
@@ -17,6 +17,6 @@ test("scale rule migration emits SQL Server DDL with ownership linkage, constrai
     assert.match(ddl, /CREATE INDEX "IDX_scale_rules_due"/);
     assert.match(ddl, /"next_evaluation_at" datetime2\(7\) NOT NULL.*SYSUTCDATETIME\(\)/);
     assert.doesNotMatch(ddl, /(?:DROP|ALTER) TABLE "deployments"/);
-    assert.equal(DATABASE_MIGRATIONS.at(-1), ScaleRules1794009600000);
+    assert.deepEqual(DATABASE_MIGRATIONS.slice(-2), [ScaleRules1794009600000, DeploymentResourceUpdates1794096000000]);
   } finally { await runner.release(); }
 });

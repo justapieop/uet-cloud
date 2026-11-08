@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DeploymentMetrics, MetricSeries } from "./metrics.ts";
-import { METRICS_RANGES, chartSeries, latestMetricSummary } from "./metrics.ts";
+import type { ChartSeries, DeploymentMetrics, MetricSeries } from "./metrics.ts";
+import { METRICS_RANGES, activeRevisionAverageSeries, chartSeries, latestMetricSummary } from "./metrics.ts";
 import { createLatestMetricsRequest, getDeploymentMetrics, metricsErrorMessage, MetricsRequestError } from "../api/get-deployment-metrics.ts";
 
 function series(revision: string, replica: string | null, points: readonly [string, number | null][]): MetricSeries {
@@ -49,9 +49,20 @@ test("null is missing, zero is valid, and empty series have no current value", (
 
 test("chart data keeps separate, sorted replica and revision series", (): void => {
   const input: MetricSeries[] = [series("rev-a", "pod-1", [["2026-10-29T10:02:00Z", 4], ["2026-10-29T10:00:00Z", 1]])];
-  assert.equal(chartSeries(input, 60, "replica")[0].label, "rev-a / pod-1");
+  assert.equal(chartSeries(input, 60, "replica")[0].label, "Replica 1");
   assert.deepEqual(chartSeries(input, 60, "replica")[0].points.map((point): number | null => point.value), [1, 4]);
-  assert.equal(chartSeries(input, 60, "revision")[0].label, "rev-a");
+  assert.equal(chartSeries(input, 60, "revision")[0].label, "Active revision");
+});
+
+test("CPU and memory charts combine replicas into a name-free active-revision average", (): void => {
+  const input: MetricSeries[] = [
+    series("test-app-12--rev-a", "test-app-12--rev-a-replica-1", [["2026-10-29T10:00:00Z", 1], ["2026-10-29T10:01:00Z", 3]]),
+    series("test-app-12--rev-a", "test-app-12--rev-a-replica-2", [["2026-10-29T10:00:30Z", 5], ["2026-10-29T10:01:00Z", null]]),
+  ];
+  const result: ChartSeries[] = activeRevisionAverageSeries(input, 60);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.label, "Active revision average");
+  assert.deepEqual(result[0]?.points.map((point): number | null => point.value), [3, 3]);
 });
 
 test("all supported ranges are sent to the same-origin endpoint", async (): Promise<void> => {

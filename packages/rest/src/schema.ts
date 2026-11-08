@@ -4,26 +4,6 @@
  */
 
 export interface paths {
-    "/auth/root/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Sign in as the environment-configured root account
-         * @description Password login is reserved for the fixed root identity. Ordinary users must use GitHub. Establishes the normal session cookie.
-         */
-        post: operations["RootLoginController_signIn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -199,7 +179,11 @@ export interface paths {
         delete: operations["DeploymentsController_delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Queue an owned deployment's compute and replica configuration update
+         * @description Requires DeploymentUpdate, ownership, a verified Single revision baseline and active plan. Stopped apps are rejected until Azure preservation is verified.
+         */
+        patch: operations["DeploymentResourcesController_update"];
         trace?: never;
     };
     "/deployments/{id}/volumes": {
@@ -568,6 +552,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/root/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in as the environment-configured root account
+         * @description Password login is reserved for the fixed root identity. Ordinary users must use GitHub. Establishes the normal session cookie.
+         */
+        post: operations["RootLoginController_signIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -657,14 +661,27 @@ export interface paths {
         patch: operations["ScaleRulesController_update"];
         trace?: never;
     };
+    "/deployments/{id}/resource-updates/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an owned deployment's resource update operation */
+        get: operations["DeploymentResourcesController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        RootLoginDto: {
-            /** Format: password */
-            password: string;
-        };
         GitHubRepositoryResponseDto: {
             id: number;
             name: string;
@@ -769,6 +786,33 @@ export interface components {
             /** @description Persistent storage volumes to mount into the container */
             volumes?: components["schemas"]["DeploymentVolumeDto"][];
         };
+        DeploymentResourceConfigurationDto: {
+            max_vcpu: number;
+            max_memory: number;
+            min_scaling: number;
+            max_scaling: number;
+        };
+        DeploymentResourceUpdateResponseDto: {
+            /** Format: uuid */
+            operation_id: string;
+            /** Format: uuid */
+            deployment_id: string;
+            /** @enum {string} */
+            status: "PENDING" | "APPLYING" | "RECONCILING" | "SUCCEEDED" | "FAILED";
+            requested: components["schemas"]["DeploymentResourceConfigurationDto"];
+            /** @description Observed template resources; success also requires verification of the serving target revision */
+            observed: components["schemas"]["DeploymentResourceConfigurationDto"] | null;
+            no_op: boolean | null;
+            target_revision: string | null;
+            error_code: string | null;
+            error_message: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
         AdditionalDeploymentPortResponseDto: {
             target_port: number;
             exposed_port: number;
@@ -783,6 +827,8 @@ export interface components {
             access_mode: "ReadWrite" | "ReadOnly";
         };
         DeploymentResponseDto: {
+            configuration_version: string | null;
+            resource_update: components["schemas"]["DeploymentResourceUpdateResponseDto"] | null;
             /** @description Requested region, or null when omitted */
             region: string | null;
             /** Format: uuid */
@@ -1022,6 +1068,10 @@ export interface components {
             /** @example Japan East */
             display_name: string;
         };
+        RootLoginDto: {
+            /** Format: password */
+            password: string;
+        };
         VolumeAttachedDeploymentDto: {
             /** @example 00000000-0000-4000-8000-000000000001 */
             id: string;
@@ -1111,6 +1161,34 @@ export interface components {
             evaluation_window_seconds?: number;
             cooldown_seconds?: number;
         };
+        UpdateDeploymentResourcesDto: {
+            /**
+             * @description vCPU per replica, in positive increments of 0.25
+             * @example 1
+             */
+            max_vcpu: number;
+            /**
+             * @description GiB per replica; exactly twice max_vcpu
+             * @example 2
+             */
+            max_memory: number;
+            /** @example 0 */
+            min_scaling: number;
+            /**
+             * @description At least min_scaling
+             * @example 3
+             */
+            max_scaling: number;
+        };
+        DeploymentResourceUpdateReceiptDto: {
+            /** Format: uuid */
+            operation_id: string;
+            /** Format: uuid */
+            deployment_id: string;
+            /** @enum {string} */
+            status: "PENDING";
+            requested: components["schemas"]["DeploymentResourceConfigurationDto"];
+        };
     };
     responses: never;
     parameters: never;
@@ -1120,63 +1198,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    RootLoginController_signIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RootLoginDto"];
-            };
-        };
-        responses: {
-            /** @description Root session established */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid body; only password is accepted */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid credentials or ineligible root account */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Root password login is not configured */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Root login attempt limit reached; retry after one minute */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Root authentication is unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     AuthController_login: {
         parameters: {
             query?: never;
@@ -1656,6 +1677,101 @@ export interface operations {
             };
         };
     };
+    DeploymentResourcesController_update: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque Kumo configuration_version from a fresh deployment read */
+                "If-Match": string;
+                /** @description 1-255 printable ASCII characters; repeat with the same body and If-Match */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDeploymentResourcesDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    /** @description Owner-scoped operation status URL */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResourceUpdateReceiptDto"];
+                };
+            };
+            /** @description Invalid UUID/key or full compute configuration; unknown fields are rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active unsuspended owner session and required permission are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment busy, quota exceeded, or lifecycle/revision baseline unsupported */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description If-Match differs from the live stable baseline */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key reused with a different configuration or version */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Applied Azure configuration is invalid or missing */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure/Stripe unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     DeploymentsController_listVolumes: {
         parameters: {
             query?: never;
@@ -2009,6 +2125,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                "idempotency-key": string;
                 /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
                 "Idempotency-Key": string;
             };
@@ -2435,6 +2552,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                "idempotency-key": string;
                 "Idempotency-Key": string;
             };
             path: {
@@ -2921,6 +3039,63 @@ export interface operations {
             };
         };
     };
+    RootLoginController_signIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RootLoginDto"];
+            };
+        };
+        responses: {
+            /** @description Root session established */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid body; only password is accepted */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid credentials or ineligible root account */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root password login is not configured */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root login attempt limit reached; retry after one minute */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Root authentication is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     RootController_welcome: {
         parameters: {
             query?: never;
@@ -3295,6 +3470,49 @@ export interface operations {
             };
             /** @description Subscription verification unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentResourcesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResourceUpdateResponseDto"];
+                };
+            };
+            /** @description Invalid deployment or operation UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active unsuspended owner session and required permission are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or operation not found for this owner */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

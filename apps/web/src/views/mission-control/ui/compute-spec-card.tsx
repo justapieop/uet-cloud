@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { Deployment } from "@/entities/deployment";
+import { EditDeploymentSpec } from "@/features/manage-deployment";
 
 interface ComputeSpecCardProps {
   readonly deployment: Deployment;
@@ -13,9 +14,12 @@ export function ComputeSpecCard({ deployment }: ComputeSpecCardProps): JSX.Eleme
 
   return (
     <section aria-labelledby="compute-specs-heading" className="rounded-xl border border-surface-border bg-surface/40 p-5 sm:p-6">
-      <div className="border-b border-surface-border pb-4">
-        <h2 id="compute-specs-heading" className="text-sm font-medium text-foreground">Compute & Scaling</h2>
-        <p className="mt-0.5 text-xs text-muted-text">Allocated replica hardware quotas & auto-scale boundaries</p>
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-surface-border pb-4">
+        <div className="min-w-40 flex-1">
+          <h2 id="compute-specs-heading" className="text-sm font-medium text-foreground">Compute & Scaling</h2>
+          <p className="mt-0.5 text-xs text-muted-text">Resources per replica and autoscaling limits</p>
+        </div>
+        <EditDeploymentSpec deployment={deployment} />
       </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -40,7 +44,7 @@ export function ComputeSpecCard({ deployment }: ComputeSpecCardProps): JSX.Eleme
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-text">Replica Scaling Bounds</span>
           <span className="text-xs text-muted-text">
-            {minReplicas === 0 ? "Scale-to-zero idle allowed" : "Warm stand-by enforced"}
+            {minReplicas === null ? "Scaling configuration unavailable" : minReplicas === 0 ? "Scale-to-zero idle allowed" : "Warm stand-by enforced"}
           </span>
         </div>
         <div className="mt-3 flex items-center gap-3">
@@ -54,12 +58,6 @@ export function ComputeSpecCard({ deployment }: ComputeSpecCardProps): JSX.Eleme
             <span className="text-xs text-muted-dark">max</span>
           </div>
           <span className="text-xs text-muted-text">replicas</span>
-        </div>
-        <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
-          <div
-            className="h-full rounded-full bg-blue-500"
-            style={{ width: maxReplicas && maxReplicas > 0 ? `${Math.min(100, (maxReplicas / 10) * 100)}%` : "20%" }}
-          />
         </div>
       </div>
     </section>
