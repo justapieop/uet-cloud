@@ -54,3 +54,11 @@ False undoes a scheduled cancellation while Stripe allows it; it does not restar
 Retry uncertain mutations with the same key, actor, user, subscription, and body. The key is hashed with those identities and uses Stripe's native retention. Changed parameters or incompatible Stripe state can return 409; unavailable Stripe calls return 503. Stripe calls run outside SQL transactions. Pagination and unknown/malformed body fields produce 400; missing grants produce 403.
 
 Public plan selection and Checkout remain separate. No live Stripe calls or application-data mutations occur in normal backend tests; real plan CRUD/uniqueness coverage belongs to the isolated SQL integration suite.
+
+## Self-service subscriptions
+
+`GET /user/me/subscriptions` lists the signed-in user's subscriptions with the same `limit` (1–100, default 30) and `starting_after` cursor contract. `PATCH /user/me/subscriptions/:subscriptionId` accepts only `{ "cancel_at_period_end": true | false }` and requires `Idempotency-Key`. These routes require an active, unsuspended session, with no SubscriptionManage grant. The persisted session owner's customer is resolved server-side; users cannot select another account or customer. Stripe ownership is checked before mutation. Responses use the existing subscription DTOs and `private, no-store`; errors use 400/403/404/409/503 as on the management routes. Register the static self-service controller before the dynamic user controller.
+
+The billing page at `/account/billing` supports cancellation and undo with confirmation, retry-stable idempotency keys, status feedback, and refresh after successful API changes. Ended subscriptions are read-only. API listing follows cursor pages; failures show an unavailable state rather than substituting demo data.
+
+Development defaults to labelled demo subscriptions: active, cancellation scheduled, and canceled. Demo actions update the local preview and never call Stripe; reloading restores fixtures. Development always uses demo subscriptions. Production always uses the backend. This demo covers the subscriptions section; current-plan and usage sections retain their existing sources.

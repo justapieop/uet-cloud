@@ -73,7 +73,12 @@ resource web 'Microsoft.App/containerApps@2025-07-01' = {
         name: 'web'
         image: webImage
         resources: { cpu: json('0.25'), memory: '0.5Gi' }
-        env: [{ name: 'API_URL', value: apiUrl }]
+        env: [
+          { name: 'NODE_ENV', value: 'production' }
+          { name: 'PORT', value: '3000' }
+          { name: 'HOSTNAME', value: '0.0.0.0' }
+          { name: 'API_URL', value: apiUrl }
+        ]
         probes: [
           { type: 'Startup', tcpSocket: { port: 3000 }, periodSeconds: 5, failureThreshold: 30 }
           { type: 'Readiness', tcpSocket: { port: 3000 }, periodSeconds: 10, failureThreshold: 3 }

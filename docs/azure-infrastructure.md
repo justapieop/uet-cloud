@@ -182,6 +182,12 @@ Use those outputs rather than entering generated resource names yourself.
    because its durable workers run in-process. Probe '/' confirms HTTP startup;
    it does not prove all downstream dependencies or permissions are healthy.
 
+   The frontend explicitly runs with `NODE_ENV=production`, `PORT=3000`, and
+   `HOSTNAME=0.0.0.0`, with `API_URL` pointing to this environment's backend.
+   Subscription management uses the authenticated backend routes in deployed
+   environments; demo subscriptions are limited to local development. No
+   subscription demo configuration variable is required.
+
 Do not put secret values in `integrationSettings`: use the
 `integrationVaultReferences` key-to-secret-name map. References take precedence
 over plain settings with the same key. The infrastructure-generated SQL/Azure/URL

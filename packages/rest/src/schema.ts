@@ -305,26 +305,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/plans/{id}/subscriptions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create a Stripe-hosted subscription checkout for the signed-in user
-         * @description Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
-         */
-        post: operations["PlanSubscriptionsController_create"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/plans": {
         parameters: {
             query?: never;
@@ -402,6 +382,26 @@ export interface paths {
         get: operations["UserPlansController_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plans/{id}/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe-hosted subscription checkout for the signed-in user
+         * @description Includes all active prices on the linked product, including metered recurring and one-time initial charges. Returns checkout_url for a browser redirect to Stripe. Success and cancellation return to the configured frontend dashboard; redirects do not grant deployment access. Retry the same request with the same Idempotency-Key; a new key represents a new Checkout Session. Stripe's idempotency retention applies.
+         */
+        post: operations["PlanSubscriptionsController_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -620,6 +620,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/user/me/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the signed-in user's Stripe subscriptions in all statuses with cursor pagination */
+        get: operations["MySubscriptionsController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/user/me/subscriptions/{subscriptionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Schedule or undo cancellation at the end of the subscription period
+         * @description Only accepts cancel_at_period_end. Does not immediately cancel, reactivate an ended subscription, change prices, or remove metered items.
+         */
+        patch: operations["MySubscriptionsController_setCancellation"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -835,14 +872,6 @@ export interface components {
             commit_sha: string;
             image: string;
         };
-        PlanSubscriptionResponseDto: {
-            checkout_session_id: string;
-            /**
-             * Format: uri
-             * @description Redirect the browser to this Stripe-hosted payment page
-             */
-            checkout_url: string;
-        };
         PlanResponseDto: {
             id: string;
             name: string;
@@ -911,6 +940,14 @@ export interface components {
             has_plan: boolean;
             /** @description Active local plans matching the user's active Stripe subscriptions */
             plans: components["schemas"]["PlanResponseDto"][];
+        };
+        PlanSubscriptionResponseDto: {
+            checkout_session_id: string;
+            /**
+             * Format: uri
+             * @description Redirect the browser to this Stripe-hosted payment page
+             */
+            checkout_url: string;
         };
         AdminSubscriptionItemDto: {
             price_id: string;
@@ -1915,72 +1952,6 @@ export interface operations {
             };
         };
     };
-    PlanSubscriptionsController_create: {
-        parameters: {
-            query?: never;
-            header: {
-                "idempotency-key": string;
-                /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
-                "Idempotency-Key": string;
-            };
-            path: {
-                /** @description Local Kumo plan ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        /** @description No body is needed. Only an empty object is accepted; pricing is selected by the server. */
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PlanSubscriptionResponseDto"];
-                };
-            };
-            /** @description Invalid plan/key or nonempty request body; client price selection is forbidden */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description An active, unsuspended user with a linked Stripe customer is required */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Plan is missing, inactive, or not linked to Stripe */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe idempotency key conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     PlansController_list: {
         parameters: {
             query?: never;
@@ -2275,6 +2246,72 @@ export interface operations {
                 content?: never;
             };
             /** @description Stripe subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    PlanSubscriptionsController_create: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                /** @description Unique printable ASCII key per subscription request (1–255 characters); reuse for retries */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @description Local Kumo plan ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description No body is needed. Only an empty object is accepted; pricing is selected by the server. */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid plan/key or nonempty request body; client price selection is forbidden */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active, unsuspended user with a linked Stripe customer is required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Plan is missing, inactive, or not linked to Stripe */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe idempotency key conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe unavailable or product's active prices cannot form a subscription Checkout Session */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -2956,6 +2993,126 @@ export interface operations {
             };
             /** @description Volume is currently mounted to one or more deployments */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MySubscriptionsController_list: {
+        parameters: {
+            query?: {
+                limit?: number;
+                starting_after?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionPageDto"];
+                };
+            };
+            /** @description Invalid query, payload, subscription ID, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authenticated, active, unsuspended user required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User or user-owned subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription management unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MySubscriptionsController_setCancellation: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+                "Idempotency-Key": string;
+            };
+            path: {
+                subscriptionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCancellationDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSubscriptionResponseDto"];
+                };
+            };
+            /** @description Invalid query, payload, subscription ID, or Idempotency-Key */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authenticated, active, unsuspended user required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User or user-owned subscription not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stripe subscription management unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

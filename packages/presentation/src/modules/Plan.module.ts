@@ -5,7 +5,7 @@ import { ConfigService } from "@nestjs/config";
 import { getRepositoryToken, TypeOrmModule } from "@nestjs/typeorm";
 import type { Repository } from "typeorm";
 import { PlanSubscriptionsController } from "../controllers/PlanSubscriptions.controller.js";
-import { UserSubscriptionsController } from "../controllers/UserSubscriptions.controller.js";
+import { MySubscriptionsController, UserSubscriptionsController } from "../controllers/UserSubscriptions.controller.js";
 import { PlansController } from "../controllers/Plans.controller.js";
 import { UserPlansController } from "../controllers/UserPlans.controller.js";
 import { DatabaseModule } from "./Database.module.js";
@@ -15,7 +15,7 @@ import { createPlanCheckoutRedirects } from "../common/PlanCheckout.options.js";
 
 @Module({
   imports: [AppConfigModule, DatabaseModule, StripeModule, TypeOrmModule.forFeature([InfraPlan])],
-  controllers: [UserPlansController, PlansController, PlanSubscriptionsController, UserSubscriptionsController],
+  controllers: [MySubscriptionsController, UserPlansController, PlansController, PlanSubscriptionsController, UserSubscriptionsController],
   providers: [
     { provide: AdminPlansCase, useFactory: (plans: InfraPlanRepository): AdminPlansCase => new AdminPlansCase(plans), inject: [InfraPlanRepository] },
     { provide: AdminSubscriptionsCase, useFactory: (users: InfraUserRepository, stripe: StripeProvider): AdminSubscriptionsCase => new AdminSubscriptionsCase(users, stripe), inject: [InfraUserRepository, StripeProvider] },

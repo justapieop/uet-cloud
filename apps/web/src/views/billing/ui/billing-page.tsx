@@ -24,17 +24,6 @@ interface SubscriptionContentProps {
   readonly result: MySubscriptionsResult;
 }
 
-function formatCancellationDate(timestamp: number | null): string {
-  if (timestamp === null) return "At period end";
-
-  const date: Date = new Date(timestamp * 1000);
-  if (Number.isNaN(date.getTime())) return "Date unavailable";
-
-  return `${new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeZone: "UTC",
-  }).format(date)} UTC`;
-}
 
 function PlanContent({ result }: PlanContentProps): JSX.Element {
   if (result.kind === "forbidden" || result.kind === "unavailable") {
@@ -153,16 +142,13 @@ function SubscriptionContent({ result }: SubscriptionContentProps): JSX.Element 
               {subscription.status}
             </span>
           </div>
-          <p className="mt-3 text-sm text-muted-text">
-            {subscription.cancel_at_period_end
-              ? `Cancellation scheduled: ${formatCancellationDate(subscription.cancel_at)}.`
-              : "No period-end cancellation is scheduled."}
-          </p>
-          {result.source === "demo" && (
+          {(subscription.status === "active" || subscription.status === "trialing" || subscription.status === "past_due") && (
             <div className="mt-4">
               <CancellationControl
                 subscriptionId={subscription.id}
                 scheduled={subscription.cancel_at_period_end}
+                cancelAt={subscription.cancel_at}
+                demo={result.source === "demo"}
               />
             </div>
           )}
