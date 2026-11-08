@@ -199,7 +199,11 @@ export interface paths {
         delete: operations["DeploymentsController_delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Queue an owned deployment's compute and replica configuration update
+         * @description Requires DeploymentUpdate, ownership, a verified Single revision baseline and active plan. Stopped apps are rejected until Azure preservation is verified.
+         */
+        patch: operations["DeploymentResourcesController_update"];
         trace?: never;
     };
     "/deployments/{id}/volumes": {
@@ -657,6 +661,60 @@ export interface paths {
         patch: operations["MySubscriptionsController_setCancellation"];
         trace?: never;
     };
+    "/deployments/{id}/scale-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the owned deployment's scale rules (zero or one) */
+        get: operations["ScaleRulesController_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployments/{id}/scale-rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the owned deployment's scale rule */
+        get: operations["ScaleRulesController_get"];
+        put?: never;
+        /** Create one CPU scale rule within reserved deployment and current plan limits */
+        post: operations["ScaleRulesController_create"];
+        /** Delete the rule, retaining the current applied replica count */
+        delete: operations["ScaleRulesController_delete"];
+        options?: never;
+        head?: never;
+        /** Update a CPU scale rule; enabled=false pauses future evaluations */
+        patch: operations["ScaleRulesController_update"];
+        trace?: never;
+    };
+    "/deployments/{id}/resource-updates/{operationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read an owned deployment's resource update operation */
+        get: operations["DeploymentResourcesController_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -769,6 +827,33 @@ export interface components {
             /** @description Persistent storage volumes to mount into the container */
             volumes?: components["schemas"]["DeploymentVolumeDto"][];
         };
+        DeploymentResourceConfigurationDto: {
+            max_vcpu: number;
+            max_memory: number;
+            min_scaling: number;
+            max_scaling: number;
+        };
+        DeploymentResourceUpdateResponseDto: {
+            /** Format: uuid */
+            operation_id: string;
+            /** Format: uuid */
+            deployment_id: string;
+            /** @enum {string} */
+            status: "PENDING" | "APPLYING" | "RECONCILING" | "SUCCEEDED" | "FAILED";
+            requested: components["schemas"]["DeploymentResourceConfigurationDto"];
+            /** @description Observed template resources; success also requires verification of the serving target revision */
+            observed: components["schemas"]["DeploymentResourceConfigurationDto"] | null;
+            no_op: boolean | null;
+            target_revision: string | null;
+            error_code: string | null;
+            error_message: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+        };
         AdditionalDeploymentPortResponseDto: {
             target_port: number;
             exposed_port: number;
@@ -783,6 +868,8 @@ export interface components {
             access_mode: "ReadWrite" | "ReadOnly";
         };
         DeploymentResponseDto: {
+            configuration_version: string | null;
+            resource_update: components["schemas"]["DeploymentResourceUpdateResponseDto"] | null;
             /** @description Requested region, or null when omitted */
             region: string | null;
             /** Format: uuid */
@@ -794,7 +881,7 @@ export interface components {
             /** @description Whether ingress is external; applied Azure value for provisioned deployment reads */
             external: boolean | null;
             /** @enum {string} */
-            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
+            status: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "SCALING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
             image: string | null;
             build_id: string | null;
             resource_id: string | null;
@@ -1058,6 +1145,87 @@ export interface components {
              */
             region?: string;
         };
+        ScaleRuleResponseDto: {
+            deployment_id: string;
+            enabled: boolean;
+            /** @enum {string} */
+            metric: "cpu";
+            scale_out_threshold: number;
+            scale_in_threshold: number;
+            min_replicas: number;
+            max_replicas: number;
+            evaluation_window_seconds: number;
+            cooldown_seconds: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            last_evaluated_at: string | null;
+            /** Format: date-time */
+            last_scaled_at: string | null;
+            /** @enum {string} */
+            last_action: "SCALE_OUT" | "SCALE_IN" | "NO_ACTION";
+            last_reason: string;
+        };
+        CreateScaleRuleDto: {
+            /** @default false */
+            enabled: boolean;
+            /** @enum {string} */
+            metric: "cpu";
+            /** @description Percent of allocated vCPU, sustained in every one-minute bucket */
+            scale_out_threshold: number;
+            /** @description Must be lower than scale_out_threshold */
+            scale_in_threshold: number;
+            min_replicas: number;
+            max_replicas: number;
+            /** @description Whole minutes, from 120 to 1800 seconds */
+            evaluation_window_seconds: number;
+            cooldown_seconds: number;
+        };
+        UpdateScaleRuleDto: {
+            /** @default false */
+            enabled: boolean;
+            /** @enum {string} */
+            metric?: "cpu";
+            /** @description Percent of allocated vCPU, sustained in every one-minute bucket */
+            scale_out_threshold?: number;
+            /** @description Must be lower than scale_out_threshold */
+            scale_in_threshold?: number;
+            min_replicas?: number;
+            max_replicas?: number;
+            /** @description Whole minutes, from 120 to 1800 seconds */
+            evaluation_window_seconds?: number;
+            cooldown_seconds?: number;
+        };
+        UpdateDeploymentResourcesDto: {
+            /**
+             * @description vCPU per replica, in positive increments of 0.25
+             * @example 1
+             */
+            max_vcpu: number;
+            /**
+             * @description GiB per replica; exactly twice max_vcpu
+             * @example 2
+             */
+            max_memory: number;
+            /** @example 0 */
+            min_scaling: number;
+            /**
+             * @description At least min_scaling
+             * @example 3
+             */
+            max_scaling: number;
+        };
+        DeploymentResourceUpdateReceiptDto: {
+            /** Format: uuid */
+            operation_id: string;
+            /** Format: uuid */
+            deployment_id: string;
+            /** @enum {string} */
+            status: "PENDING";
+            requested: components["schemas"]["DeploymentResourceConfigurationDto"];
+        };
     };
     responses: never;
     parameters: never;
@@ -1290,7 +1458,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @description Filter by deployment status */
-                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
+                status?: "PENDING" | "PROVISIONING" | "RUNNING" | "STOPPED" | "STARTING" | "STOPPING" | "SCALING" | "FAILED" | "DELETE_PENDING" | "DELETING" | "DELETE_FAILED" | "DELETED";
                 /** @description Case-insensitive literal substring of the deployment name */
                 name?: string;
                 /** @description Exact applied Azure region for provisioned deployments; requested region for deployments without an Azure resource */
@@ -1596,6 +1764,101 @@ export interface operations {
             };
             /** @description Deployment is busy or in a state that cannot be deleted */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentResourcesController_update: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Opaque Kumo configuration_version from a fresh deployment read */
+                "If-Match": string;
+                /** @description 1-255 printable ASCII characters; repeat with the same body and If-Match */
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDeploymentResourcesDto"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    /** @description Owner-scoped operation status URL */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResourceUpdateReceiptDto"];
+                };
+            };
+            /** @description Invalid UUID/key or full compute configuration; unknown fields are rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active unsuspended owner session and required permission are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment busy, quota exceeded, or lifecycle/revision baseline unsupported */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description If-Match differs from the live stable baseline */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Idempotency-Key reused with a different configuration or version */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Applied Azure configuration is invalid or missing */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Azure/Stripe unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -3113,6 +3376,300 @@ export interface operations {
             };
             /** @description Stripe subscription management unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"][];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateScaleRuleDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Rule exists, deployment busy, or reserved/plan quota exceeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Another deployment operation is in progress */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ScaleRulesController_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateScaleRuleDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScaleRuleResponseDto"];
+                };
+            };
+            /** @description Invalid UUID, rule configuration, or unknown body fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An eligible session and required deployment permissions are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or rule not found for this owner */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment busy or reserved/plan quota exceeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Subscription verification unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeploymentResourcesController_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentResourceUpdateResponseDto"];
+                };
+            };
+            /** @description Invalid deployment or operation UUID */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Active unsuspended owner session and required permission are required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Deployment or operation not found for this owner */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

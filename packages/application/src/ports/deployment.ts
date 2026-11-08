@@ -12,6 +12,8 @@ export interface DeploymentProgressOptions {
 }
 
 export interface DeploymentRepository {
+  findByIdAndUserIdForUpdate?(id: string, userId: string): Promise<Deployment | null>;
+  setActiveResourceUpdate?(id: string, userId: string, operationId: string): Promise<boolean>;
   findById(id: string): Promise<Deployment | null>;
   findByIdAndUserId(id: string, userId: string): Promise<Deployment | null>;
   findByUserId(userId: string, filters?: DeploymentListFilters): Promise<Deployment[]>;
@@ -44,6 +46,7 @@ export interface DeploymentProvisionInput {
   readonly name: string;
   readonly spec: DeploymentSpec;
   readonly resourceId?: string;
+  readonly onBeforeImageUpdate?: (baseline: import("@kumo/domain").DeploymentResourceBaseline) => Promise<void>;
 }
 
 export interface DeploymentProvisionResult {

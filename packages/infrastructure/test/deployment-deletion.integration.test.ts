@@ -16,6 +16,7 @@ import {
   InfraUserRole,
   InfraUser,
   InfraVolume,
+  InfraScaleRule,
   TypeOrmUnitOfWork,
 } from "../dist/db/index.js";
 
@@ -64,7 +65,7 @@ test("SQL Server deletion claims, operation leases, stale recovery, and slot rel
   const source: DataSource = new DataSource({
     ...options,
     database,
-    entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraBuild, InfraVolume],
+    entities: [InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraBuild, InfraVolume, InfraScaleRule],
     migrations: DATABASE_MIGRATIONS,
     synchronize: false,
   });

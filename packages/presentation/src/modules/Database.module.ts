@@ -5,13 +5,19 @@ import { PinoLogger } from "nestjs-pino";
 import { DataSource, TypeORMError } from "typeorm";
 import {
   DEPLOYMENT_OPERATION_LOCK,
+  DEPLOYMENT_RESOURCE_UPDATE_REPOSITORY,
+  DEPLOYMENT_RESOURCE_UPDATE_QUEUE,
   UNIT_OF_WORK,
 } from "@kumo/application";
 import {
   InfraDeployment,
+  InfraScaleRule,
+  InfraScaleRuleRepository,
   DATABASE_MIGRATIONS,
   InfraDeploymentOperationLock,
   InfraDeploymentRepository,
+  InfraDeploymentResourceUpdate,
+  InfraDeploymentResourceUpdateRepository,
   InfraPlan,
   InfraRole,
   InfraRoleRepository,
@@ -68,13 +74,21 @@ import { AppConfigModule } from "./AppConfig.module.js";
       },
       inject: [ConfigService, PinoLogger],
     }),
-    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraPlan, InfraVolume]),
+    TypeOrmModule.forFeature([InfraUser, InfraRole, InfraUserRole, InfraDeployment, InfraDeploymentResourceUpdate, InfraPlan, InfraVolume, InfraScaleRule]),
   ],
   providers: [
     InfraUserRepository,
     InfraRoleRepository,
     InfraUserRoleRepository,
     InfraDeploymentRepository,
+    InfraScaleRuleRepository,
+    {
+      provide: InfraDeploymentResourceUpdateRepository,
+      useFactory: (dataSource: DataSource): InfraDeploymentResourceUpdateRepository => new InfraDeploymentResourceUpdateRepository(dataSource.manager),
+      inject: [DataSource],
+    },
+    { provide: DEPLOYMENT_RESOURCE_UPDATE_REPOSITORY, useExisting: InfraDeploymentResourceUpdateRepository },
+    { provide: DEPLOYMENT_RESOURCE_UPDATE_QUEUE, useExisting: InfraDeploymentResourceUpdateRepository },
     {
       provide: DEPLOYMENT_OPERATION_LOCK,
       useFactory: (dataSource: DataSource, config: ConfigService): InfraDeploymentOperationLock => {
@@ -92,10 +106,14 @@ import { AppConfigModule } from "./AppConfig.module.js";
     },
   ],
   exports: [
+    InfraScaleRuleRepository,
     UNIT_OF_WORK,
     DEPLOYMENT_OPERATION_LOCK,
     InfraStripeCustomerLinkRepository,
     InfraDeploymentRepository,
+    InfraDeploymentResourceUpdateRepository,
+    DEPLOYMENT_RESOURCE_UPDATE_REPOSITORY,
+    DEPLOYMENT_RESOURCE_UPDATE_QUEUE,
     InfraVolumeRepository,
     InfraUserRepository,
     InfraRoleRepository,

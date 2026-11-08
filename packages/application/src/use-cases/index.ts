@@ -9,3 +9,6 @@ export * from "./plan/AdminPlans.case.js";
 export * from "./plan/AdminSubscriptions.case.js";
 export * from "./deployment/GetDeploymentRegions.case.js";
 export * from "./volume/index.js";
+export * from "./deployment/UpdateDeploymentResources.case.js";
+export * from "./deployment/ProcessDeploymentResourceUpdate.case.js";
+export * from "./deployment/GetDeploymentResourceUpdate.case.js";

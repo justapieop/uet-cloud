@@ -145,7 +145,7 @@ test("AttachVolumeCase rejects attaching when deployment status is invalid", asy
       run: async <T>(operation: (repos: UnitOfWorkRepositories) => Promise<T>): Promise<T> => {
         const repos: UnitOfWorkRepositories = {
           ...emptyRepositories(),
-          users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser() },
+          users: { ...emptyRepositories().users, findById: async (): Promise<User | null> => createTestUser(), findByIdForUpdate: async (): Promise<User | null> => createTestUser() },
           deployment: { ...emptyRepositories().deployment, findByIdAndUserId: async (): Promise<Deployment | null> => deployment },
         };
         return operation(repos);

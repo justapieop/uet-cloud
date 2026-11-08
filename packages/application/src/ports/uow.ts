@@ -1,3 +1,4 @@
+import type { DeploymentResourceUpdateRepository } from "./deployment-resource-update.js";
 import type { DeploymentRequestRepository } from "./deployment-request.js";
 import type { DeploymentRepository } from "./deployment.js";
 import type { RoleRepository } from "./role.js";
@@ -5,8 +6,10 @@ import type { UserRoleRepository } from "./user-role.js";
 import type { UserRepository } from "./user.js";
 import type { PlanRepository } from "./plan.js";
 import type { VolumeRepository } from "./volume.js";
+import type { ScaleRuleRepository } from "./scale-rule.js";
 
 export interface UnitOfWorkRepositories {
+  deploymentResourceUpdates?: DeploymentResourceUpdateRepository;
   users: UserRepository;
   roles: RoleRepository;
   userRoles: UserRoleRepository;
@@ -14,6 +17,7 @@ export interface UnitOfWorkRepositories {
   deploymentRequests: DeploymentRequestRepository;
   plans: PlanRepository;
   volumes: VolumeRepository;
+  scaleRules: ScaleRuleRepository;
 }
 
 export interface UnitOfWork {

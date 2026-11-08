@@ -2,7 +2,7 @@ import type { AzureFileProperties, ContainerAppsAPIClient, Container, ContainerA
 import type { ResourceManagementClient, ResourceGroup } from "@azure/arm-resources";
 import type { StorageManagementClient, StorageAccountListKeysResult } from "@azure/arm-storage";
 import { BuildProviderError, type DeploymentProvisioner, type DeploymentProvisionInput, type DeploymentProvisionResult, type GetBuildCase, type TriggerBuildCase, type TriggerBuildInput, type TriggerBuildResult, type VolumeManager } from "@kumo/application";
-import { validateDeploymentPorts, validateDeploymentVolumes, type BuildDetails, type DeploymentPortMapping, type DeploymentVolume, type InvalidDomainParams } from "@kumo/domain";
+import { validateDeploymentPorts, validateDeploymentVolumes, type BuildDetails, type DeploymentPortMapping, type DeploymentVolume, type DeploymentResourceBaseline, type InvalidDomainParams } from "@kumo/domain";
 import { Injectable } from "@nestjs/common";
 import type { ConfigService } from "@nestjs/config";
 import { setTimeout as delay } from "node:timers/promises";
@@ -15,6 +15,7 @@ import { legacyProvisioningEnabled } from "../feature-flags/legacy-provisioning.
 import { AzureLegacyEnvironmentProvisioner } from "./legacy-environment.js";
 import { managedEnvironmentReference, sharedEnvironmentReference, validateEnvironment, type ManagedEnvironmentReference } from "./shared-environment.js";
 import { legacyVolumeShareName, storageLinkName as createStorageLinkName, userStorageAccountName as createUserStorageAccountName, volumeShareName as createVolumeShareName } from "./volume-storage-names.js";
+import type { AzureDeploymentConfigurationReader } from "./deployment-configuration.js";
 
 export interface AzureRgInput {
   userId: string;
@@ -41,6 +42,7 @@ export interface AzureDeploymentCreateInput extends AzureAcaEnvInput {
   resourceId?: string;
   volumes?: readonly DeploymentVolume[];
   onBuildAccepted?: (id: string, image: string) => Promise<void>;
+  onBeforeImageUpdate?: (baseline: DeploymentResourceBaseline) => Promise<void>;
 }
 
 export interface AzureProviderClients {
@@ -67,6 +69,7 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     private readonly clients: AzureProviderClients,
     private readonly legacyFactory: () => Pick<AzureLegacyEnvironmentProvisioner, "getAcaEnvironment">,
     private readonly featureFlags: FeatureFlagConfiguration,
+    private readonly configurationReader?: AzureDeploymentConfigurationReader,
   ) {
     this.platformResourceGroup = config.get<string>("AZURE_PLATFORM_RESOURCE_GROUP")
       ?? config.getOrThrow<string>("AZURE_RG_NAME");
@@ -128,10 +131,12 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
       ...input.spec, name: input.name, userId: input.userId, deploymentId: input.id, resourceId: input.resourceId,
       resources: { cpu: input.spec.maxVcpu, memory: `${input.spec.maxMemory}Gi` },
       minReplicas: input.spec.minScaling, maxReplicas: input.spec.maxScaling,
-      volumes: input.spec.volumes, onBuildAccepted,
+      volumes: input.spec.volumes, onBuildAccepted, onBeforeImageUpdate: input.onBeforeImageUpdate,
     }));
     const buildId: string | undefined = app.tags?.["kumo-build-id"];
-    const image: string | undefined = app.template?.containers?.[0]?.image;
+    const containers: Container[] = app.template?.containers ?? [];
+    const image: string | undefined = (containers.find((container: Container): boolean => container.name === input.name)
+      ?? (containers.length === 1 ? containers[0] : undefined))?.image;
     if (!app.id || !buildId || !image || app.provisioningState !== "Succeeded") {
       throw new BuildProviderError("Azure did not return a successfully provisioned app with build metadata");
     }
@@ -192,6 +197,8 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
     if (existing) {
       if (input.resourceId && existing.id?.toLowerCase() !== input.resourceId.toLowerCase()) throw new BuildProviderError("Redeployment resource identity changed");
       if (!input.resourceId) return existing;
+      if (!this.configurationReader || !input.onBeforeImageUpdate || !input.deploymentId) throw new BuildProviderError("Redeployment applied configuration verification is unavailable");
+      await this.configurationReader.readBaseline({ resourceId: input.resourceId, deploymentId: input.deploymentId, userId: input.userId, appName: input.name, abortSignal: signal });
     } else {
       await this.getUserRg({ ...input, region: normalizeAzureRegion(environment.location), abortSignal: signal });
     }
@@ -223,8 +230,17 @@ export class AzureProvider implements DeploymentProvisioner, VolumeManager {
       throw new BuildProviderError("Build image does not belong to the configured private registry");
     }
     if (existing && input.resourceId) {
-      // Read again after the potentially long build so out-of-band settings are preserved.
-      const current: ContainerApp = await runBuildStep("Redeployment configuration lookup", () => this.clients.containerApps.get(rgName, input.name, { abortSignal: signal }));
+      if (!this.configurationReader || !input.onBeforeImageUpdate || !input.deploymentId) throw new BuildProviderError("Redeployment applied configuration verification is unavailable");
+      const identity: { readonly resourceId: string; readonly deploymentId: string; readonly userId: string; readonly appName: string; readonly abortSignal: AbortSignal } = {
+        resourceId: input.resourceId, deploymentId: input.deploymentId, userId: input.userId, appName: input.name, abortSignal: signal,
+      };
+      const baseline: DeploymentResourceBaseline = await this.configurationReader.readBaseline(identity);
+      await input.onBeforeImageUpdate(baseline);
+      signal.throwIfAborted();
+      // Verify again after billing, then preserve the same verified live template.
+      const snapshot: { readonly app: ContainerApp; readonly baseline: DeploymentResourceBaseline } = await this.configurationReader.readVerifiedSnapshot(identity);
+      if (snapshot.baseline.version !== baseline.version) throw new BuildProviderError("Redeployment applied configuration changed during quota verification");
+      const current: ContainerApp = snapshot.app;
       if (current.id?.toLowerCase() !== input.resourceId.toLowerCase() || current.tags?.["kumo-deployment-id"] !== input.deploymentId ||
         (current.environmentId ?? current.managedEnvironmentId)?.toLowerCase() !== environment.id!.toLowerCase()) throw new BuildProviderError("Redeployment ownership or environment changed");
       const containers: NonNullable<NonNullable<ContainerApp["template"]>["containers"]> = current.template?.containers ?? [];

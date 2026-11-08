@@ -27,6 +27,7 @@ export class DeleteDeploymentCase {
     assertDeploymentOperationLease(signal);
     const deployment: Deployment | null = await repo.deployment.findByIdAndUserId(input.id, input.userId);
     if (!deployment) throw new DeploymentNotFoundError(`Deployment with id ${input.id} was not found`);
+    if (deployment.activeResourceUpdateId) throw new InvalidDeploymentStatusError("A resource update is still in progress");
     if (deployment.status === "DELETE_PENDING" || deployment.status === "DELETING" || deployment.status === "DELETED") return;
     if (deployment.status !== "PENDING" && deployment.status !== "RUNNING" && deployment.status !== "STOPPED" &&
       deployment.status !== "FAILED" && deployment.status !== "DELETE_FAILED") {
@@ -40,5 +41,6 @@ export class DeleteDeploymentCase {
       { clearError: true },
     );
     if (!transitioned) throw new InvalidDeploymentStatusError("Deployment changed before the deletion request was accepted");
+    await repo.scaleRules.delete(deployment.id);
   }
 }

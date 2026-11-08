@@ -1,4 +1,5 @@
 import { ResilienceService } from "@nestjs/resilience";
+import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import { MonitorClient } from "@azure/arm-monitor";
 import { GetDeploymentMetricsCase } from "@kumo/application";
 import { createAzureResiliencePolicy, AZURE_CREDENTIAL, AzureMonitorMetricsReader, InfraDeploymentRepository, type AzureCredential } from "@kumo/infrastructure";
@@ -33,9 +34,10 @@ import { ConfigService } from "@nestjs/config";
     },
     {
       provide: AzureMonitorMetricsReader,
-      useFactory: (config: ConfigService, client: MonitorClient): AzureMonitorMetricsReader => new AzureMonitorMetricsReader(config, client.metrics),
-      inject: [ConfigService, MonitorClient],
+      useFactory: (config: ConfigService, client: MonitorClient, apps: ContainerAppsAPIClient): AzureMonitorMetricsReader => new AzureMonitorMetricsReader(config, client.metrics, apps.containerApps),
+      inject: [ConfigService, MonitorClient, ContainerAppsAPIClient],
     },
   ],
+  exports: [AzureMonitorMetricsReader],
 })
 export class MonitoringModule {}

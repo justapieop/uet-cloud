@@ -1,5 +1,7 @@
 # External provider dependencies
 
+CPU scale rules reuse MonitoringModule's exported AzureMonitorMetricsReader. DeploymentModule supplies AzureDeploymentScaler with the existing ContainerAppsAPIClient's app get/update, revision get, and replica list surfaces. The scaler shares workload scope and memory normalization with existing adapters; it constructs no fallback client or credential. See [CPU scale rules](scale-rules.vi.md).
+
 Nest module factories construct external clients and pass them to infrastructure providers. Providers require these dependencies; they do not create fallback SDK clients or credentials.
 
 `ExternalClientsModule` supplies the shared `AZURE_CREDENTIAL` and `HTTP_TRANSPORT` tokens exported by `@kumo/infrastructure`. Their defaults are `DefaultAzureCredential` and the Node fetch implementation.

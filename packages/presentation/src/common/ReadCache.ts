@@ -106,6 +106,12 @@ export class UserReadCacheInterceptor implements NestInterceptor<unknown, unknow
 
   private ttl(policy: ReadCachePolicy, value: unknown): number {
     const values: unknown[] = Array.isArray(value) ? value : [value];
+    if (policy.group === "deployments" && values.some((item: unknown): boolean => {
+      if (!item || typeof item !== "object") return false;
+      const operation: unknown = "resourceUpdate" in item ? item.resourceUpdate : "resource_update" in item ? item.resource_update : null;
+      return typeof operation === "object" && operation !== null && "status" in operation &&
+        (operation.status === "PENDING" || operation.status === "APPLYING" || operation.status === "RECONCILING");
+    })) return policy.ttlMs;
     const statuses: unknown[] = values.map((item: unknown): unknown => item && typeof item === "object" && "status" in item ? item.status : undefined);
     if (policy.group === "deployments" && statuses.length > 0 && statuses.every((status: unknown): boolean => status === "RUNNING" || status === "STOPPED")) return 10_000;
     if (policy.group === "builds" && statuses.length > 0 && statuses.every((status: unknown): boolean => status === "SUCCEEDED" || status === "FAILED" || status === "CANCELED")) return 30_000;

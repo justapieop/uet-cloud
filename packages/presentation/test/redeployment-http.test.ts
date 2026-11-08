@@ -4,7 +4,7 @@ import { test, type TestContext } from "node:test";
 import { ClassSerializerInterceptor, Module, type INestApplication } from "@nestjs/common";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { IdempotencyModule } from "@nestjs/idempotency";
-import { CheckPermissionsCase, RedeployDeploymentCase } from "@kumo/application";
+import { CheckPermissionsCase, RedeployDeploymentCase, type DeploymentConfiguration, type DeploymentConfigurationReader } from "@kumo/application";
 import { Deployment, Permission, Role, User } from "@kumo/domain";
 import type { NextFunction, Request, Response } from "express";
 import { RedeploymentsController } from "../dist/controllers/Redeployments.controller.js";
@@ -15,6 +15,13 @@ test("redeploy HTTP enforces permissions/ownership, queues once and replays its 
   const setup: AdmissionFixture = new AdmissionFixture();
   const id: string = "00000000-0000-4000-8000-000000000001";
   setup.deployments = [new Deployment({ id, userId: "123", name: "my-app", spec: SPEC, status: "RUNNING", resourceId: "owned-resource" })];
+  const configuration: DeploymentConfigurationReader = {
+    read: async (input: Parameters<DeploymentConfigurationReader["read"]>[0]): Promise<DeploymentConfiguration> => {
+      assert.deepEqual(input, { deploymentId: id, userId: "123", appName: "my-app", resourceId: "owned-resource" });
+      return { configurationVersion: "stable-applied-configuration", region: "japaneast", maxVcpu: SPEC.maxVcpu, maxMemory: SPEC.maxMemory,
+        minScaling: SPEC.minScaling, maxScaling: SPEC.maxScaling, targetPort: SPEC.targetPort, external: true, additionalPorts: [], image: "old-image", fqdn: "my-app.example.com" };
+    },
+  };
   let roles: Role[] = [];
   let authenticated: boolean = true;
   let suspended: boolean = false;
@@ -24,7 +31,7 @@ test("redeploy HTTP enforces permissions/ownership, queues once and replays its 
     scope: (request: Request): string => (request.user as User).id,
   })], controllers: [RedeploymentsController], providers: [
     { provide: CheckPermissionsCase, useValue: new CheckPermissionsCase({ findActiveByUserId: async (): Promise<Role[]> => roles }) },
-    { provide: RedeployDeploymentCase, useValue: new RedeployDeploymentCase(setup, setup) },
+    { provide: RedeployDeploymentCase, useValue: new RedeployDeploymentCase(setup, setup, configuration) },
     { provide: RouteReadCache, useValue: { invalidateDeployments: async (userId: string): Promise<void> => { assert.equal(userId, "123"); invalidations++; } } },
   ] })(FixtureModule);
   const app: INestApplication = await NestFactory.create(FixtureModule, { logger: false, abortOnError: false });

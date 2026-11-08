@@ -41,10 +41,13 @@ export class AttachVolumeCase {
 
   private async attachWithLock(input: AttachVolumeInput, signal: AbortSignal): Promise<Deployment> {
     const initialUser: User = await this.uow.run(async (repo: UnitOfWorkRepositories): Promise<User> => {
-      const user: User | null = await repo.users.findById(input.userId);
-      if (!user || user.suspended) throw new DeploymentSubscriptionRequired("An eligible user is required");
-      const deployment: Deployment | null = await repo.deployment.findByIdAndUserId(input.deploymentId, input.userId);
+      const user: User | null = await repo.users.findByIdForUpdate(input.userId);
+      if (!user || !user.active || user.suspended) throw new DeploymentSubscriptionRequired("An eligible user is required");
+      const deployment: Deployment | null = repo.deployment.findByIdAndUserIdForUpdate
+          ? await repo.deployment.findByIdAndUserIdForUpdate(input.deploymentId, input.userId)
+          : await repo.deployment.findByIdAndUserId(input.deploymentId, input.userId);
       if (!deployment) throw new DeploymentNotFoundError("Deployment not found");
+        if (deployment.activeResourceUpdateId) throw new VolumeOperationConflictError("A resource update is still in progress");
       if (deployment.status !== "RUNNING" && deployment.status !== "STOPPED") {
         throw new InvalidDeploymentStatusError("Deployment must be in RUNNING or STOPPED state to attach volume");
       }
@@ -71,12 +74,15 @@ export class AttachVolumeCase {
 
     const validated: { readonly deployment: Deployment; readonly existingVolumes: readonly DeploymentVolume[] } =
       await this.uow.run(async (repo: UnitOfWorkRepositories): Promise<{ readonly deployment: Deployment; readonly existingVolumes: readonly DeploymentVolume[] }> => {
-        const user: User | null = await repo.users.findById(input.userId);
-        if (!user || user.suspended || user.stripeCustomerId !== initialUser.stripeCustomerId) {
+        const user: User | null = await repo.users.findByIdForUpdate(input.userId);
+        if (!user || !user.active || user.suspended || user.stripeCustomerId !== initialUser.stripeCustomerId) {
           throw new DeploymentSubscriptionRequired("The user or billing association changed; retry the request");
         }
-        const deployment: Deployment | null = await repo.deployment.findByIdAndUserId(input.deploymentId, input.userId);
+        const deployment: Deployment | null = repo.deployment.findByIdAndUserIdForUpdate
+          ? await repo.deployment.findByIdAndUserIdForUpdate(input.deploymentId, input.userId)
+          : await repo.deployment.findByIdAndUserId(input.deploymentId, input.userId);
         if (!deployment) throw new DeploymentNotFoundError("Deployment not found");
+        if (deployment.activeResourceUpdateId) throw new VolumeOperationConflictError("A resource update is still in progress");
         if (deployment.status !== "RUNNING" && deployment.status !== "STOPPED") {
           throw new InvalidDeploymentStatusError("Deployment must be in RUNNING or STOPPED state to attach volume");
         }
@@ -108,6 +114,7 @@ export class AttachVolumeCase {
     return await this.uow.run(async (repo: UnitOfWorkRepositories): Promise<Deployment> => {
       const currentDeployment: Deployment | null = await repo.deployment.findByIdAndUserId(input.deploymentId, input.userId);
       if (!currentDeployment) throw new DeploymentNotFoundError("Deployment not found");
+      if (currentDeployment.activeResourceUpdateId) throw new VolumeOperationConflictError("A resource update is still in progress");
       if (currentDeployment.status !== "RUNNING" && currentDeployment.status !== "STOPPED") {
         throw new InvalidDeploymentStatusError("Deployment changed before the volume attachment completed");
       }

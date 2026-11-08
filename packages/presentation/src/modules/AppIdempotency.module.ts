@@ -15,7 +15,7 @@ import { DatabaseModule } from "./Database.module.js";
       useFactory: (config: ConfigService): IdempotencyModuleOptions => ({
         ttl: reliabilityNumber(config, "IDEMPOTENCY_TTL_MS", 86_400_000, 2_592_000_000),
         lockTtl: "30s", maxLockHold: "2m", storeTimeout: "5s",
-        replayHeaders: ["cache-control"],
+        replayHeaders: ["cache-control", "location"],
         storeIf: (status: number): boolean => (status >= 200 && status < 300) || status === 400 || status === 422,
         scope: (request: Request): string => {
           const user: User | undefined = request.user as User | undefined;

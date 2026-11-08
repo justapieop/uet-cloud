@@ -20,3 +20,5 @@ export * from "./github-webhook.js";
 export * from "./deployment-regions.js";
 export * from "./root-login.js";
 export * from "./volume.js";
+export * from "./deployment-resource-update.js";
+export * from "./scale-rule.js";

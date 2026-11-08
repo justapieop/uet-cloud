@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Deployment, Plan, User, type DeploymentSpec, type DeploymentStatus } from "@kumo/domain";
 import {
-  ProcessGitHubPushCase, RedeployDeploymentCase, InvalidGitHubWebhook, SubscriptionCheckUnavailable,
-  type GitHubPush, type UnitOfWork, type UnitOfWorkRepositories,
+  ProcessGitHubPushCase, RedeployDeploymentCase, DeploymentOperationConflictError, InvalidGitHubWebhook, SubscriptionCheckUnavailable,
+  type DeploymentConfiguration, type DeploymentConfigurationReader, type GitHubPush, type UnitOfWork, type UnitOfWorkRepositories,
 } from "../dist/index.js";
 import { AdmissionFixture, PLAN, SPEC } from "./support/admission.ts";
 
@@ -44,7 +44,17 @@ class PushFixture extends AdmissionFixture {
         if (this.failure) throw new Error("GitHub unavailable");
         return this.installed ? { defaultBranch: "main" } : null;
       },
-    }, new RedeployDeploymentCase(this, this), { exec: async (): Promise<boolean> => this.allowed });
+    }, new RedeployDeploymentCase(this, this, {
+      read: async (input: Parameters<DeploymentConfigurationReader["read"]>[0]): Promise<DeploymentConfiguration> => {
+        const current: Deployment | undefined = this.deployments.find((item: Deployment): boolean => item.id === input.deploymentId);
+        assert.ok(current);
+        assert.equal(input.userId, current.userId);
+        assert.equal(input.appName, current.name);
+        assert.equal(input.resourceId, current.resourceId);
+        return { configurationVersion: "stable-applied-configuration", region: "japaneast", maxVcpu: 0.5, maxMemory: 1,
+          minScaling: 0, maxScaling: 2, targetPort: 8080, external: true, additionalPorts: [], image: "existing-image", fqdn: "my-app.example.com" };
+      },
+    }), { exec: async (): Promise<boolean> => this.allowed });
   }
 }
 
@@ -65,7 +75,13 @@ test("push queues only deployments owned by the repository account and matching 
 
 test("duplicate concurrent push deliveries queue once and completed work is protected by the durable receipt", async (): Promise<void> => {
   const setup: PushFixture = new PushFixture();
-  await Promise.all([setup.push.exec("push", PUSH), setup.push.exec("push", PUSH)]);
+  const deliveries: PromiseSettledResult<string | null>[] = await Promise.allSettled([setup.push.exec("push", PUSH), setup.push.exec("push", PUSH)]);
+  assert.ok(deliveries.some((delivery: PromiseSettledResult<string | null>): boolean => delivery.status === "fulfilled"));
+  for (let index: number = 0; index < deliveries.length; index++) {
+    const delivery: PromiseSettledResult<string | null> = deliveries[index]!;
+    if (delivery.status === "rejected") assert.ok(delivery.reason instanceof DeploymentOperationConflictError);
+  }
+  await setup.push.exec("push", PUSH);
   assert.equal(setup.receipts.size, 1);
   assert.equal(setup.deployments[0]?.status, "PENDING");
   setup.deployments = [new Deployment({ ...setup.deployments[0]!.getDetails(), status: "RUNNING" })];

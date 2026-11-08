@@ -1,6 +1,7 @@
 import type { UnitOfWork, UnitOfWorkRepositories } from "@kumo/application";
 import { Injectable } from "@nestjs/common";
 import { DataSource, type EntityManager } from "typeorm";
+import { InfraDeploymentResourceUpdateRepository } from "./repositories/deployment-resource-update.js";
 import { InfraDeploymentRequestRepository } from "./repositories/deployment-request.js";
 import { InfraRole, InfraRoleRepository } from "./repositories/role.js";
 import { InfraUserRole, InfraUserRoleRepository } from "./repositories/user-role.js";
@@ -8,6 +9,7 @@ import { InfraUser, InfraUserRepository } from "./repositories/user.js";
 import { InfraDeployment, InfraDeploymentRepository } from "./repositories/deployment.js";
 import { InfraPlan, InfraPlanRepository } from "./repositories/plan.js";
 import { InfraVolume, InfraVolumeRepository } from "./repositories/volume.js";
+import { InfraScaleRule, InfraScaleRuleRepository } from "./repositories/scale-rule.js";
 
 @Injectable()
 export class TypeOrmUnitOfWork implements UnitOfWork {
@@ -22,8 +24,10 @@ export class TypeOrmUnitOfWork implements UnitOfWork {
         userRoles: new InfraUserRoleRepository(manager.getRepository(InfraUserRole)),
         deployment: new InfraDeploymentRepository(manager.getRepository(InfraDeployment)),
         deploymentRequests: new InfraDeploymentRequestRepository(manager),
+        deploymentResourceUpdates: new InfraDeploymentResourceUpdateRepository(manager),
         plans: new InfraPlanRepository(manager.getRepository(InfraPlan)),
         volumes: new InfraVolumeRepository(manager.getRepository(InfraVolume)),
+        scaleRules: new InfraScaleRuleRepository(manager.getRepository(InfraScaleRule)),
       };
 
       return work(repositories);

@@ -41,10 +41,35 @@ export function chartSeries(series: readonly MetricSeries[], intervalSeconds: nu
     const points: ChartPoint[] = [...pointsByBucket.entries()]
       .sort(([left]: [number, number | null], [right]: [number, number | null]): number => left - right)
       .map(([timestamp, value]: [number, number | null]): ChartPoint => ({ timestamp, value }));
-    const revision: string = item.revision_name ?? "Unknown revision";
-    const label: string = kind === "replica" ? `${revision} / ${item.replica_name ?? "Unknown replica"}` : revision;
-    return { key: `${revision}:${item.replica_name ?? "revision"}:${index}`, label, points };
+    const label: string = kind === "replica" ? `Replica ${index + 1}` : "Active revision";
+    return { key: `${kind}:${index}`, label, points };
   });
+}
+
+export function activeRevisionAverageSeries(series: readonly MetricSeries[], intervalSeconds: number): ChartSeries[] {
+  if (series.length === 0) return [];
+  const buckets: Map<number, { sum: number; count: number }> = new Map<number, { sum: number; count: number }>();
+  for (let seriesIndex: number = 0; seriesIndex < series.length; seriesIndex += 1) {
+    const item: MetricSeries = series[seriesIndex]!;
+    for (let pointIndex: number = 0; pointIndex < item.points.length; pointIndex += 1) {
+      const point: MetricSeries["points"][number] = item.points[pointIndex]!;
+      const bucket: number | null = metricBucket(point.timestamp, intervalSeconds);
+      if (bucket === null) continue;
+      const current: { sum: number; count: number } = buckets.get(bucket) ?? { sum: 0, count: 0 };
+      if (point.value !== null && Number.isFinite(point.value)) {
+        current.sum += point.value;
+        current.count += 1;
+      }
+      buckets.set(bucket, current);
+    }
+  }
+  const points: ChartPoint[] = [...buckets.entries()]
+    .sort(([left]: [number, { sum: number; count: number }], [right]: [number, { sum: number; count: number }]): number => left - right)
+    .map(([timestamp, value]: [number, { sum: number; count: number }]): ChartPoint => ({
+      timestamp,
+      value: value.count > 0 ? value.sum / value.count : null,
+    }));
+  return [{ key: "active-revision-average", label: "Active revision average", points }];
 }
 
 export function latestMetricSummary(series: readonly MetricSeries[], intervalSeconds: number, mode: "average" | "sum"): MetricSummary {
