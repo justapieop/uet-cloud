@@ -13,4 +13,5 @@ export * from "./migrations.js";
 export * from "./repositories/stripe-customer-link.js";
 export * from "./seed.js";
 export * from "./add-admin.js";
+export * from "./repositories/deployment-resource-update.js";
 export * from "./repositories/scale-rule.js";

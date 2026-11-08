@@ -15,5 +15,9 @@ export * from "./deployment-regions.js";
 export { AzureLegacyEnvironmentProvisioner, type LegacyEnvironmentClients } from "./legacy-environment.js";
 export * from "./legacy-deployment-regions.js";
 export * from "./volume-storage-names.js";
+
+export * from "./deployment-resource-update-worker.js";
+export * from "./deployment-configuration-updater.js";
+export * from "./deployment-resource-baseline.js";
 export * from "./deployment-scaler.js";
 export * from "./scale-rule-worker.js";

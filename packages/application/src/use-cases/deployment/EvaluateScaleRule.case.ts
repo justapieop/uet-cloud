@@ -31,7 +31,7 @@ export class EvaluateScaleRuleCase {
       const rule: ScaleRule | null = await repo.scaleRules.findByDeploymentId(deploymentId);
       if (!rule?.getDetails().enabled) return null;
       const deployment: Deployment | null = await repo.deployment.findById(deploymentId);
-      if (!deployment || deployment.status !== "RUNNING" || !deployment.resourceId) return null;
+      if (!deployment || deployment.status !== "RUNNING" || !deployment.resourceId || deployment.activeResourceUpdateId) return null;
       const user: User | null = await repo.users.findById(deployment.userId);
       if (!user || !user.active || user.suspended || !await new CheckPermissionsCase(repo.roles).exec(user.id,
         [Permission.DeploymentRead, Permission.DeploymentUpdate, Permission.DeploymentMetricsRead])) return null;
@@ -63,7 +63,7 @@ export class EvaluateScaleRuleCase {
       claimed = await this.uow.run(async (repo: UnitOfWorkRepositories): Promise<boolean> => {
         const user: User | null = await repo.users.findByIdForUpdate(deployment.userId);
         const current: Deployment | null = await repo.deployment.findByIdAndUserId(deploymentId, deployment.userId);
-        if (!current || current.status !== "RUNNING" || current.resourceId !== deployment.resourceId || current.updatedAt.getTime() !== deployment.updatedAt.getTime()) return false;
+        if (!current || current.status !== "RUNNING" || current.activeResourceUpdateId || current.resourceId !== deployment.resourceId || current.updatedAt.getTime() !== deployment.updatedAt.getTime()) return false;
         await checkScaleRuleCapacity(repo, user, initial.user.stripeCustomerId!, products, current, rule.getDetails(), snapshot);
         if (!await new CheckPermissionsCase(repo.roles).exec(deployment.userId,
           [Permission.DeploymentRead, Permission.DeploymentUpdate, Permission.DeploymentMetricsRead])) return false;

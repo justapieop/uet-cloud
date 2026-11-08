@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { Module, type INestApplicationContext } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import type { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import type { Response } from "@azure/arm-monitor";
 import { DeploymentMetricsReadError, InvalidDeploymentResourceError, type DeploymentMetrics } from "@kumo/application";
 import { AzureMonitorMetricsReader, type MetricsClient, type MetricsReadInput } from "../dist/azure/monitoring.js";
@@ -40,11 +41,24 @@ function fixture(responses: Record<string, Response>, failStatus?: number): { re
       assert.equal(options.top, 1000);
       calls.push(options.metricnames);
       if (failStatus) throw { statusCode: failStatus, message: "secret Azure response" };
-      return responses[options.metricnames]!;
+      const response: Response = responses[options.metricnames]!;
+      const activeRevision: RegExpMatchArray | null = options.filter.match(/revisionName eq '([^']+)'/);
+      if (!activeRevision) return response;
+      return {
+        ...response,
+        value: response.value.map((metric): typeof metric => ({
+          ...metric,
+          timeseries: metric.timeseries.filter((series): boolean => series.metadatavalues?.some((entry): boolean =>
+            entry.name?.value === "revisionName" && entry.value === activeRevision[1]) ?? false),
+        })),
+      };
     },
   };
   const reader: AzureMonitorMetricsReader = new AzureMonitorMetricsReader(
     new ConfigService({ AZURE_SUBSCRIPTION_ID: "sub", AZURE_PLATFORM_RESOURCE_GROUP: "platform" }), client,
+    { get: async (): Promise<{ id: string; tags: Record<string, string>; configuration: { activeRevisionsMode: "Single" }; latestReadyRevisionName: string }> => ({
+      id: RESOURCE_ID, tags: { "kumo-deployment-id": INPUT.deploymentId }, configuration: { activeRevisionsMode: "Single" }, latestReadyRevisionName: "rev-a",
+    }) } as unknown as ContainerAppsAPIClient["containerApps"],
   );
   return { reader, calls };
 }
@@ -64,7 +78,7 @@ test("Nest creates the Azure monitoring reader with ConfigService", async () => 
     provide: AzureMonitorMetricsReader,
     useFactory: (config: ConfigService): AzureMonitorMetricsReader => new AzureMonitorMetricsReader(config, {
       list: async (): Promise<never> => { throw new Error("Resolving providers must not call Azure"); },
-    }),
+    }, { get: async (): Promise<never> => { throw new Error("Resolving providers must not call Azure"); } } as unknown as ContainerAppsAPIClient["containerApps"]),
     inject: [ConfigService],
   }] })(FixtureModule);
   const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false, abortOnError: false });
@@ -95,11 +109,12 @@ test("reads separate replicas and revisions, converts units, and retains missing
   assert.deepEqual(calls.sort(), ["Replicas", "UsageNanoCores", "WorkingSetBytes"].sort());
   assert.equal(result.cpu[0]?.points[0]?.value, 0.15);
   assert.equal(result.cpu[1]?.points[0]?.value, 0.25);
-  assert.equal(result.cpu[2]?.points[0]?.value, null);
   assert.equal(result.memory[0]?.points[0]?.value, 220);
-  assert.equal(result.cpu[2]?.revisionName, "rev-b");
-  assert.equal(result.replicas[1]?.points[0]?.value, 0);
-  assert.equal(result.replicas[1]?.replicaName, null);
+  assert.equal(result.cpu.length, 2);
+  assert.equal(result.cpu[0]?.revisionName, "rev-a");
+  assert.equal(result.replicas.length, 1);
+  assert.equal(result.replicas[0]?.points[0]?.value, 2);
+  assert.equal(result.replicas[0]?.replicaName, null);
   assert.equal(result.cpu[0]?.points[0]?.timestamp, "2026-10-17T08:00:00.000Z");
 });
 

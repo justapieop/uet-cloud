@@ -24,6 +24,7 @@
     "prebuild": "npm run build --workspace @kumo/rest",
     "build": "next build",
     "test:metrics": "node --experimental-strip-types --test src/entities/deployment/model/metrics.test.ts",
+    "test:resources": "node --experimental-test-module-mocks --test src/features/manage-deployment/model/deployment-edit.test.ts src/features/manage-deployment/api/resource-update-actions.test.ts",
     "start": "next start"
   }
 }

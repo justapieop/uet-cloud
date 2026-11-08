@@ -81,6 +81,22 @@ test("ACA rechecks the observed replica set immediately before PATCH", async ():
   assert.equal(fixture.writes.length, 0);
 });
 
+test("ACA scaling uses the resource reader's hardened memory conversion", async (): Promise<void> => {
+  const valid: readonly string[] = ["1048576Ki", "1024Mi", "1Gi", "0.0009765625Ti"];
+  for (let index: number = 0; index < valid.length; index++) {
+    const fixture: Fixture = new Fixture();
+    fixture.app.template!.containers![0]!.resources!.memory = valid[index]!;
+    assert.equal((await fixture.scaler.inspect(IDENTITY, SIGNAL)).memoryGiB, 1);
+  }
+  const invalid: readonly unknown[] = ["0Gi", "invalid", 1];
+  for (let index: number = 0; index < invalid.length; index++) {
+    const fixture: Fixture = new Fixture();
+    fixture.app.template!.containers![0]!.resources!.memory = invalid[index] as string;
+    await assert.rejects(fixture.scaler.inspect(IDENTITY, SIGNAL));
+    assert.equal(fixture.writes.length, 0);
+  }
+});
+
 test("ACA never treats an accepted PATCH without a ready revision as successful", async (): Promise<void> => {
   const fixture: Fixture = new Fixture();
   const expected: DeploymentScalingSnapshot = await fixture.scaler.inspect(IDENTITY, SIGNAL);

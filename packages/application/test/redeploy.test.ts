@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Deployment, User, type DeploymentStatus } from "@kumo/domain";
-import { RedeployDeploymentCase, DeploymentNotFoundError, InvalidDeploymentStatusError, DeploymentSubscriptionRequired } from "../dist/index.js";
+import { RedeployDeploymentCase, DeploymentNotFoundError, InvalidDeploymentStatusError, DeploymentSubscriptionRequired,
+  type DeploymentConfiguration, type DeploymentConfigurationReader } from "../dist/index.js";
 import { AdmissionFixture, SPEC } from "./support/admission.ts";
 
 function fixture(status: DeploymentStatus = "RUNNING"): AdmissionFixture {
@@ -11,9 +12,23 @@ function fixture(status: DeploymentStatus = "RUNNING"): AdmissionFixture {
   return setup;
 }
 
+function configuration(setup: AdmissionFixture): DeploymentConfigurationReader {
+  return {
+    read: async (input: Parameters<DeploymentConfigurationReader["read"]>[0]): Promise<DeploymentConfiguration> => {
+      const current: Deployment | undefined = setup.deployments.find((deployment: Deployment): boolean => deployment.id === input.deploymentId);
+      assert.ok(current);
+      assert.equal(input.userId, current.userId);
+      assert.equal(input.appName, current.name);
+      assert.equal(input.resourceId, current.resourceId);
+      return { configurationVersion: "stable-applied-configuration", region: "japaneast", maxVcpu: 0.5, maxMemory: 1,
+        minScaling: 0, maxScaling: 2, targetPort: 8080, external: true, additionalPorts: [], image: "old-image", fqdn: "my-app.example.com" };
+    },
+  };
+}
+
 test("redeploy reserves no additional slot, queues once, and replays its durable receipt without Stripe", async (): Promise<void> => {
   const setup: AdmissionFixture = fixture();
-  const useCase: RedeployDeploymentCase = new RedeployDeploymentCase(setup, setup);
+  const useCase: RedeployDeploymentCase = new RedeployDeploymentCase(setup, setup, configuration(setup));
   const accepted: Deployment = await useCase.exec("deployment", "123", "key");
   assert.equal(accepted.status, "PENDING");
   assert.equal(accepted.buildId, null);
@@ -28,7 +43,7 @@ test("redeploy reserves no additional slot, queues once, and replays its durable
 
 test("redeploy rejects foreign deployments, inactive users and expired subscriptions", async (): Promise<void> => {
   const setup: AdmissionFixture = fixture();
-  const useCase: RedeployDeploymentCase = new RedeployDeploymentCase(setup, setup);
+  const useCase: RedeployDeploymentCase = new RedeployDeploymentCase(setup, setup, configuration(setup));
   await assert.rejects(useCase.exec("foreign", "123", "key"), DeploymentNotFoundError);
   assert.equal(setup.stripeCalls, 0);
   setup.user = new User({ ...setup.user, active: false });
@@ -42,12 +57,12 @@ test("redeploy rejects foreign deployments, inactive users and expired subscript
 test("receipt failure rolls back queued redeployment and busy/stopped deployments cannot redeploy", async (): Promise<void> => {
   const setup: AdmissionFixture = fixture();
   setup.receiptFailure = true;
-  await assert.rejects(new RedeployDeploymentCase(setup, setup).exec("deployment", "123", "key"), /Receipt persistence/);
+  await assert.rejects(new RedeployDeploymentCase(setup, setup, configuration(setup)).exec("deployment", "123", "key"), /Receipt persistence/);
   assert.equal(setup.deployments[0]?.status, "RUNNING");
   assert.equal(setup.receipts.size, 0);
   const statuses: DeploymentStatus[] = ["STOPPED", "STOPPING", "STARTING", "SCALING", "PENDING", "PROVISIONING"];
   for (let index: number = 0; index < statuses.length; index++) {
     const busy: AdmissionFixture = fixture(statuses[index]!);
-    await assert.rejects(new RedeployDeploymentCase(busy, busy).exec("deployment", "123", "key"), InvalidDeploymentStatusError);
+    await assert.rejects(new RedeployDeploymentCase(busy, busy, configuration(busy)).exec("deployment", "123", "key"), InvalidDeploymentStatusError);
   }
 });

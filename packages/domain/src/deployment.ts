@@ -1,3 +1,4 @@
+import { validateDeploymentResourceConfiguration } from "./deployment-resource-configuration.js";
 import { Domain, InvalidDomainParams } from "./domain.js";
 import { isBlankStr } from "./utils.js";
 import { MIN_VOLUME_SIZE_GB, MAX_VOLUME_SIZE_GB } from "./volume.js";
@@ -129,6 +130,7 @@ export class Deployment extends Domain<DeploymentDetails> {
   public readonly containerAppEnvironmentId: string | null;
   public readonly containerAppDeletedAt: Date | null;
   public readonly deletionClaimToken: string | null;
+  public readonly activeResourceUpdateId: string | null;
 
   public constructor(details: DeploymentDetails) {
     super(details);
@@ -152,6 +154,7 @@ export class Deployment extends Domain<DeploymentDetails> {
     this.containerAppEnvironmentId = details.containerAppEnvironmentId ?? null;
     this.containerAppDeletedAt = details.containerAppDeletedAt ?? null;
     this.deletionClaimToken = details.deletionClaimToken ?? null;
+    this.activeResourceUpdateId = details.activeResourceUpdateId ?? null;
   }
 
   public validate(): InvalidDomainParams | null {
@@ -178,18 +181,17 @@ export class Deployment extends Domain<DeploymentDetails> {
       (typeof this.details.deletionClaimToken !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.details.deletionClaimToken))) {
       return new InvalidDomainParams("Deployment.deletionClaimToken must be a UUID");
     }
+    if (this.details.activeResourceUpdateId !== undefined && this.details.activeResourceUpdateId !== null &&
+      (typeof this.details.activeResourceUpdateId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(this.details.activeResourceUpdateId))) {
+      return new InvalidDomainParams("Deployment.activeResourceUpdateId must be a UUID");
+    }
     const spec: DeploymentSpec | null | undefined = this.details.spec;
     if (spec) {
       if (spec.region !== undefined && (typeof spec.region !== "string" || !/^[a-z][a-z0-9]{0,63}$/.test(spec.region))) {
         return new InvalidDomainParams("Region must be a lowercase Azure region name such as japaneast");
       }
-      if (!Number.isFinite(spec.maxVcpu) || spec.maxVcpu <= 0 || !Number.isInteger(spec.maxVcpu * 4) ||
-        !Number.isFinite(spec.maxMemory) || spec.maxMemory !== spec.maxVcpu * 2) {
-        return new InvalidDomainParams("Memory in GiB must be exactly twice vCPU; vCPU must be positive in increments of 0.25");
-      }
-      if (!Number.isInteger(spec.minScaling) || spec.minScaling < 0 || !Number.isInteger(spec.maxScaling) || spec.maxScaling < 1 || spec.minScaling > spec.maxScaling) {
-        return new InvalidDomainParams("Scaling must use integer replica counts with 0 <= min_scaling <= max_scaling and max_scaling >= 1");
-      }
+      const computeError: InvalidDomainParams | null = validateDeploymentResourceConfiguration(spec);
+      if (computeError) return computeError;
       if (!Number.isInteger(spec.targetPort) || spec.targetPort < 1 || spec.targetPort > 65535) {
         return new InvalidDomainParams("Target port must be between 1 and 65535");
       }
@@ -223,7 +225,7 @@ export class Deployment extends Domain<DeploymentDetails> {
       status: this.status, spec: this.spec, image: this.image, buildId: this.buildId,
       resourceId: this.resourceId, fqdn: this.fqdn, error: this.error,
       containerAppEnvironmentId: this.containerAppEnvironmentId, containerAppDeletedAt: this.containerAppDeletedAt,
-      deletionClaimToken: this.deletionClaimToken,
+      deletionClaimToken: this.deletionClaimToken, activeResourceUpdateId: this.activeResourceUpdateId,
     };
   }
 }
@@ -244,4 +246,5 @@ export interface DeploymentDetails {
   containerAppEnvironmentId?: string | null;
   containerAppDeletedAt?: Date | null;
   deletionClaimToken?: string | null;
+  activeResourceUpdateId?: string | null;
 }

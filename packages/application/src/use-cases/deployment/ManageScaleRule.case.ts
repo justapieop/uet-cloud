@@ -1,7 +1,7 @@
 import { ScaleRule, type Deployment, type ScaleRuleConfiguration, type ScaleRuleDetails, type User } from "@kumo/domain";
 import type { UnitOfWork, UnitOfWorkRepositories } from "../../ports/uow.js";
 import { DeploymentNotFoundError } from "../../ports/deployment.js";
-import type { DeploymentOperationLock } from "../../ports/deployment-operation-lock.js";
+import { DeploymentOperationConflictError, type DeploymentOperationLock } from "../../ports/deployment-operation-lock.js";
 import { ScaleRuleConflictError, ScaleRuleNotFoundError } from "../../ports/scale-rule.js";
 import { DeploymentSubscriptionRequired, type StripeSubscriptionGateway } from "../../ports/stripe.js";
 import { assertDeploymentOperationLease, withDeploymentOperationLock } from "./with-deployment-operation-lock.js";
@@ -28,6 +28,7 @@ export class ManageScaleRuleCase {
     return withDeploymentOperationLock(this.lock, deploymentId, "scale-rule", async (signal: AbortSignal): Promise<ScaleRule> => {
       const initial: { readonly user: User; readonly rule: ScaleRule } = await this.uow.run(async (repo: UnitOfWorkRepositories): Promise<{ readonly user: User; readonly rule: ScaleRule }> => {
         const deployment: Deployment = await this.owned(repo, deploymentId, userId);
+        if (deployment.activeResourceUpdateId) throw new DeploymentOperationConflictError();
         const existing: ScaleRule | null = await repo.scaleRules.findByDeploymentId(deploymentId);
         if (create && existing) throw new ScaleRuleConflictError("A deployment can have only one scale rule");
         if (!create && !existing) throw new ScaleRuleNotFoundError("Scale rule not found");
@@ -59,6 +60,7 @@ export class ManageScaleRuleCase {
         assertDeploymentOperationLease(signal);
         const user: User | null = await repo.users.findByIdForUpdate(userId);
         const deployment: Deployment = await this.owned(repo, deploymentId, userId);
+        if (deployment.activeResourceUpdateId) throw new DeploymentOperationConflictError();
         if (["SCALING", "DELETE_PENDING", "DELETING", "DELETE_FAILED", "DELETED"].includes(deployment.status)) throw new ScaleRuleConflictError("Deployment changed before saving the scale rule");
         if (enabled) {
           if (!["RUNNING", "STOPPED"].includes(deployment.status)) throw new ScaleRuleConflictError("Deployment changed before saving the scale rule");
@@ -74,7 +76,8 @@ export class ManageScaleRuleCase {
   public delete(deploymentId: string, userId: string): Promise<void> {
     return withDeploymentOperationLock(this.lock, deploymentId, "scale-rule", async (signal: AbortSignal): Promise<void> => {
       await this.uow.run(async (repo: UnitOfWorkRepositories): Promise<void> => {
-        await this.owned(repo, deploymentId, userId);
+        const deployment: Deployment = await this.owned(repo, deploymentId, userId);
+        if (deployment.activeResourceUpdateId) throw new DeploymentOperationConflictError();
         assertDeploymentOperationLease(signal);
         await repo.scaleRules.delete(deploymentId);
       });

@@ -9,6 +9,7 @@ import type { Request } from "express";
 import { DeploymentMetricsReadError, DeploymentMetricsUnavailableError, DeploymentNotFoundError, GetDeploymentMetricsCase } from "@kumo/application";
 import { AzureMonitorMetricsReader, InfraDeploymentRepository } from "@kumo/infrastructure";
 import { MonitorClient } from "@azure/arm-monitor";
+import { ContainerAppsAPIClient } from "@azure/arm-appcontainers";
 import { ConfigService } from "@nestjs/config";
 import type { FactoryProvider } from "@nestjs/common";
 import { DeploymentMetricsController } from "../dist/controllers/DeploymentMetrics.controller.js";
@@ -72,7 +73,7 @@ test("monitoring module wires the existing repository and Infrastructure adapter
   const providers: { provide?: unknown; inject?: unknown[] }[] = Reflect.getMetadata("providers", MonitoringModule) as { provide?: unknown; inject?: unknown[] }[];
   assert.ok(imports.includes(DatabaseModule));
   assert.deepEqual(providers.find((provider) => provider.provide === GetDeploymentMetricsCase)?.inject, [InfraDeploymentRepository, AzureMonitorMetricsReader]);
-  assert.deepEqual(providers.find((provider) => provider.provide === AzureMonitorMetricsReader)?.inject, [ConfigService, MonitorClient]);
+  assert.deepEqual(providers.find((provider) => provider.provide === AzureMonitorMetricsReader)?.inject, [ConfigService, MonitorClient, ContainerAppsAPIClient]);
 });
 
 test("Nest resolves the monitoring use case factory with repository and reader providers", async () => {
@@ -83,6 +84,7 @@ test("Nest resolves the monitoring use case factory with repository and reader p
     { provide: InfraDeploymentRepository, useValue: {} },
     { provide: ConfigService, useValue: new ConfigService({ AZURE_SUBSCRIPTION_ID: "sub", AZURE_PLATFORM_RESOURCE_GROUP: "platform" }) },
     { provide: MonitorClient, useValue: { metrics: { list: async (): Promise<never> => { throw new Error("Must not call Azure"); } } } },
+    { provide: ContainerAppsAPIClient, useValue: { containerApps: { get: async (): Promise<never> => { throw new Error("Must not call Azure"); } } } },
     ...providers,
   ] })(FixtureModule);
   const context: INestApplicationContext = await NestFactory.createApplicationContext(FixtureModule, { logger: false, abortOnError: false });

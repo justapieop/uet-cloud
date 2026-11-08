@@ -2,13 +2,14 @@ import "reflect-metadata";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ConfigService } from "@nestjs/config";
-import type { ContainerApp, ManagedEnvironment } from "@azure/arm-appcontainers";
+import type { ContainerApp, ManagedEnvironment, Revision } from "@azure/arm-appcontainers";
 import type { GetBuildCase, TriggerBuildCase, TriggerBuildInput, TriggerBuildResult } from "@kumo/application";
-import type { BuildDetails, BuildStatus } from "@kumo/domain";
+import type { BuildDetails, BuildStatus, DeploymentResourceBaseline } from "@kumo/domain";
 import type { FeatureFlagConfiguration } from "../dist/feature-flags/provider.js";
 import type { AzureLegacyEnvironmentProvisioner } from "../dist/azure/legacy-environment.js";
 import { AzureProvider, type AzureDeploymentCreateInput, type AzureProviderClients } from "../dist/azure/provider.js";
 import { storageLinkName } from "../dist/azure/volume-storage-names.js";
+import { AzureDeploymentConfigurationReader } from "../dist/azure/deployment-configuration.js";
 
 const ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/platform/providers/Microsoft.App/managedEnvironments/shared-env";
 const LEGACY_ENVIRONMENT_ID: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/managedEnvironments/user-aca-env-123";
@@ -48,6 +49,7 @@ interface Fixture {
   provider: AzureProvider;
   events: string[];
   apps: Map<string, ContainerApp>;
+  verifyBaseline: NonNullable<AzureDeploymentCreateInput["onBeforeImageUpdate"]>;
 }
 
 function fixture(options: FixtureOptions = {}): Fixture {
@@ -169,10 +171,22 @@ function fixture(options: FixtureOptions = {}): Fixture {
     AZURE_DEPLOYMENT_POLL_INTERVAL_MS: "1",
   });
   const flags: FeatureFlagConfiguration = options.featureFlags ?? { feature_flags: [{ id: "LegacyPerUserProvisioning", enabled: options.enableLegacy ?? false }] };
+  const reader: AzureDeploymentConfigurationReader = new AzureDeploymentConfigurationReader(config, clients.containerApps, {
+    getRevision: async (_group: string, appName: string, revisionName: string): Promise<Revision> => {
+      const app: ContainerApp = apps.get(appName)!;
+      assert.equal(revisionName, app.latestRevisionName);
+      return { id: `${app.id}/revisions/${revisionName}`, name: revisionName, template: app.template,
+        active: true, provisioningState: "Provisioned", healthState: "Healthy", runningState: "Running", replicas: 1 };
+    },
+  });
   return { provider: new AzureProvider(config, trigger, getBuild, clients, (): Pick<AzureLegacyEnvironmentProvisioner, "getAcaEnvironment"> => {
     if (!options.legacyProvider) throw new Error("Legacy provisioning provider is not configured");
     return options.legacyProvider;
-  }, flags), events, apps };
+  }, flags, reader), events, apps, verifyBaseline: async (baseline: DeploymentResourceBaseline): Promise<void> => {
+    assert.match(baseline.version, /^v1-[0-9a-f]{64}$/);
+    assert.equal(baseline.environmentId, environmentId);
+    events.push("configuration-verified");
+  } };
 }
 
 test("AzureProvider uses the same deterministic storage-link name as the deletion adapter", (): void => {
@@ -217,14 +231,17 @@ test("redeployment rebuilds then updates only its owned app image while preservi
   const setup: Fixture = fixture({ existingResources: true, existingApp: true });
   const resourceId: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
   const original: ContainerApp = { id: resourceId, location: "southeastasia", environmentId: ENVIRONMENT_ID, provisioningState: "Succeeded",
+    runningStatus: "Running", latestRevisionName: "my-app--ready", latestReadyRevisionName: "my-app--ready",
     tags: { "kumo-deployment-id": "deployment", "kumo-build-id": "old-build", custom: "kept" },
     configuration: { ingress: { external: false, targetPort: 8080, additionalPortMappings: [{ targetPort: 9000, external: false }] }, secrets: [{ name: "secret", value: "retained" }], activeRevisionsMode: "Single" },
     template: { containers: [{ name: "my-app", image: "old-image", resources: { cpu: 1, memory: "2Gi" }, env: [{ name: "MY_VALUE", value: "kept" }], volumeMounts: [{ volumeName: "data", mountPath: "/data" }] }],
       scale: { minReplicas: 1, maxReplicas: 3 }, volumes: [{ name: "data", storageType: "AzureFile", storageName: "share" }] },
   };
   setup.apps.set(INPUT.name, original);
-  const updated: ContainerApp = await setup.provider.createDeployment({ ...INPUT, resourceId, deploymentId: "deployment" });
+  const updated: ContainerApp = await setup.provider.createDeployment({ ...INPUT, resourceId, deploymentId: "deployment", onBeforeImageUpdate: setup.verifyBaseline });
   assert.ok(setup.events.indexOf("build-SUCCEEDED") < setup.events.indexOf("app-update"));
+  assert.ok(setup.events.indexOf("build-SUCCEEDED") < setup.events.indexOf("configuration-verified"));
+  assert.ok(setup.events.indexOf("configuration-verified") < setup.events.indexOf("app-update"));
   assert.equal(updated.template?.containers?.[0]?.image, "registry.azurecr.io/my-app:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   assert.deepEqual(updated.configuration, original.configuration);
   assert.deepEqual(updated.template?.volumes, original.template?.volumes);
@@ -238,8 +255,11 @@ test("redeployment rebuilds then updates only its owned app image while preservi
 test("a failed redeployment build never updates the existing app and foreign resource IDs never reach Azure", async (): Promise<void> => {
   const resourceId: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
   const failed: Fixture = fixture({ existingResources: true, existingApp: true, statuses: ["FAILED"] });
-  failed.apps.set(INPUT.name, { id: resourceId, location: "southeastasia", environmentId: ENVIRONMENT_ID, tags: { "kumo-deployment-id": "deployment" } });
-  await assert.rejects(failed.provider.createDeployment({ ...INPUT, resourceId, deploymentId: "deployment" }), /Build build-id failed/);
+  failed.apps.set(INPUT.name, { id: resourceId, location: "southeastasia", environmentId: ENVIRONMENT_ID, tags: { "kumo-deployment-id": "deployment" },
+    provisioningState: "Succeeded", runningStatus: "Running", latestRevisionName: "my-app--ready", latestReadyRevisionName: "my-app--ready",
+    configuration: { activeRevisionsMode: "Single" },
+    template: { containers: [{ name: "my-app", image: "old-image", resources: { cpu: 1, memory: "2Gi" } }], scale: { minReplicas: 1, maxReplicas: 3 } } });
+  await assert.rejects(failed.provider.createDeployment({ ...INPUT, resourceId, deploymentId: "deployment", onBeforeImageUpdate: failed.verifyBaseline }), /Build build-id failed/);
   assert.equal(failed.events.includes("app-create"), false);
   assert.equal(failed.events.includes("app-update"), false);
   const foreign: Fixture = fixture();
@@ -377,8 +397,10 @@ test("legacy app redeployment retains its existing environment without moving it
   const setup: Fixture = fixture({ legacy: true, existingResources: true, existingApp: true });
   const resourceId: string = "/subscriptions/sub/resourceGroups/user-rg-123/providers/Microsoft.App/containerApps/my-app";
   setup.apps.set(INPUT.name, { id: resourceId, location: "southeastasia", environmentId: LEGACY_ENVIRONMENT_ID,
-    tags: { "kumo-deployment-id": "deployment" }, template: { containers: [{ name: "my-app", image: "old" }] } });
-  const result: ContainerApp = await setup.provider.createDeployment({ ...INPUT, deploymentId: "deployment", resourceId });
+    provisioningState: "Succeeded", runningStatus: "Running", latestRevisionName: "my-app--ready", latestReadyRevisionName: "my-app--ready",
+    configuration: { activeRevisionsMode: "Single" }, tags: { "kumo-deployment-id": "deployment" },
+    template: { containers: [{ name: "my-app", image: "old", resources: { cpu: 1, memory: "2Gi" } }], scale: { minReplicas: 1, maxReplicas: 3 } } });
+  const result: ContainerApp = await setup.provider.createDeployment({ ...INPUT, deploymentId: "deployment", resourceId, onBeforeImageUpdate: setup.verifyBaseline });
   assert.equal(result.environmentId, LEGACY_ENVIRONMENT_ID);
   assert.deepEqual(setup.events.slice(0, 2), ["app-get", "env-get"]);
   assert.equal(setup.events.includes("rg-create"), false);
